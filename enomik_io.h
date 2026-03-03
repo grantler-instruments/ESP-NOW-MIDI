@@ -22,6 +22,12 @@
 #define TOUCH_MAX_VALUE 100
 #endif
 
+// analogWrite() on ESP32 uses 8-bit PWM (0-255) by default. Using ADC_MAX_VALUE
+// would map most MIDI values above ~4 to 255, making vel/CC 60 behave like 127.
+#ifndef PWM_MAX_VALUE
+#define PWM_MAX_VALUE 255
+#endif
+
 namespace enomik
 {
     // Pin mode constants for clarity
@@ -96,8 +102,8 @@ namespace enomik
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
                         int mappedValue = map(velocity, config.min_midi_value, config.max_midi_value,
-                                              0, ADC_MAX_VALUE);
-                        analogWrite(config.pin, constrain(mappedValue, 0, ADC_MAX_VALUE));
+                                              0, PWM_MAX_VALUE);
+                        analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
                     }
                 }
             }
@@ -138,8 +144,8 @@ namespace enomik
                     }
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
-                        int mappedValue = map(bend, 0, 16383, 0, ADC_MAX_VALUE);
-                        analogWrite(config.pin, constrain(mappedValue, 0, ADC_MAX_VALUE));
+                        int mappedValue = map(bend, 0, 16383, 0, PWM_MAX_VALUE);
+                        analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
                     }
                 }
             }
@@ -159,8 +165,8 @@ namespace enomik
                     }
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
-                        int mappedValue = map(value, config.min_midi_value, config.max_midi_value, 0, ADC_MAX_VALUE);
-                        analogWrite(config.pin, constrain(mappedValue, 0, ADC_MAX_VALUE));
+                        int mappedValue = map(value, config.min_midi_value, config.max_midi_value, 0, PWM_MAX_VALUE);
+                        analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
                     }
                 }
             }
