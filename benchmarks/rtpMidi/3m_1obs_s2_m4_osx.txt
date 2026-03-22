@@ -1,4 +1,4 @@
-esp-now-midi distance 3m
+rtpMidi distance 3m
 iterations: 100
 frequency: 50
 TODO: lscpu
