@@ -47,19 +47,25 @@ jobs:
           arduino-cli lib install "Adafruit MPU6050"
           arduino-cli lib install "Adafruit_VL53L0X"
           arduino-cli lib install "Mozzi"
-          arduino-cli lib install "SparkFun DMX Shield Library"
           arduino-cli lib install "AceButton"
+          arduino-cli lib install "ESP32Servo"
+          arduino-cli lib install "MPU9250_WE"
           
       - name: Compile all examples for ${{ matrix.board.name }}
         run: |
           mkdir -p build
+          failed=0
           for sketch in examples/*/; do
             if [ -d "$sketch" ]; then
               sketch_name=$(basename "$sketch")
               echo "Building $sketch_name for ${{ matrix.board.name }}"
-              arduino-cli compile --fqbn ${{ matrix.board.fqbn }} "$sketch" --output-dir build/"$sketch_name" || echo "Failed to build $sketch_name for ${{ matrix.board.name }}"
+              if ! arduino-cli compile --fqbn ${{ matrix.board.fqbn }} "$sketch" --output-dir build/"$sketch_name"; then
+                echo "Failed to build $sketch_name for ${{ matrix.board.name }}"
+                failed=1
+              fi
             fi
           done
+          exit $failed
           
       - name: Organize binaries for web embedding
         run: |

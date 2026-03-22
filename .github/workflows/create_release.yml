@@ -41,7 +41,6 @@ jobs:
           arduino-cli lib install "Adafruit MPU6050"
           arduino-cli lib install "Adafruit_VL53L0X"
           arduino-cli lib install "Mozzi"
-          arduino-cli lib install "SparkFun DMX Shield Library"
           arduino-cli lib install "AceButton"
       - name: Compile all examples for ${{ matrix.board.name }}
         run: |
