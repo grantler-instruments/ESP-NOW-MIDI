@@ -40,6 +40,7 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
     * NOTEON direct mapping
       * MIDI Ch 1, NOTE 0, VEL: 127 -> DMX Channel 1, value: 127*2
       * MIDI Ch 4, NOTE 127, VEL: 127 -> DMX Channel 512, value: 127*2
+  * **client_servo** - control a servo via MIDI CC using [ESP32Servo](https://github.com/madhephaestus/ESP32Servo/)
 
 ## Breaking changes (this library is under active development => please make sure you are using the latest version)
 * This repo uses Semantic Versioning, although strict adherence will only come into effect at version 1.0.0.
@@ -103,7 +104,8 @@ A circuit python version is in the making as well. Contributions here are very w
   * Adafruit GFX Library
   * Adafruit SSD1306
 * examples/client_dac_i2s depends on mozzi
-* examples/client_dmx depends on SparkfunDMX 
+* examples/client_dmx uses Grove DMX512 (SN75176) with a built-in minimal sender (no extra library). Optional: use **luksal/ESP32-DMX** or **pierrejay/esp32-EZDMX** instead (see comment in the sketch). 
+* examples/client_servo depends on **ESP32Servo**
 
 ## Contributing
 If you find any bugs feel free to submit an issue on github, also PRs are very welcome.

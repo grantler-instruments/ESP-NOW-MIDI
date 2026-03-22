@@ -95,15 +95,22 @@ namespace enomik
                     config.midi_channel == channel &&
                     config.midi_note == note)
                 {
+                    // MIDI: Note On with velocity 0 is equivalent to Note Off
+                    if (velocity == 0)
+                    {
+                        onNoteOff(channel, note, 0);
+                        return;
+                    }
                     if (config.mode == ENOMIK_OUTPUT)
                     {
-                        digitalWrite(config.pin, velocity > 0 ? HIGH : LOW);
+                        digitalWrite(config.pin, HIGH);
                     }
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
                         int mappedValue = map(velocity, config.min_midi_value, config.max_midi_value,
                                               0, PWM_MAX_VALUE);
-                        analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
+                        mappedValue = constrain(mappedValue, 0, PWM_MAX_VALUE);
+                        analogWrite(config.pin, (uint8_t)mappedValue);
                     }
                 }
             }
@@ -508,9 +515,11 @@ namespace enomik
 
         void initializePinHardware(const PinConfig &c)
         {
-            if (c.mode == ENOMIK_OUTPUT)
+            if (c.mode == ENOMIK_OUTPUT || c.mode == ENOMIK_ANALOG_OUTPUT)
             {
                 pinMode(c.pin, OUTPUT);
+                if (c.mode == ENOMIK_ANALOG_OUTPUT)
+                    analogWrite(c.pin, 0);
             }
             else if (c.mode == ENOMIK_INPUT)
             {
