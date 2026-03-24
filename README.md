@@ -68,10 +68,26 @@ This library is fully integrated in the [ESP-NOW MIDI Kit](https://grantler-inst
 A circuit python version is in the making as well. Contributions here are very welcome.
 
 ## Benchmarks
-* proper benchmarks will follow
-* i did some early tests measuring the round trip time: pd --usb midi--> dongle --esp-now midi--> client_echo --esp-now-midi--> dongle --usb midi--> pd
-* s2 (single core) on both sides, pd running on ubuntu, distance ~3m, 1000 control change message, avg time = ~13ms => ~7ms per message
-* running it without the client overhead, on dual core esp and a faster host might bring even better results
+Round-trip path used for tests:
+
+`pd --usb midi--> dongle --wireless midi--> client_echo --wireless midi--> dongle --usb midi--> pd`
+
+Metrics are generated with:
+
+`python3 scripts/analyze_benchmark.py <benchmark_file.txt>`
+
+The script writes a sibling `<old_name>_analysis.txt` with:
+`mean`, `median`, `p95`, `p99`.
+
+Current benchmark summaries:
+
+| Transport | File | Samples | Mean (ms) | Median (ms) | p95 (ms) | p99 (ms) |
+|---|---|---:|---:|---:|---:|---:|
+| BLE MIDI | `benchmarks/bleMidi/1m_0obs_m4_m1_osx.txt` | 999 | 22.347 | 17.142 | 48.752 | 49.660 |
+| BLE MIDI | `benchmarks/bleMidi/3m_1obs_m4_m1_osx.txt` | 999 | 18.800 | 11.632 | 48.823 | 49.841 |
+| BLE MIDI | `benchmarks/bleMidi/5m_2obs_m4_m1_osx.txt` | 999 | 20.079 | 12.607 | 48.344 | 49.706 |
+| RTP MIDI | `benchmarks/rtpMidi/1m_0obs_m4_m1_osx.txt` | 999 | 26.461 | 25.759 | 46.430 | 49.342 |
+| USB MIDI | `benchmarks/usbMidi/1m_m4_osx.txt` | 999 | 6.118 | 6.100 | 11.338 | 12.404 |
 
 
 ## sysex interface
