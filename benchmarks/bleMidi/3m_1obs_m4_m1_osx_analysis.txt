@@ -1,0 +1,6 @@
+source_file: 3m_1obs_m4_m1_osx.txt
+samples: 999
+mean: 18.799745
+median: 11.632000
+p95: 48.822860
+p99: 49.841152

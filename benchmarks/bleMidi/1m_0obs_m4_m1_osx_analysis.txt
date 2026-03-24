@@ -1,0 +1,6 @@
+source_file: 1m_0obs_m4_m1_osx.txt
+samples: 999
+mean: 22.347488
+median: 17.142400
+p95: 48.751670
+p99: 49.659852
