@@ -1,0 +1,6 @@
+source_file: 1m_m4_osx.txt
+samples: 999
+mean: 6.117634
+median: 6.099530
+p95: 11.337700
+p99: 12.403600
