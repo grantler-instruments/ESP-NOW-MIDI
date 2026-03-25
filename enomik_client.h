@@ -344,6 +344,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             // Initialize USB MIDI using global instance
             USBMIDI.begin(MIDI_CHANNEL_OMNI);
+            USBMIDI.turnThruOff();
 
             // Set USB descriptors
             TinyUSBDevice.setManufacturerDescriptor("grantler instruments");
