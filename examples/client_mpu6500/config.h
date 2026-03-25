@@ -1,12 +1,12 @@
 // Feature toggles — 1 = send this CC / read sensor as needed, 0 = off
-#define ENABLE_MPU6500_ACCEL_X 1
-#define ENABLE_MPU6500_ACCEL_Y 1
-#define ENABLE_MPU6500_ACCEL_Z 1
+#define ENABLE_MPU6500_ACCEL_X 0
+#define ENABLE_MPU6500_ACCEL_Y 0
+#define ENABLE_MPU6500_ACCEL_Z 0
 #define ENABLE_MPU6500_ACCEL_SUM 1  // x + y + z (g)
-#define ENABLE_MPU6500_GYRO_X 1
-#define ENABLE_MPU6500_GYRO_Y 1
-#define ENABLE_MPU6500_GYRO_Z 1
-#define ENABLE_MPU6500_TEMP 1
+#define ENABLE_MPU6500_GYRO_X 0
+#define ENABLE_MPU6500_GYRO_Y 0
+#define ENABLE_MPU6500_GYRO_Z 0
+#define ENABLE_MPU6500_TEMP 0
 
 // Derived — used by the sketch to skip I2C reads when a whole group is off
 #define MPU6500_ANY_ACCEL_AXIS (ENABLE_MPU6500_ACCEL_X || ENABLE_MPU6500_ACCEL_Y || ENABLE_MPU6500_ACCEL_Z)

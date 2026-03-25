@@ -2,7 +2,7 @@
 #include "enomik_client.h"
 
 // on the dongle: run the print_mac firmware and paste it here
-uint8_t peerMacAddress[6] = { 0xCC, 0x8D, 0xA2, 0x8B, 0x85, 0x1C };
+uint8_t peerMacAddress[6] = { 0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62 };
 enomik::Client _client;
 
 void onNoteOn(byte channel, byte note, byte velocity) {

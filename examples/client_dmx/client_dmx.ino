@@ -1,14 +1,39 @@
+/*
+ * DMX512 client: MIDI (ESP-NOW) -> DMX512 output.
+ * Hardware: Grove DMX512 (SN75176 RS-485) or any UART RS-485 transceiver.
+ *
+ * This sketch uses the built-in DMXSender.h (no extra library). If you prefer
+ * an external library, two options that work with Grove/SN75176:
+ *
+ *   • luksal/ESP32-DMX (https://github.com/luksal/ESP32-DMX)
+ *     Install: Arduino Library Manager "ESP32-DMX" or
+ *              arduino-cli lib install https://github.com/luksal/ESP32-DMX.git
+ *     Pins are fixed: TX=17, RX=16, DE=4 → wire Grove DE to GPIO 4.
+ *     API: DMX::Initialize(DMXDirection::output); DMX::Write(channel, value);
+ *     No update() in loop; it sends in a background task.
+ *
+ *   • pierrejay/esp32-EZDMX (https://github.com/pierrejay/esp32-EZDMX)
+ *     Install: clone repo and add lib/EZDMX to your Arduino libraries folder,
+ *              or add as dependency in PlatformIO.
+ *     Configurable DE pin (e.g. 21 for Grove). API: dmx.begin(); dmx.start();
+ *     dmx.set(channel, value);  (MIT license)
+ *
+ * Wiring (Grove DMX512 / SN75176) with this sketch’s DMXSender:
+ *   - ESP32 TX2 (e.g. GPIO 17) -> module RX/DI
+ *   - GPIO 21 -> DE/RE (driver enable; high = transmit)
+ *   - 3.3V, GND; DMX out from module A/B to fixture.
+ */
 #include "enomik_client.h"
-#include <SparkFunDMX.h>  //https://github.com/sparkfun/SparkFunDMX/
+#include "DMXSender.h"
 
 // on the dongle: run the print_mac firmware and paste it here
-uint8_t peerMacAddress[6] = { 0x84, 0xF7, 0x03, 0xF0, 0x80, 0x14 };
+uint8_t peerMacAddress[6] = { 0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62 };
 enomik::Client _client;
 
-SparkFunDMX dmx;
+DMXSender dmx;
 HardwareSerial dmxSerial(2);
-uint8_t enPin = 21;
-uint8_t numChannels = 512;
+const uint8_t dePin = 21;   // DE/RE for SN75176 (Grove DMX512)
+const uint16_t numChannels = 512;
 
 struct ChannelState {
   uint8_t msb = 0;
@@ -21,34 +46,38 @@ struct ChannelState {
 ChannelState channelStates[512];
 const unsigned long PAIR_TIMEOUT = 20;  // ms - if both halves arrive within this window, combine them
 
-
-// there has been a change in the callback signature with esp32 board version 3.3.0, hence this is here for backwards compatibility
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 3, 0)
-void customOnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failure");
-}
-#else
-void customOnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failure");
-}
-#endif
-
-void customOnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  // Serial.print("Custom Callback - Status: ");
-  // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failure");
-}
+// MIDI note-on start channel (1 = use MIDI ch 1–5 for DMX 1–512 via notes)
+const int noteOnStartChannel = 1;
 
 void onNoteOn(byte channel, byte note, byte velocity) {
-  // Use first 4 MIDI channels for note control
-  Serial.println("note on");
-  if (channel >= 1 && channel <= 4) {
-    int dmxChannel = channel;         // MIDI channel 1-4 maps to DMX channel 1-4
-    uint8_t dmxValue = velocity * 2;  // Scale 0-127 to 0-254
-    dmx.writeByte(dmxChannel, dmxValue);
+  // Use MIDI channels noteOnStartChannel..(noteOnStartChannel+4) for DMX 1–512
+  // Ch 1: DMX 1–127, Ch 2: 128–254, Ch 3: 255–381, Ch 4: 382–508, Ch 5: 509–512
+  if (channel < noteOnStartChannel || channel > (noteOnStartChannel + 4)) {
+    return;
+  }
+  if (note < 1 || note > 127) {
+    return;
+  }
+
+  int dmxChannel = (channel - noteOnStartChannel) * 127 + note;
+  if (dmxChannel >= 1 && dmxChannel <= 512) {
+    dmx.writeByte(velocity * 2, dmxChannel);  // writeByte(data, channel); 0-127 -> 0-254
   }
 }
 
-void onNoteOff(byte channel, byte note, byte velocity) {}
+void onNoteOff(byte channel, byte note, byte velocity) {
+  if (channel < noteOnStartChannel || channel > (noteOnStartChannel + 4)) {
+    return;
+  }
+  if (note < 1 || note > 127) {
+    return;
+  }
+
+  int dmxChannel = (channel - noteOnStartChannel) * 127 + note;
+  if (dmxChannel >= 1 && dmxChannel <= 512) {
+    dmx.writeByte(0, dmxChannel);
+  }
+}
 void onControlChange(byte channel, byte control, byte value) {
   // Determine if MSB (CC 0-31) or LSB (CC 32-63)
   bool isMSB = (control < 32);
@@ -82,8 +111,8 @@ void onControlChange(byte channel, byte control, byte value) {
       // Scale to 8-bit DMX (0-16383 → 0-255)
       uint8_t dmxValue = fullValue >> 6;
 
-      // Write to DMX (channels are 1-indexed in SparkFunDMX)
-      dmx.writeByte(dmxChannel + 1, dmxValue);
+      // DMX channels 1-indexed
+      dmx.writeByte(dmxValue, dmxChannel + 1);
 
       // Clear flags for next pair
       channelStates[dmxChannel].msbReceived = false;
@@ -115,8 +144,9 @@ void setup() {
   _client.setHandleAfterTouchChannel(onAfterTouch);
   _client.setHandleAfterTouchPoly(onPolyAfterTouch);
 
-  dmx.begin(dmxSerial, enPin, numChannels);
-  dmx.setComDir(DMX_WRITE_DIR);
+  // 250k baud, 8N2 (DMX512). Start serial before DMX sender.
+  dmxSerial.begin(250000, SERIAL_8N2);
+  dmx.begin(dmxSerial, dePin, UART_NUM_2, numChannels);
 
   // register as a client by sending any message
   // this is needed in this case, as the client will stay unkown to the dongle until the first message is sent.
