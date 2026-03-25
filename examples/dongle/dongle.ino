@@ -417,6 +417,8 @@ void loop() {
     Serial.println("USB mounted - initializing MIDI");
 
     MIDI.begin(MIDI_CHANNEL_OMNI);
+    MIDI.turnThruOff();
+
 
     // Set USB MIDI handlers
     MIDI.setHandleNoteOn(onNoteOn);

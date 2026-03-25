@@ -256,7 +256,7 @@ public:
 
     if (_peersCount == 0)
     {
-      Serial.println("No peers registered!");
+      // Serial.println("No peers registered!");
       return ESP_FAIL;
     }
 
