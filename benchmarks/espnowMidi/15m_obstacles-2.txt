@@ -1,5 +1,6 @@
 distance: 15 m
 obstacles: 2
+indoor: 1
 samplerate: 96000
 buffer/block size: 16
 
