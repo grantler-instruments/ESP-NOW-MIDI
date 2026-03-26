@@ -1,0 +1,8 @@
+source_file: 20m_obstacles-0.txt
+samples: 1000
+min: 6.000000
+max: 155.333000
+mean: 16.300662
+median: 11.333300
+p95: 32.666700
+p99: 48.666700

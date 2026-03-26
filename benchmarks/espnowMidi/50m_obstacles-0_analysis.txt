@@ -1,0 +1,8 @@
+source_file: 50m_obstacles-0.txt
+samples: 1000
+min: 6.000000
+max: 187.333000
+mean: 18.981996
+median: 16.666700
+p95: 43.333300
+p99: 59.333300

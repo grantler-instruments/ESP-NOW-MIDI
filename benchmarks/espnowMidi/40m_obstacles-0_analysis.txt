@@ -1,0 +1,8 @@
+source_file: 40m_obstacles-0.txt
+samples: 1000
+min: 6.000000
+max: 128.667000
+mean: 18.880664
+median: 16.666700
+p95: 38.000000
+p99: 64.666700

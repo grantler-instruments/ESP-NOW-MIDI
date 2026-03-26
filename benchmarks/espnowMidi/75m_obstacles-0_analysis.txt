@@ -1,0 +1,8 @@
+source_file: 75m_obstacles-0.txt
+samples: 1000
+min: 6.000000
+max: 102.000000
+mean: 18.293997
+median: 16.666700
+p95: 38.000000
+p99: 54.000000
