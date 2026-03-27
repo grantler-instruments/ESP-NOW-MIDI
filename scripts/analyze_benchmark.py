@@ -43,12 +43,16 @@ def write_analysis(file_path: Path, values: list[float]) -> Path:
 
     mean_value = statistics.mean(values)
     median_value = statistics.median(values)
+    min_value = sorted_values[0]
+    max_value = sorted_values[-1]
     p95_value = percentile(sorted_values, 0.95)
     p99_value = percentile(sorted_values, 0.99)
 
     lines = [
         f"source_file: {file_path.name}",
         f"samples: {len(values)}",
+        f"min: {min_value:.6f}",
+        f"max: {max_value:.6f}",
         f"mean: {mean_value:.6f}",
         f"median: {median_value:.6f}",
         f"p95: {p95_value:.6f}",

@@ -1,0 +1,8 @@
+source_file: 3m_obstacles-0.txt
+samples: 1000
+min: 32.666700
+max: 64.666700
+mean: 44.101981
+median: 43.333300
+p95: 48.666700
+p99: 59.333300

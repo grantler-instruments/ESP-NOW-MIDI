@@ -1,0 +1,8 @@
+source_file: 10m_obstacles-2.txt
+samples: 1000
+min: 32.666700
+max: 107.333000
+mean: 47.221990
+median: 43.333300
+p95: 64.666700
+p99: 80.666700
