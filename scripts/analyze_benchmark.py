@@ -22,6 +22,11 @@ def percentile(sorted_values: list[float], p: float) -> float:
     return sorted_values[low] * (1.0 - weight) + sorted_values[high] * weight
 
 
+def mad(values: list[float], median_value: float) -> float:
+    """Median absolute deviation (robust jitter metric)."""
+    return statistics.median([abs(v - median_value) for v in values])
+
+
 def parse_values(file_path: Path) -> list[float]:
     values: list[float] = []
     with file_path.open("r", encoding="utf-8") as f:
@@ -45,8 +50,18 @@ def write_analysis(file_path: Path, values: list[float]) -> Path:
     median_value = statistics.median(values)
     min_value = sorted_values[0]
     max_value = sorted_values[-1]
+    # Tail behavior
     p95_value = percentile(sorted_values, 0.95)
     p99_value = percentile(sorted_values, 0.99)
+    # Jitter-focused metrics
+    sigma_sample = statistics.stdev(values) if len(values) > 1 else 0.0
+    sigma_population = statistics.pstdev(values) if values else 0.0
+    p25_value = percentile(sorted_values, 0.25)
+    p75_value = percentile(sorted_values, 0.75)
+    iqr_value = p75_value - p25_value
+    mad_value = mad(values, median_value)
+    # Peak-to-peak spread
+    p2p_value = max_value - min_value
 
     lines = [
         f"source_file: {file_path.name}",
@@ -57,6 +72,14 @@ def write_analysis(file_path: Path, values: list[float]) -> Path:
         f"median: {median_value:.6f}",
         f"p95: {p95_value:.6f}",
         f"p99: {p99_value:.6f}",
+        # New jitter / variability fields (appended, so old parsers keep working)
+        f"sigma_sample: {sigma_sample:.6f}",
+        f"sigma_population: {sigma_population:.6f}",
+        f"p25: {p25_value:.6f}",
+        f"p75: {p75_value:.6f}",
+        f"iqr: {iqr_value:.6f}",
+        f"mad: {mad_value:.6f}",
+        f"peak_to_peak: {p2p_value:.6f}",
     ]
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output_path

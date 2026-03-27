@@ -68,26 +68,28 @@ This library is fully integrated in the [ESP-NOW MIDI Kit](https://grantler-inst
 A circuit python version is in the making as well. Contributions here are very welcome.
 
 ## Benchmarks
-Round-trip path used for tests:
+This repository includes benchmark data and their analysis (see `benchmarks/` and `scripts/`).
 
-`pd --usb midi--> dongle --wireless midi--> client_echo --wireless midi--> dongle --usb midi--> pd`
+Each `*_analysis.txt` contains these latency metrics:
 
-Metrics are generated with:
+* `samples`: Number of numeric latency samples parsed from the benchmark file.
+* `min` / `max`: Fastest and slowest observed sample.
+* `mean`: Arithmetic average latency.
+* `median`: 50th percentile (middle value), usually more robust than mean when outliers exist.
+* `p95`: 95th percentile (95% of samples are at or below this value).
+* `p99`: 99th percentile (tail-latency indicator).
+* `sigma_sample`: Sample standard deviation (`stdev`), spread estimate for a sample set.
+* `sigma_population`: Population standard deviation (`pstdev`), spread estimate if treating the file as the full population.
+* `p25`: 25th percentile.
+* `p75`: 75th percentile.
+* `iqr`: Interquartile range (`p75 - p25`), spread of the middle 50% of values.
+* `mad`: Median absolute deviation (median of `abs(x - median)`), robust jitter metric.
+* `peak_to_peak`: Total observed range (`max - min`), very sensitive to outliers.
 
-`python3 scripts/analyze_benchmark.py <benchmark_file.txt>`
-
-The script writes a sibling `<old_name>_analysis.txt` with:
-`mean`, `median`, `p95`, `p99`.
-
-Current benchmark summaries:
-
-| Transport | File | Samples | Mean (ms) | Median (ms) | p95 (ms) | p99 (ms) |
-|---|---|---:|---:|---:|---:|---:|
-| BLE MIDI | `benchmarks/bleMidi/1m_0obs_m4_m1_osx.txt` | 999 | 22.347 | 17.142 | 48.752 | 49.660 |
-| BLE MIDI | `benchmarks/bleMidi/3m_1obs_m4_m1_osx.txt` | 999 | 18.800 | 11.632 | 48.823 | 49.841 |
-| BLE MIDI | `benchmarks/bleMidi/5m_2obs_m4_m1_osx.txt` | 999 | 20.079 | 12.607 | 48.344 | 49.706 |
-| RTP MIDI | `benchmarks/rtpMidi/1m_0obs_m4_m1_osx.txt` | 999 | 26.461 | 25.759 | 46.430 | 49.342 |
-| USB MIDI | `benchmarks/usbMidi/1m_m4_osx.txt` | 999 | 6.118 | 6.100 | 11.338 | 12.404 |
+Practical reading:
+* For "typical" latency, look at `median`.
+* For bad-case behavior, look at `p95` and `p99`.
+* For jitter/stability, compare `mad`, `iqr`, and `sigma_*`.
 
 
 ## sysex interface
