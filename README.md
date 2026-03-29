@@ -16,7 +16,7 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
 * When uploading to an S3, please make sure you have USB mode: USB-OTG (TinyUSB) activated
 
 ## Features
-* **enomik::Client I/O** MIDI sysex configuratable client: zero programming for basic I/O, e.g. digital input 3 -> MIDI CC
+* **enomik::Client I/O** Add `enomik::Client` to your sketch and it becomes a MIDI SysEx–configurable client: map pins to MIDI without extra wiring logic, e.g. digital input 3 → MIDI CC
 * **enomik::Client MIDI wrapper** Helper that takes care of the ESP-NOW setup, provides a common interface for USB and ESP-NOW MIDI
 * **examples**
   * **print_mac**: periodically prints the mac address to the serial monitor
@@ -50,19 +50,30 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
 
 
 ## Usage
-1. Upload the print_mac example to an ESP32-S2 Mini board. The MAC address will be printed to via serial, or if you have a display connect to the dongle, you can skip this step, as the mac address will be printed on the display.
-1. Upload the dongle example to an ESP32-S2 Mini board.
-2. Copy the MAC address of the dongle and register it via the addPeer function
-3. Integrate your sensor reading code into the sender.
-4. Use the provided API to send MIDI messages, similar to the original MIDI library.
-5. Or use the client with the no-code enomik web-app
 
-If you are planning to send midi messages from your computer to your other esp32 micro controller, the dongle firmware will forward midi messages received via usb midi, the sender first needs to register its mac address by sending any midi message to the dongle via esp now midi.
+You usually run **two roles**: a **dongle** (USB MIDI + ESP-NOW on one board, e.g. ESP32-S2 Mini with TinyUSB) and one or more **remote ESPs** that speak ESP-NOW MIDI.
 
-If you are using the dongle with a display then make sure you have set `HAS_DISPLAY 1` in config.h 
+### 1. Set up the dongle
+
+1. Flash the **dongle** example onto your USB-capable board.
+2. Note the dongle’s Wi-Fi STA MAC: run **print_mac** on that board (serial), or read it from the dongle display if you use one.
+
+If the dongle has an OLED, set `HAS_DISPLAY` to `1` in `examples/dongle/config.h`.
+
+### 2. Connect a remote board
+
+**Option A — `enomik::Client` (SysEx / web app)**  
+Use the **client** example or add `enomik::Client` to your sketch: call `begin()` in `setup()` and call the client’s `loop()` from your sketch `loop()`. Pair once with the dongle using `addPeer()` / `addPeerFromString()` with the dongle MAC (see the other client examples), or pair from the host via MIDI SysEx; saved peers are restored on boot. Configure pins and routing over SysEx or with the [enomik web app](https://grantler-instruments.github.io/enomik-app/).
+
+**Option B — Plain `esp_now_midi`**  
+See **plain_echo** and similar: initialize the library, `addPeer()` with the dongle MAC, then send and receive MIDI with the same style of API as a typical Arduino MIDI library.
+
+### 3. Computer → remote ESP
+
+USB MIDI sent to the dongle is forwarded over ESP-NOW. For the first link-up, the remote side typically needs the dongle registered as a peer (`addPeer` or SysEx pairing as above); the dongle learns the client when the client sends ESP-NOW MIDI traffic.
 
 ### enomik 3000 (WIP)
-This library is fully integrated in the [ESP-NOW MIDI Kit](https://grantler-instruments.github.io/enomik-app/) - the no-code app for creating (wireless) MIDI devices.
+Drop `enomik::Client` into your firmware and your board turns into a MIDI SysEx–configurable device: routing, pin modes, and basic I/O can be set from a host over SysEx instead of hard-coding every mapping. This library is integrated with the [ESP-NOW MIDI Kit](https://grantler-instruments.github.io/enomik-app/) — the no-code app for creating (wireless) MIDI devices.
 
 ### Circuit Python (WIP)
 A circuit python version is in the making as well. Contributions here are very welcome.
