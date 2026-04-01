@@ -195,7 +195,7 @@ namespace enomik
             _onMIDISendRequest = callback;
         }
 
-        void setOnAddPeerRequest(std::function<void(uint8_t mac[])> callback)
+        void setOnAddPeerRequest(std::function<bool(uint8_t mac[])> callback)
         {
             _onAddPeerRequest = callback;
         }
@@ -248,7 +248,7 @@ namespace enomik
 
         // External callbacks
         std::function<void(midi_message)> _onMIDISendRequest;
-        std::function<void(uint8_t mac[])> _onAddPeerRequest;
+        std::function<bool(uint8_t mac[])> _onAddPeerRequest;
         std::function<void()> _onGetPeersRequest;
         std::function<void()> _onResetRequest;
 
@@ -336,7 +336,12 @@ namespace enomik
                     // Need to cast away const for the callback
                     uint8_t macCopy[6];
                     memcpy(macCopy, mac, 6);
-                    _onAddPeerRequest(macCopy);
+                    bool success = _onAddPeerRequest(macCopy);
+                    _sysexHandler.sendAddPeerResponse(success);
+                }
+                else
+                {
+                    _sysexHandler.sendAddPeerResponse(false);
                 } });
 
             // Handler for getting peers
@@ -366,7 +371,8 @@ namespace enomik
                 {
                     _onResetRequest();
                 }
-                
+
+                _sysexHandler.sendSimpleResponse(SysExCommand::RESET_RESPONSE);
                 Serial.println("System reset complete"); });
 
             // Handler for sending SysEx messages back out

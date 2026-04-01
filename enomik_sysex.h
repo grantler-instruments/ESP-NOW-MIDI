@@ -23,7 +23,9 @@ namespace enomik
         // Response codes (command + 64)
         GET_PIN_CONFIG_RESPONSE = 0x42,      // 66
         GET_ALL_PIN_CONFIGS_RESPONSE = 0x44, // 68
+        ADD_PEER_RESPONSE = 0x47,            // 71
         GET_PEERS_RESPONSE = 0x48,           // 72
+        RESET_RESPONSE = 0x49,               // 73 (RESET + 64)
         GET_VERSION_RESPONSE = 0x4A          // 74
     };
 
@@ -348,6 +350,17 @@ namespace enomik
 
             SysExPacket pkt = SysExEncoder::encodeByteResponse(
                 SysExCommand::DELETE_PIN_CONFIG, pin);
+            midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
+            _onSend(msg);
+        }
+
+        void sendAddPeerResponse(bool success)
+        {
+            if (!_onSend)
+                return;
+
+            SysExPacket pkt = SysExEncoder::encodeByteResponse(
+                SysExCommand::ADD_PEER_RESPONSE, success ? 1 : 0);
             midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
             _onSend(msg);
         }

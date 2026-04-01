@@ -275,15 +275,18 @@ namespace enomik
                                    if (this->peerStorage.add(mac))
                                    {
                                        Serial.println("Peer added and stored successfully");
+                                       return true;
                                    }
                                    else
                                    {
                                        Serial.println("Failed to store peer");
+                                       return false;
                                    }
                                }
                                else
                                {
                                    Serial.println("Failed to add peer to ESP-NOW");
+                                   return false;
                                } });
 
             io.setOnGetPeersRequest([this]()
