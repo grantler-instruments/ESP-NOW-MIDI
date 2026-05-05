@@ -1,7 +1,9 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstdint>
+#include <cstring>
 #include "EEPROM.h"
+#include "utils/log.h"
 
 #define MAC_ADDRESS_SIZE 6
 #define MAX_PEERS 20
@@ -37,16 +39,14 @@ public:
         }
         
         if (!EEPROM.begin(eepromSize)) {
-            Serial.println("PeerStorage: Failed to initialize EEPROM");
+            enomik_log_error("PeerStorage: Failed to initialize EEPROM");
             return false;
         }
         
         load();
         initialized = true;
         
-        Serial.print("PeerStorage: Loaded ");
-        Serial.print(peerCount);
-        Serial.println(" peers");
+        enomik_log_debug("PeerStorage: Loaded %d peers", peerCount);
         
         return true;
     }
@@ -54,17 +54,17 @@ public:
     // Peer management
     bool add(const uint8_t mac[MAC_ADDRESS_SIZE]) {
         if (!initialized) {
-            Serial.println("PeerStorage: Not initialized");
+            enomik_log_error("PeerStorage: Not initialized");
             return false;
         }
         
         if (isFull()) {
-            Serial.println("PeerStorage: Maximum peers reached");
+            enomik_log_error("PeerStorage: Maximum peers reached");
             return false;
         }
         
         if (exists(mac)) {
-            Serial.println("PeerStorage: Peer already exists");
+            enomik_log_debug("PeerStorage: Peer already exists");
             return false;
         }
         
@@ -72,11 +72,8 @@ public:
         peerCount++;
         save();
         
-        Serial.print("PeerStorage: Added peer ");
-        printMac(mac);
-        Serial.print(" (Total: ");
-        Serial.print(peerCount);
-        Serial.println(")");
+        enomik_log_debug("PeerStorage: Added peer %02X:%02X:%02X:%02X:%02X:%02X (Total: %d)",
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], peerCount);
         
         return true;
     }
@@ -84,7 +81,7 @@ public:
     bool remove(const uint8_t mac[MAC_ADDRESS_SIZE]) {
         int index = findIndex(mac);
         if (index < 0) {
-            Serial.println("PeerStorage: Peer not found");
+            enomik_log_error("PeerStorage: Peer not found");
             return false;
         }
         
@@ -93,13 +90,13 @@ public:
     
     bool remove(int index) {
         if (index < 0 || index >= peerCount) {
-            Serial.println("PeerStorage: Invalid index");
+            enomik_log_error("PeerStorage: Invalid index");
             return false;
         }
         
-        Serial.print("PeerStorage: Removing peer ");
-        printMac(peers[index].mac);
-        Serial.println();
+        enomik_log_debug("PeerStorage: Removing peer %02X:%02X:%02X:%02X:%02X:%02X",
+            peers[index].mac[0], peers[index].mac[1], peers[index].mac[2],
+            peers[index].mac[3], peers[index].mac[4], peers[index].mac[5]);
         
         // Shift remaining peers down
         for (int i = index; i < peerCount - 1; i++) {
@@ -117,7 +114,7 @@ public:
         peerCount = 0;
         memset(peers, 0, sizeof(peers));
         save();
-        Serial.println("PeerStorage: All peers cleared");
+        enomik_log_debug("PeerStorage: All peers cleared");
     }
     
     // Query methods
@@ -142,20 +139,14 @@ public:
     
     // Debug
     void printAll() const {
-        Serial.print("PeerStorage: Stored peers (");
-        Serial.print(peerCount);
-        Serial.println("):");
-        
+        enomik_log("PeerStorage: Stored peers (%d):", peerCount);
         for (int i = 0; i < peerCount; i++) {
-            Serial.print("  [");
-            Serial.print(i);
-            Serial.print("]: ");
-            printMac(peers[i].mac);
-            Serial.println();
+            enomik_log("  [%d]: %02X:%02X:%02X:%02X:%02X:%02X", i,
+                peers[i].mac[0], peers[i].mac[1], peers[i].mac[2],
+                peers[i].mac[3], peers[i].mac[4], peers[i].mac[5]);
         }
-        
         if (isEmpty()) {
-            Serial.println("  No peers stored");
+            enomik_log("  No peers stored");
         }
     }
 
@@ -178,16 +169,14 @@ private:
         EEPROM.get(eepromAddr, storage);
         
         if (storage.validFlag != VALID_FLAG) {
-            // First time use - initialize
-            Serial.println("PeerStorage: Initializing fresh storage");
+            enomik_log_debug("PeerStorage: Initializing fresh storage");
             peerCount = 0;
             memset(peers, 0, sizeof(peers));
             save();
         } else {
-            // Load existing peers
             peerCount = storage.peerCount;
             if (peerCount > MAX_PEERS) {
-                Serial.println("PeerStorage: Corrupt data, resetting");
+                enomik_log_error("PeerStorage: Corrupt data, resetting");
                 peerCount = 0;
                 save();
             } else {
@@ -215,13 +204,6 @@ private:
         return -1;
     }
     
-    static void printMac(const uint8_t mac[MAC_ADDRESS_SIZE]) {
-        for (int i = 0; i < MAC_ADDRESS_SIZE; i++) {
-            if (mac[i] < 16) Serial.print("0");
-            Serial.print(mac[i], HEX);
-            if (i < MAC_ADDRESS_SIZE - 1) Serial.print(":");
-        }
-    }
 };
 
 } // namespace enomik

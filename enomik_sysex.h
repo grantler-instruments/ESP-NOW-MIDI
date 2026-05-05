@@ -1,5 +1,6 @@
 #include "./enomik_pinconfig.h"
 #include "./version.h"
+#include "./utils/log.h"
 
 namespace enomik
 {
@@ -211,12 +212,8 @@ namespace enomik
             if (length < 8)
                 return false;
 
-            Serial.println("Decoding PinConfig from SysEx payload");
-            Serial.println(payload[3]);
-            Serial.println(payload[4]);
-            Serial.println(payload[5]);
-            Serial.println(payload[6]);
-            Serial.println(payload[7]);
+            enomik_log_debug("Decoding PinConfig: ch=%d type=0x%02X cc/note=%d min=%d max=%d",
+                payload[3], payload[4], payload[5], payload[6], payload[7]);
 
             cfg.pin = payload[0];
             cfg.mode = payload[1];
@@ -269,7 +266,7 @@ namespace enomik
             // Validate minimum length
             if (length < SysExPacket::MIN_PACKET_SIZE)
             {
-                Serial.println("SysEx: Invalid packet length");
+                enomik_log_error("SysEx: Invalid packet length");
                 return;
             }
 
@@ -280,21 +277,15 @@ namespace enomik
 
             if (!packet.isValid())
             {
-                Serial.println("SysEx: Invalid packet format");
+                enomik_log_error("SysEx: Invalid packet format");
                 return;
             }
 
             // Check version compatibility
             if (!packet.isVersionCompatible())
             {
-                Serial.print("SysEx: Incompatible protocol version ");
-                Serial.print(packet.getMajorVersion());
-                Serial.print(".");
-                Serial.print(packet.getMinorVersion());
-                Serial.print(" (expected ");
-                Serial.print(PROTOCOL_VERSION_MAJOR);
-                Serial.print(".x)");
-                Serial.println();
+                enomik_log_error("SysEx: Incompatible protocol version %d.%d (expected %d.x)",
+                    packet.getMajorVersion(), packet.getMinorVersion(), PROTOCOL_VERSION_MAJOR);
                 return;
             }
 
@@ -384,8 +375,7 @@ namespace enomik
             const uint8_t *payload = packet.getPayload();
             uint16_t payloadLen = packet.getPayloadLength();
 
-            Serial.print("SysEx: Handling command 0x");
-            Serial.println(static_cast<uint8_t>(cmd), HEX);
+            enomik_log_debug("SysEx: Handling command 0x%02X", static_cast<uint8_t>(cmd));
 
             switch (cmd)
             {
@@ -430,8 +420,7 @@ namespace enomik
                 break;
 
             default:
-                Serial.print("SysEx: Unknown command: 0x");
-                Serial.println(static_cast<uint8_t>(cmd), HEX);
+                enomik_log_error("SysEx: Unknown command: 0x%02X", static_cast<uint8_t>(cmd));
                 break;
             }
         }
@@ -440,20 +429,19 @@ namespace enomik
         {
             if (!_onSetPinConfig)
             {
-                Serial.println("SysEx: No SET_PIN_CONFIG handler");
+                enomik_log_debug("SysEx: No SET_PIN_CONFIG handler");
                 return;
             }
 
             PinConfig cfg(0, 0);
             if (SysExDecoder::decodePinConfig(payload, length, cfg))
             {
-                Serial.print("SysEx: Setting config for pin ");
-                Serial.println(cfg.pin);
+                enomik_log_debug("SysEx: Setting config for pin %d", cfg.pin);
                 _onSetPinConfig(cfg);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode pin config");
+                enomik_log_error("SysEx: Failed to decode pin config");
             }
         }
 
@@ -461,20 +449,19 @@ namespace enomik
         {
             if (!_onGetPinConfig)
             {
-                Serial.println("SysEx: No GET_PIN_CONFIG handler");
+                enomik_log_debug("SysEx: No GET_PIN_CONFIG handler");
                 return;
             }
 
             uint8_t pin;
             if (SysExDecoder::decodePin(payload, length, pin))
             {
-                Serial.print("SysEx: Getting config for pin ");
-                Serial.println(pin);
+                enomik_log_debug("SysEx: Getting config for pin %d", pin);
                 _onGetPinConfig(pin);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode pin number");
+                enomik_log_error("SysEx: Failed to decode pin number");
             }
         }
 
@@ -482,20 +469,19 @@ namespace enomik
         {
             if (!_onDeletePinConfig)
             {
-                Serial.println("SysEx: No DELETE_PIN_CONFIG handler");
+                enomik_log_debug("SysEx: No DELETE_PIN_CONFIG handler");
                 return;
             }
 
             uint8_t pin;
             if (SysExDecoder::decodePin(payload, length, pin))
             {
-                Serial.print("SysEx: Deleting config for pin ");
-                Serial.println(pin);
+                enomik_log_debug("SysEx: Deleting config for pin %d", pin);
                 _onDeletePinConfig(pin);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode pin number");
+                enomik_log_error("SysEx: Failed to decode pin number");
             }
         }
 
@@ -503,7 +489,7 @@ namespace enomik
         {
             if (_onClearPinConfigs)
             {
-                Serial.println("SysEx: Clearing all pin configs");
+                enomik_log_debug("SysEx: Clearing all pin configs");
                 _onClearPinConfigs();
             }
         }
@@ -512,7 +498,7 @@ namespace enomik
         {
             if (_onGetAllPinConfigs)
             {
-                Serial.println("SysEx: Getting all pin configs");
+                enomik_log_debug("SysEx: Getting all pin configs");
                 _onGetAllPinConfigs();
             }
         }
@@ -521,7 +507,7 @@ namespace enomik
         {
             if (_onGetMAC)
             {
-                Serial.println("SysEx: Getting MAC address");
+                enomik_log_debug("SysEx: Getting MAC address");
                 _onGetMAC();
             }
         }
@@ -530,26 +516,20 @@ namespace enomik
         {
             if (!_onAddPeer)
             {
-                Serial.println("SysEx: No ADD_PEER handler");
+                enomik_log_debug("SysEx: No ADD_PEER handler");
                 return;
             }
 
             uint8_t mac[6];
             if (SysExDecoder::decodeMAC(payload, length, mac))
             {
-                Serial.print("SysEx: Adding peer: ");
-                for (int i = 0; i < 6; i++)
-                {
-                    Serial.print(mac[i], HEX);
-                    if (i < 5)
-                        Serial.print(":");
-                }
-                Serial.println();
+                enomik_log_debug("SysEx: Adding peer: %02X:%02X:%02X:%02X:%02X:%02X",
+                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                 _onAddPeer(mac);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode MAC address");
+                enomik_log_error("SysEx: Failed to decode MAC address");
             }
         }
 
@@ -557,7 +537,7 @@ namespace enomik
         {
             if (_onGetPeers)
             {
-                Serial.println("SysEx: Getting peers");
+                enomik_log_debug("SysEx: Getting peers");
                 _onGetPeers();
             }
         }
@@ -566,7 +546,7 @@ namespace enomik
         {
             if (_onReset)
             {
-                Serial.println("SysEx: Performing reset");
+                enomik_log_debug("SysEx: Performing reset");
                 _onReset();
             }
         }
@@ -575,7 +555,7 @@ namespace enomik
         {
             if (_onGetVersion)
             {
-                Serial.println("SysEx: Getting version");
+                enomik_log_debug("SysEx: Getting version");
                 _onGetVersion();
             }
         }

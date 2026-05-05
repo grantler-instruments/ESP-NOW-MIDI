@@ -4,11 +4,11 @@
 #define ESP_NOW_MIDI_CHANNEL 6
 #endif
 #include "./version.h"
+#include "./utils/log.h"
 #include <esp_now.h>
 #include <esp_wifi.h> // Needed for wifi_tx_info_t in newer versions
 #include <WiFi.h>
 #include "./midiHelpers.h"
-#define ESP_NOW_DEBUGGING 0
 
 // Version detection
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 3, 0)
@@ -46,18 +46,12 @@ public:
 #ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
   static void DefaultOnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
   {
-#if ESP_NOW_DEBUGGING == 1
-    Serial.print("\r\nLast Packet Send Status:\t");
-    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-#endif
+    enomik_log_debug("Last Packet Send Status: %s", status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
   }
 #else
   static void DefaultOnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
   {
-#if ESP_NOW_DEBUGGING == 1
-    Serial.print("\r\nLast Packet Send Status:\t");
-    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-#endif
+    enomik_log_debug("Last Packet Send Status: %s", status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
   }
 #endif
 
@@ -117,11 +111,11 @@ public:
 
     if (init_result == ESP_ERR_ESPNOW_EXIST)
     {
-      Serial.println("[ESP-NOW] Already initialized");
+      enomik_log_debug("Already initialized");
     }
     else if (init_result != ESP_OK)
     {
-      Serial.printf("[ESP-NOW] Init failed with error: %d\n", init_result);
+      enomik_log_error("Init failed with error: %d", init_result);
       return;
     }
 
@@ -156,19 +150,13 @@ public:
   {
     if (_peersCount >= MAX_PEERS)
     {
-      Serial.println("Maximum number of peers reached");
+      enomik_log_error("Maximum number of peers reached");
       return false;
     }
 
-    // Debug print
-    Serial.print("Adding peer: ");
-    for (int i = 0; i < 6; i++)
-    {
-      Serial.print(macAddress[i], HEX);
-      if (i < 5)
-        Serial.print(":");
-    }
-    Serial.println();
+    enomik_log_debug("Adding peer: %02X:%02X:%02X:%02X:%02X:%02X",
+      macAddress[0], macAddress[1], macAddress[2],
+      macAddress[3], macAddress[4], macAddress[5]);
 
     // Create the peer info structure
     esp_now_peer_info_t peerInfo;
@@ -180,7 +168,7 @@ public:
     // Add the peer to ESP-NOW
     if (esp_now_add_peer(&peerInfo) != ESP_OK)
     {
-      Serial.println("Failed to add peer");
+      enomik_log_error("Failed to add peer");
       return false;
     }
 
@@ -188,14 +176,13 @@ public:
     memcpy(_peers[_peersCount].mac, macAddress, 6);
     _peers[_peersCount].packed_mac = PeerInfo::packMac(macAddress);
     _peersCount++;
-    Serial.print("Peer added successfully. Total peers: ");
-    Serial.println(_peersCount);
+    enomik_log_debug("Peer added successfully. Total peers: %d", _peersCount);
     return true;
   }
 
   void clearPeers()
   {
-    Serial.println("Clearing all peers from ESP-NOW...");
+    enomik_log_debug("Clearing all peers from ESP-NOW...");
 
     // Remove all peers from ESP-NOW
     for (int i = 0; i < _peersCount; i++)
@@ -203,18 +190,13 @@ public:
       esp_err_t result = esp_now_del_peer(_peers[i].mac);
       if (result == ESP_OK)
       {
-        Serial.print("Removed peer: ");
-        for (int j = 0; j < 6; j++)
-        {
-          Serial.print(_peers[i].mac[j], HEX);
-          if (j < 5)
-            Serial.print(":");
-        }
-        Serial.println();
+        enomik_log_debug("Removed peer: %02X:%02X:%02X:%02X:%02X:%02X",
+          _peers[i].mac[0], _peers[i].mac[1], _peers[i].mac[2],
+          _peers[i].mac[3], _peers[i].mac[4], _peers[i].mac[5]);
       }
       else
       {
-        Serial.printf("Failed to remove peer, error: %d\n", result);
+        enomik_log_error("Failed to remove peer, error: %d", result);
       }
     }
 
@@ -222,7 +204,7 @@ public:
     memset(_peers, 0, sizeof(_peers));
     _peersCount = 0;
 
-    Serial.println("All peers cleared");
+    enomik_log_debug("All peers cleared");
   }
 
   int getPeersCount() const
@@ -232,21 +214,14 @@ public:
 
   void printPeers() const
   {
-    Serial.println("=== Registered ESP-NOW Peers ===");
+    enomik_log("=== Registered ESP-NOW Peers ===");
     for (int i = 0; i < _peersCount; i++)
     {
-      Serial.print("Peer ");
-      Serial.print(i);
-      Serial.print(": ");
-      for (int j = 0; j < 6; j++)
-      {
-        Serial.print(_peers[i].mac[j], HEX);
-        if (j < 5)
-          Serial.print(":");
-      }
-      Serial.println();
+      enomik_log("Peer %d: %02X:%02X:%02X:%02X:%02X:%02X", i,
+        _peers[i].mac[0], _peers[i].mac[1], _peers[i].mac[2],
+        _peers[i].mac[3], _peers[i].mac[4], _peers[i].mac[5]);
     }
-    Serial.println("================================");
+    enomik_log("================================");
   }
 
   // Send to all peers
@@ -256,7 +231,6 @@ public:
 
     if (_peersCount == 0)
     {
-      // Serial.println("No peers registered!");
       return ESP_FAIL;
     }
 
@@ -271,7 +245,7 @@ public:
     return result;
   }
 
-  inline esp_err_t sendNoteOn(byte note, byte velocity, byte channel)
+  inline esp_err_t sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel)
   {
     midi_message message;
     message.channel = channel;
@@ -283,7 +257,7 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
-  inline esp_err_t sendNoteOff(byte note, byte velocity, byte channel)
+  inline esp_err_t sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel)
   {
     midi_message message;
     message.channel = channel;
@@ -295,7 +269,7 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
-  inline esp_err_t sendControlChange(byte control, byte value, byte channel)
+  inline esp_err_t sendControlChange(uint8_t control, uint8_t value, uint8_t channel)
   {
     midi_message message;
     message.channel = channel;
@@ -307,7 +281,7 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
-  inline esp_err_t sendProgramChange(byte program, byte channel)
+  inline esp_err_t sendProgramChange(uint8_t program, uint8_t channel)
   {
     midi_message message;
     message.channel = channel;
@@ -319,7 +293,7 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
-  inline esp_err_t sendAfterTouch(byte pressure, byte channel)
+  inline esp_err_t sendAfterTouch(uint8_t pressure, uint8_t channel)
   {
     midi_message message;
     message.channel = channel;
@@ -331,7 +305,7 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
-  inline esp_err_t sendAfterTouch(byte note, byte pressure, byte channel)
+  inline esp_err_t sendAfterTouch(uint8_t note, uint8_t pressure, uint8_t channel)
   {
     midi_message message;
     message.channel = channel;
@@ -343,12 +317,12 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
-  inline esp_err_t sendAfterTouchPoly(byte note, byte pressure, byte channel)
+  inline esp_err_t sendAfterTouchPoly(uint8_t note, uint8_t pressure, uint8_t channel)
   {
     return sendAfterTouch(note, pressure, channel);
   }
 
-  inline esp_err_t sendPitchBendRaw(int value, byte channel)
+  inline esp_err_t sendPitchBendRaw(int value, uint8_t channel)
   {
     midi_message message;
     message.channel = channel;
@@ -361,7 +335,7 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
-  inline esp_err_t sendPitchBend(int16_t value, byte channel)
+  inline esp_err_t sendPitchBend(int16_t value, uint8_t channel)
   {
     // clamp to signed 14-bit range
     if (value < -8192)
@@ -589,37 +563,37 @@ public:
     }
   }
 
-  void setHandleNoteOn(void (*callback)(byte channel, byte note, byte velocity))
+  void setHandleNoteOn(void (*callback)(uint8_t channel, uint8_t note, uint8_t velocity))
   {
     onNoteOnHandler = callback;
   }
 
-  void setHandleNoteOff(void (*callback)(byte channel, byte note, byte velocity))
+  void setHandleNoteOff(void (*callback)(uint8_t channel, uint8_t note, uint8_t velocity))
   {
     onNoteOffHandler = callback;
   }
 
-  void setHandleControlChange(void (*callback)(byte channel, byte control, byte value))
+  void setHandleControlChange(void (*callback)(uint8_t channel, uint8_t control, uint8_t value))
   {
     onControlChangeHandler = callback;
   }
 
-  void setHandleProgramChange(void (*callback)(byte channel, byte program))
+  void setHandleProgramChange(void (*callback)(uint8_t channel, uint8_t program))
   {
     onProgramChangeHandler = callback;
   }
 
-  void setHandlePitchBend(void (*callback)(byte channel, int value))
+  void setHandlePitchBend(void (*callback)(uint8_t channel, int value))
   {
     onPitchBendHandler = callback;
   }
 
-  void setHandleAfterTouchChannel(void (*callback)(byte channel, byte pressure))
+  void setHandleAfterTouchChannel(void (*callback)(uint8_t channel, uint8_t pressure))
   {
     onAfterTouchChannelHandler = callback;
   }
 
-  void setHandleAfterTouchPoly(void (*callback)(byte channel, byte note, byte pressure))
+  void setHandleAfterTouchPoly(void (*callback)(uint8_t channel, uint8_t note, uint8_t pressure))
   {
     onAfterTouchPolyHandler = callback;
   }
@@ -649,7 +623,7 @@ public:
     onSongPositionHandler = callback;
   }
 
-  void setHandleSongSelect(void (*callback)(byte value))
+  void setHandleSongSelect(void (*callback)(uint8_t value))
   {
     onSongSelectHandler = callback;
   }
@@ -673,19 +647,19 @@ private:
   bool _autoPeerDiscovery = true;
 
   // MIDI Handlers
-  void (*onNoteOnHandler)(byte channel, byte note, byte velocity) = nullptr;
-  void (*onNoteOffHandler)(byte channel, byte note, byte velocity) = nullptr;
-  void (*onControlChangeHandler)(byte channel, byte control, byte value) = nullptr;
-  void (*onProgramChangeHandler)(byte channel, byte program) = nullptr;
-  void (*onPitchBendHandler)(byte channel, int value) = nullptr;
-  void (*onAfterTouchChannelHandler)(byte channel, byte value) = nullptr;
-  void (*onAfterTouchPolyHandler)(byte channel, byte note, byte value) = nullptr;
+  void (*onNoteOnHandler)(uint8_t channel, uint8_t note, uint8_t velocity) = nullptr;
+  void (*onNoteOffHandler)(uint8_t channel, uint8_t note, uint8_t velocity) = nullptr;
+  void (*onControlChangeHandler)(uint8_t channel, uint8_t control, uint8_t value) = nullptr;
+  void (*onProgramChangeHandler)(uint8_t channel, uint8_t program) = nullptr;
+  void (*onPitchBendHandler)(uint8_t channel, int value) = nullptr;
+  void (*onAfterTouchChannelHandler)(uint8_t channel, uint8_t value) = nullptr;
+  void (*onAfterTouchPolyHandler)(uint8_t channel, uint8_t note, uint8_t value) = nullptr;
   void (*onStartHandler)() = nullptr;
   void (*onStopHandler)() = nullptr;
   void (*onContinueHandler)() = nullptr;
   void (*onClockHandler)() = nullptr;
   void (*onSongPositionHandler)(uint16_t value) = nullptr;
-  void (*onSongSelectHandler)(byte value) = nullptr;
+  void (*onSongSelectHandler)(uint8_t value) = nullptr;
 };
 
 esp_now_midi *esp_now_midi::_instance = nullptr;

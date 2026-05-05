@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include "esp_now_midi.h"
 #include "utils/mac.h"
+#include "utils/log.h"
 #include "enomik_sysex.h"
 #include "./enomik_pinconfig.h"
 
@@ -216,28 +217,17 @@ namespace enomik
 
         void printPinConfigs()
         {
-            Serial.println("=== Pin Configurations ===");
+            enomik_log("=== Pin Configurations ===");
             for (size_t i = 0; i < _pinConfigs.size(); i++)
             {
                 const auto &cfg = _pinConfigs[i];
-                Serial.print("Pin: ");
-                Serial.print(cfg.pin);
-                Serial.print(" | Mode: ");
-                Serial.print(cfg.mode);
-                Serial.print(" | MIDI Channel: ");
-                Serial.print(cfg.midi_channel);
-                Serial.print(" | MIDI Type: ");
-                Serial.print(static_cast<uint8_t>(cfg.midi_type));
-                Serial.print(" | CC: ");
-                Serial.print(cfg.midi_cc);
-                Serial.print(" | Note: ");
-                Serial.print(cfg.midi_note);
-                Serial.print(" | Min MIDI: ");
-                Serial.print(cfg.min_midi_value);
-                Serial.print(" | Max MIDI: ");
-                Serial.println(cfg.max_midi_value);
+                enomik_log("Pin: %d | Mode: %d | Ch: %d | Type: 0x%02X | CC: %d | Note: %d | Min: %d | Max: %d",
+                    cfg.pin, cfg.mode, cfg.midi_channel,
+                    static_cast<uint8_t>(cfg.midi_type),
+                    cfg.midi_cc, cfg.midi_note,
+                    cfg.min_midi_value, cfg.max_midi_value);
             }
-            Serial.println("==========================");
+            enomik_log("==========================");
         }
 
     private:
@@ -257,15 +247,14 @@ namespace enomik
             // Handler for setting pin configuration
             _sysexHandler.setOnSetPinConfig([this](const PinConfig &cfg)
                                             {
-                Serial.println("SysEx: Setting pin config");
+                enomik_log_debug("SysEx: Setting pin config");
                 upsertPinConfig(cfg);
                 _sysexHandler.sendPinConfigResponse(cfg); });
 
             // Handler for getting single pin configuration
             _sysexHandler.setOnGetPinConfig([this](uint8_t pin)
                                             {
-                Serial.print("SysEx: Getting config for pin ");
-                Serial.println(pin);
+                enomik_log_debug("SysEx: Getting config for pin %d", pin);
                 for (const auto &cfg : _pinConfigs)
                 {
                     if (cfg.pin == pin)
@@ -274,12 +263,12 @@ namespace enomik
                         return;
                     }
                 }
-                Serial.println("SysEx: Pin config not found"); });
+                enomik_log_debug("SysEx: Pin config not found"); });
 
             // Handler for getting all pin configurations
             _sysexHandler.setOnGetAllPinConfigs([this]()
                                                 {
-                Serial.println("SysEx: Getting all pin configs");
+                enomik_log_debug("SysEx: Getting all pin configs");
                 for (const auto &cfg : _pinConfigs)
                 {
                     _sysexHandler.sendPinConfigResponse(cfg);
@@ -288,8 +277,7 @@ namespace enomik
             // Handler for deleting pin configuration
             _sysexHandler.setOnDeletePinConfig([this](uint8_t pin)
                                                {
-                Serial.print("SysEx: Deleting config for pin ");
-                Serial.println(pin);
+                enomik_log_debug("SysEx: Deleting config for pin %d", pin);
                 
                 for (size_t i = 0; i < _pinConfigs.size(); i++)
                 {
@@ -306,7 +294,7 @@ namespace enomik
             // Handler for clearing all pin configurations
             _sysexHandler.setOnClearPinConfigs([this]()
                                                {
-                Serial.println("SysEx: Clearing all pin configs");
+                enomik_log_debug("SysEx: Clearing all pin configs");
                 _pinConfigs.clear();
                 _pinStates.clear();
                 savePinConfigsToPrefs(_pinConfigs);
@@ -315,7 +303,7 @@ namespace enomik
             // Handler for getting MAC address
             _sysexHandler.setOnGetMAC([this]()
                                       {
-                Serial.println("SysEx: Getting MAC address");
+                enomik_log_debug("SysEx: Getting MAC address");
                 uint8_t mac[6];
                 esp_read_mac(mac, ESP_MAC_WIFI_STA);
                 _sysexHandler.sendMACResponse(mac); });
@@ -323,13 +311,8 @@ namespace enomik
             // Handler for adding peer
             _sysexHandler.setOnAddPeer([this](const uint8_t mac[6])
                                        {
-                Serial.print("SysEx: Adding peer ");
-                for (int i = 0; i < 6; i++)
-                {
-                    Serial.print(mac[i], HEX);
-                    if (i < 5) Serial.print(":");
-                }
-                Serial.println();
+                enomik_log_debug("SysEx: Adding peer %02X:%02X:%02X:%02X:%02X:%02X",
+                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                 
                 if (_onAddPeerRequest)
                 {
@@ -347,7 +330,7 @@ namespace enomik
             // Handler for getting peers
             _sysexHandler.setOnGetPeers([this]()
                                         {
-                Serial.println("SysEx: Getting peers list");
+                enomik_log_debug("SysEx: Getting peers list");
                 if (_onGetPeersRequest)
                 {
                     _onGetPeersRequest();
@@ -356,7 +339,7 @@ namespace enomik
             // Handler for system reset
             _sysexHandler.setOnReset([this]()
                                      {
-                Serial.println("SysEx: Performing system reset");
+                enomik_log_debug("SysEx: Performing system reset");
                 
                 // Clear in-memory configurations
                 _pinConfigs.clear();
@@ -373,7 +356,7 @@ namespace enomik
                 }
 
                 _sysexHandler.sendSimpleResponse(SysExCommand::RESET_RESPONSE);
-                Serial.println("System reset complete"); });
+                enomik_log_debug("System reset complete"); });
 
             // Handler for sending SysEx messages back out
             _sysexHandler.setOnSend([this](const midi_sysex_message &msg)
@@ -591,34 +574,26 @@ namespace enomik
 
         void upsertPinConfig(const PinConfig &config)
         {
-            Serial.println("=== UPSERT START ===");
-            Serial.print("Upserting pin: ");
-            Serial.println(config.pin);
+            enomik_log_debug("Upserting pin: %d", config.pin);
 
             // Remove existing config for this pin
             for (size_t i = 0; i < _pinConfigs.size(); i++)
             {
                 if (_pinConfigs[i].pin == config.pin)
                 {
-                    Serial.print("Removing existing config at index: ");
-                    Serial.println(i);
+                    enomik_log_debug("Removing existing config at index: %d", (int)i);
                     _pinConfigs.erase(_pinConfigs.begin() + i);
                     _pinStates.erase(_pinStates.begin() + i);
                     break;
                 }
             }
 
-            // Add new config
-            Serial.print("Adding new config for pin: ");
-            Serial.println(config.pin);
             _pinConfigs.push_back(config);
             _pinStates.push_back(PinState());
             initializePinHardware(config);
 
-            Serial.print("Config count after: ");
-            Serial.println(_pinConfigs.size());
+            enomik_log_debug("Config count after upsert: %d", (int)_pinConfigs.size());
             savePinConfigsToPrefs(_pinConfigs);
-            Serial.println("=== UPSERT END ===");
         }
 
         void savePinConfigsToPrefs(const std::vector<PinConfig> &configs)

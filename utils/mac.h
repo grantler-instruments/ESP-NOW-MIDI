@@ -1,71 +1,75 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstdint>
+#include <cstring>
+#include <cstdio>
 #include "esp_mac.h"
-
+#include "../utils/log.h"
 
 #define MAC_ADDRESS_SIZE 6
 
 namespace enomik {
 
-// Convert MAC address to string (uppercase with colons)
-inline String macToString(const uint8_t mac[MAC_ADDRESS_SIZE]) {
-    String result = "";
-    for (int i = 0; i < MAC_ADDRESS_SIZE; i++) {
-        if (mac[i] < 16) result += "0";
-        result += String(mac[i], HEX);
-        if (i < MAC_ADDRESS_SIZE - 1) result += ":";
-    }
-    result.toUpperCase();
-    return result;
+// Returns pointer to a static buffer — single-threaded use only
+inline const char* macToString(const uint8_t mac[MAC_ADDRESS_SIZE]) {
+    static char buf[18];
+    snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return buf;
 }
 
-// Parse MAC address from string format "XX:XX:XX:XX:XX:XX"
-inline bool macFromString(const String& macStr, uint8_t mac[MAC_ADDRESS_SIZE]) {
-    String trimmed = macStr;
-    trimmed.trim();
-    trimmed.toUpperCase();
-
-    if (trimmed.length() != 17) {
-        Serial.println("MacHelpers: Invalid MAC length. Expected XX:XX:XX:XX:XX:XX");
+// Parse MAC address from C string "XX:XX:XX:XX:XX:XX"
+inline bool macFromString(const char* macStr, uint8_t mac[MAC_ADDRESS_SIZE]) {
+    if (!macStr || strlen(macStr) != 17) {
+        enomik_log_error("MacHelpers: Invalid MAC length. Expected XX:XX:XX:XX:XX:XX");
         return false;
     }
+
+    // Normalize to uppercase in a local copy
+    char upper[18];
+    for (int i = 0; i < 17; i++) {
+        char c = macStr[i];
+        upper[i] = (c >= 'a' && c <= 'f') ? (c - 'a' + 'A') : c;
+    }
+    upper[17] = '\0';
 
     int bytePositions[MAC_ADDRESS_SIZE] = {0, 3, 6, 9, 12, 15};
 
     for (int i = 0; i < MAC_ADDRESS_SIZE; i++) {
         int pos = bytePositions[i];
-        char char1 = trimmed.charAt(pos);
-        char char2 = trimmed.charAt(pos + 1);
+        char char1 = upper[pos];
+        char char2 = upper[pos + 1];
 
-        auto isHex = [](char c) { 
-            return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F'); 
+        auto isHex = [](char c) {
+            return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F');
         };
-        
-        auto hexToNibble = [](char c) { 
-            return (c >= '0' && c <= '9') ? (c - '0') : (c - 'A' + 10); 
+        auto hexToNibble = [](char c) -> uint8_t {
+            return (c >= '0' && c <= '9') ? (c - '0') : (c - 'A' + 10);
         };
 
         if (!isHex(char1) || !isHex(char2)) {
-            Serial.print("MacHelpers: Invalid hex at position ");
-            Serial.println(pos);
+            enomik_log_error("MacHelpers: Invalid hex at position %d", pos);
             return false;
         }
 
-        uint8_t nibble1 = hexToNibble(char1);
-        uint8_t nibble2 = hexToNibble(char2);
-        mac[i] = (nibble1 << 4) | nibble2;
+        mac[i] = (hexToNibble(char1) << 4) | hexToNibble(char2);
 
-        // Check for colon separator (except after last byte)
-        if (i < MAC_ADDRESS_SIZE - 1 && trimmed.charAt(pos + 2) != ':') {
-            Serial.print("MacHelpers: Missing colon after byte ");
-            Serial.println(i);
+        if (i < MAC_ADDRESS_SIZE - 1 && upper[pos + 2] != ':') {
+            enomik_log_error("MacHelpers: Missing colon after byte %d", i);
             return false;
         }
     }
 
     return true;
 }
+
+#ifdef ARDUINO
+#include <Arduino.h>
+// Convenience overload for Arduino String callers
+inline bool macFromString(const String& macStr, uint8_t mac[MAC_ADDRESS_SIZE]) {
+    return macFromString(macStr.c_str(), mac);
+}
+#endif
 
 // Compare two MAC addresses
 inline bool macEquals(const uint8_t mac1[MAC_ADDRESS_SIZE], const uint8_t mac2[MAC_ADDRESS_SIZE]) {
@@ -93,19 +97,14 @@ inline bool macIsBroadcast(const uint8_t mac[MAC_ADDRESS_SIZE]) {
     return true;
 }
 
-// Print MAC address to Serial
+// Print MAC address via logger
 inline void macPrint(const uint8_t mac[MAC_ADDRESS_SIZE]) {
-    for (int i = 0; i < MAC_ADDRESS_SIZE; i++) {
-        if (mac[i] < 16) Serial.print("0");
-        Serial.print(mac[i], HEX);
-        if (i < MAC_ADDRESS_SIZE - 1) Serial.print(":");
-    }
+    enomik_log("%s", macToString(mac));
 }
 
-// Print MAC address to Serial with newline
+// Alias kept for API compatibility
 inline void macPrintln(const uint8_t mac[MAC_ADDRESS_SIZE]) {
     macPrint(mac);
-    Serial.println();
 }
 
 } // namespace enomik
