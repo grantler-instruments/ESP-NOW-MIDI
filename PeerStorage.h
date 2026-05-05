@@ -2,8 +2,14 @@
 
 #include <cstdint>
 #include <cstring>
-#include "EEPROM.h"
 #include "utils/log.h"
+
+#ifdef ARDUINO
+  #include "EEPROM.h"
+#else
+  #include "nvs_flash.h"
+  #include "nvs.h"
+#endif
 
 #define MAC_ADDRESS_SIZE 6
 #define MAX_PEERS 20
@@ -24,6 +30,7 @@ public:
         }
     };
 
+#ifdef ARDUINO
     PeerStorage(uint16_t eepromStartAddr = 0)
         : peerCount(0)
         , eepromAddr(eepromStartAddr)
@@ -31,26 +38,69 @@ public:
     {
         memset(peers, 0, sizeof(peers));
     }
-    
+#else
+    PeerStorage()
+        : peerCount(0)
+        , nvsHandle(0)
+        , initialized(false)
+    {
+        memset(peers, 0, sizeof(peers));
+    }
+
+    // Initialize the NVS flash partition. Must be called once at startup,
+    // before begin(). Handles the erase-and-reinit case automatically.
+    static bool initNVS() {
+        esp_err_t ret = nvs_flash_init();
+        if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+            enomik_log_debug("PeerStorage: NVS partition truncated or version changed, erasing");
+            if (nvs_flash_erase() != ESP_OK) {
+                enomik_log_error("PeerStorage: Failed to erase NVS flash");
+                return false;
+            }
+            ret = nvs_flash_init();
+        }
+        if (ret != ESP_OK) {
+            enomik_log_error("PeerStorage: Failed to initialize NVS flash");
+            return false;
+        }
+        return true;
+    }
+#endif
+
+#ifdef ARDUINO
     // Initialize EEPROM and load stored peers
     bool begin(size_t eepromSize = 512) {
         if (initialized) {
             return true;
         }
-        
+
         if (!EEPROM.begin(eepromSize)) {
             enomik_log_error("PeerStorage: Failed to initialize EEPROM");
             return false;
         }
-        
+#else
+    // Open the NVS namespace and load stored peers.
+    // Call initNVS() once at startup before calling begin().
+    bool begin(const char* ns = "peer_storage") {
+        if (initialized) {
+            return true;
+        }
+
+        esp_err_t err = nvs_open(ns, NVS_READWRITE, &nvsHandle);
+        if (err != ESP_OK) {
+            enomik_log_error("PeerStorage: Failed to open NVS namespace");
+            return false;
+        }
+#endif
+
         load();
         initialized = true;
-        
+
         enomik_log_debug("PeerStorage: Loaded %d peers", peerCount);
-        
+
         return true;
     }
-    
+
     // Peer management
     bool add(const uint8_t mac[MAC_ADDRESS_SIZE]) {
         if (!initialized) {
@@ -98,7 +148,6 @@ public:
             peers[index].mac[0], peers[index].mac[1], peers[index].mac[2],
             peers[index].mac[3], peers[index].mac[4], peers[index].mac[5]);
         
-        // Shift remaining peers down
         for (int i = index; i < peerCount - 1; i++) {
             peers[i] = peers[i + 1];
         }
@@ -161,27 +210,47 @@ private:
     
     Peer peers[MAX_PEERS];
     uint8_t peerCount;
-    uint16_t eepromAddr;
     bool initialized;
-    
+
+#ifdef ARDUINO
+    uint16_t eepromAddr;
+#else
+    nvs_handle_t nvsHandle;
+#endif
+
     void load() {
         StorageFormat storage;
+
+#ifdef ARDUINO
         EEPROM.get(eepromAddr, storage);
-        
+
         if (storage.validFlag != VALID_FLAG) {
             enomik_log_debug("PeerStorage: Initializing fresh storage");
             peerCount = 0;
             memset(peers, 0, sizeof(peers));
             save();
+            return;
+        }
+#else
+        size_t size = sizeof(StorageFormat);
+        esp_err_t err = nvs_get_blob(nvsHandle, "peers", &storage, &size);
+
+        if (err == ESP_ERR_NVS_NOT_FOUND) {
+            enomik_log_debug("PeerStorage: Initializing fresh storage");
+            peerCount = 0;
+            memset(peers, 0, sizeof(peers));
+            save();
+            return;
+        }
+#endif
+
+        peerCount = storage.peerCount;
+        if (peerCount > MAX_PEERS) {
+            enomik_log_error("PeerStorage: Corrupt data, resetting");
+            peerCount = 0;
+            save();
         } else {
-            peerCount = storage.peerCount;
-            if (peerCount > MAX_PEERS) {
-                enomik_log_error("PeerStorage: Corrupt data, resetting");
-                peerCount = 0;
-                save();
-            } else {
-                memcpy(peers, storage.peers, sizeof(peers));
-            }
+            memcpy(peers, storage.peers, sizeof(peers));
         }
     }
     
@@ -190,9 +259,14 @@ private:
         storage.validFlag = VALID_FLAG;
         storage.peerCount = peerCount;
         memcpy(storage.peers, peers, sizeof(peers));
-        
+
+#ifdef ARDUINO
         EEPROM.put(eepromAddr, storage);
         EEPROM.commit();
+#else
+        nvs_set_blob(nvsHandle, "peers", &storage, sizeof(StorageFormat));
+        nvs_commit(nvsHandle);
+#endif
     }
     
     int findIndex(const uint8_t mac[MAC_ADDRESS_SIZE]) const {
