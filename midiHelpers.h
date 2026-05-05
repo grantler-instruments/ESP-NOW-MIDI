@@ -1,5 +1,5 @@
 #pragma once
-#include <Arduino.h>
+#include <cstdint>
 
 enum MidiStatus
 {
@@ -39,18 +39,18 @@ enum MidiStatus
 // Original struct for internal use (1-based channels, separate fields)
 struct midi_message
 {
-    byte channel; // 1-16 (user-facing)
+    uint8_t channel; // 1-16 (user-facing)
     MidiStatus status;
-    byte firstByte;
-    byte secondByte;
+    uint8_t firstByte;
+    uint8_t secondByte;
 } __attribute__((packed));
 
 // 3-byte packet for transmission (follows MIDI spec exactly)
 struct midi_message_packet
 {
-    byte statusByte; // Status + channel (0-15) combined
-    byte data1;
-    byte data2;
+    uint8_t statusByte; // Status + channel (0-15) combined
+    uint8_t data1;
+    uint8_t data2;
 
     // Convert from midi_message (1-based channel) to packet (0-based)
     static midi_message_packet fromMessage(const midi_message &msg)
@@ -58,7 +58,7 @@ struct midi_message_packet
         midi_message_packet packet;
 
         // Combine status and channel (convert 1-based to 0-based)
-        byte channelZeroBased = (msg.channel - 1) & 0x0F;
+        uint8_t channelZeroBased = (msg.channel - 1) & 0x0F;
 
         // System messages (0xF0-0xFF) don't use channel bits
         if (msg.status >= 0xF0)
@@ -102,9 +102,9 @@ struct midi_message_packet
     }
 
     // Helper to get the size of actual MIDI data
-    byte getDataSize() const
+    uint8_t getDataSize() const
     {
-        byte status = statusByte & 0xF0;
+        uint8_t status = statusByte & 0xF0;
 
         // System messages
         if (statusByte >= 0xF0)
@@ -143,25 +143,25 @@ struct midi_message_packet
 
 struct midi_sysex_message
 {
-    byte data[128];
-    byte length;
+    uint8_t data[128];
+    uint8_t length;
 } __attribute__((packed));
 
 struct midi_mpe_message
 {
-    byte note;
-    byte velocity;
-    byte channel;      // Which channel this note is on
+    uint8_t note;
+    uint8_t velocity;
+    uint8_t channel;      // Which channel this note is on
     int16_t pitchBend; // -8192 to +8191
-    byte pressure;     // 0-127 (channel aftertouch)
-    byte timbre;       // 0-127 (CC74)
-    byte slide;        // 0-127 (CC73) - optional Y-axis control
+    uint8_t pressure;     // 0-127 (channel aftertouch)
+    uint8_t timbre;       // 0-127 (CC74)
+    uint8_t slide;        // 0-127 (CC73) - optional Y-axis control
     bool active;
 
     midi_mpe_message() : note(0), velocity(0), channel(0), pitchBend(0),
                          pressure(0), timbre(64), slide(64), active(false) {}
 
-    midi_mpe_message(byte n, byte v, byte ch) : note(n), velocity(v), channel(ch),
+    midi_mpe_message(uint8_t n, uint8_t v, uint8_t ch) : note(n), velocity(v), channel(ch),
                                                 pitchBend(0), pressure(0), timbre(64),
                                                 slide(64), active(true) {}
 };
