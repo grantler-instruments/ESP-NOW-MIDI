@@ -26,13 +26,13 @@ namespace enomik
         bool isInitialized;
 
         // --- Channel Voice ---
-        std::function<void(byte channel, byte note, byte velocity)> _onNoteOnHandler;
-        std::function<void(byte channel, byte note, byte velocity)> _onNoteOffHandler;
-        std::function<void(byte channel, byte control, byte value)> _onControlChangeHandler;
-        std::function<void(byte channel, byte program)> _onProgramChangeHandler;
-        std::function<void(byte channel, byte pressure)> _onAfterTouchChannelHandler;         // Channel aftertouch
-        std::function<void(byte channel, byte note, byte pressure)> _onAfterTouchPolyHandler; // Poly aftertouch
-        std::function<void(byte channel, int value)> _onPitchBendHandler;                     // uint16_t
+        std::function<void(uint8_t channel, uint8_t note, uint8_t velocity)> _onNoteOnHandler;
+        std::function<void(uint8_t channel, uint8_t note, uint8_t velocity)> _onNoteOffHandler;
+        std::function<void(uint8_t channel, uint8_t control, uint8_t value)> _onControlChangeHandler;
+        std::function<void(uint8_t channel, uint8_t program)> _onProgramChangeHandler;
+        std::function<void(uint8_t channel, uint8_t pressure)> _onAfterTouchChannelHandler;         // Channel aftertouch
+        std::function<void(uint8_t channel, uint8_t note, uint8_t pressure)> _onAfterTouchPolyHandler; // Poly aftertouch
+        std::function<void(uint8_t channel, int value)> _onPitchBendHandler;                     // uint16_t
 
         // --- System Real-Time ---
         std::function<void()> _onStartHandler;
@@ -42,7 +42,7 @@ namespace enomik
 
         // --- System Common ---
         std::function<void(uint16_t songPosition)> _onSongPositionHandler;
-        std::function<void(byte songNumber)> _onSongSelectHandler;
+        std::function<void(uint8_t songNumber)> _onSongSelectHandler;
 
         // --- System Exclusive ---
         std::function<void(uint8_t *data, unsigned int length)> _onSysExHandler;
@@ -67,7 +67,7 @@ namespace enomik
         }
 
         // --- Static handlers that call both IO and user-defined callbacks ---
-        static void handleNoteOnStatic(byte channel, byte note, byte velocity)
+        static void handleNoteOnStatic(uint8_t channel, uint8_t note, uint8_t velocity)
         {
             if (Client::instancePtr)
             {
@@ -79,7 +79,7 @@ namespace enomik
             }
         }
 
-        static void handleNoteOffStatic(byte channel, byte note, byte velocity)
+        static void handleNoteOffStatic(uint8_t channel, uint8_t note, uint8_t velocity)
         {
             if (Client::instancePtr)
             {
@@ -89,7 +89,7 @@ namespace enomik
             }
         }
 
-        static void handleControlChangeStatic(byte channel, byte control, byte value)
+        static void handleControlChangeStatic(uint8_t channel, uint8_t control, uint8_t value)
         {
             if (Client::instancePtr)
             {
@@ -99,7 +99,7 @@ namespace enomik
             }
         }
 
-        static void handleProgramChangeStatic(byte channel, byte program)
+        static void handleProgramChangeStatic(uint8_t channel, uint8_t program)
         {
             if (Client::instancePtr)
             {
@@ -109,7 +109,7 @@ namespace enomik
             }
         }
 
-        static void handleAfterTouchChannelStatic(byte channel, byte pressure)
+        static void handleAfterTouchChannelStatic(uint8_t channel, uint8_t pressure)
         {
             if (Client::instancePtr)
             {
@@ -119,7 +119,7 @@ namespace enomik
             }
         }
 
-        static void handleAfterTouchPolyStatic(byte channel, byte note, byte pressure)
+        static void handleAfterTouchPolyStatic(uint8_t channel, uint8_t note, uint8_t pressure)
         {
             if (Client::instancePtr)
             {
@@ -129,7 +129,7 @@ namespace enomik
             }
         }
 
-        static void handlePitchBendStatic(byte channel, int value) // uint16_t
+        static void handlePitchBendStatic(uint8_t channel, int value) // uint16_t
         {
             if (Client::instancePtr)
             {
@@ -171,7 +171,7 @@ namespace enomik
                 Client::instancePtr->_onSongPositionHandler(songPosition);
         }
 
-        static void handleSongSelectStatic(byte songNumber)
+        static void handleSongSelectStatic(uint8_t songNumber)
         {
             if (Client::instancePtr && Client::instancePtr->_onSongSelectHandler)
                 Client::instancePtr->_onSongSelectHandler(songNumber);
@@ -446,7 +446,7 @@ namespace enomik
             io.loop();
         }
 
-        bool sendNoteOn(byte note, byte velocity, byte channel)
+        bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel)
         {
             auto err = espnowMIDI.sendNoteOn(note, velocity, channel);
 #ifdef HAS_USB_MIDI
@@ -463,7 +463,7 @@ namespace enomik
             return true;
         }
 
-        bool sendNoteOff(byte note, byte velocity, byte channel)
+        bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel)
         {
             auto err = espnowMIDI.sendNoteOff(note, velocity, channel);
 #ifdef HAS_USB_MIDI
@@ -479,7 +479,7 @@ namespace enomik
             return true;
         }
 
-        bool sendControlChange(byte control, byte value, byte channel)
+        bool sendControlChange(uint8_t control, uint8_t value, uint8_t channel)
         {
             auto err = espnowMIDI.sendControlChange(control, value, channel);
 #ifdef HAS_USB_MIDI
@@ -495,7 +495,7 @@ namespace enomik
             return true;
         }
 
-        bool sendProgramChange(byte program, byte channel)
+        bool sendProgramChange(uint8_t program, uint8_t channel)
         {
             auto err = espnowMIDI.sendProgramChange(program, channel);
 #ifdef HAS_USB_MIDI
@@ -511,7 +511,7 @@ namespace enomik
             return true;
         }
 
-        bool sendAfterTouch(byte pressure, byte channel)
+        bool sendAfterTouch(uint8_t pressure, uint8_t channel)
         {
             auto err = espnowMIDI.sendAfterTouch(pressure, channel);
 #ifdef HAS_USB_MIDI
@@ -527,7 +527,7 @@ namespace enomik
             return true;
         }
 
-        bool sendPolyAfterTouch(byte note, byte pressure, byte channel)
+        bool sendPolyAfterTouch(uint8_t note, uint8_t pressure, uint8_t channel)
         {
             auto err = espnowMIDI.sendAfterTouchPoly(note, pressure, channel);
 #ifdef HAS_USB_MIDI
@@ -543,7 +543,7 @@ namespace enomik
             return true;
         }
 
-        bool sendPitchBend(int value, byte channel) // uint16_t
+        bool sendPitchBend(int value, uint8_t channel) // uint16_t
         {
             auto err = espnowMIDI.sendPitchBend(value, channel);
 #ifdef HAS_USB_MIDI
@@ -671,37 +671,37 @@ namespace enomik
             return true;
         }
         // --- Channel Voice ---
-        void setHandleNoteOn(std::function<void(byte channel, byte note, byte velocity)> handler)
+        void setHandleNoteOn(std::function<void(uint8_t channel, uint8_t note, uint8_t velocity)> handler)
         {
             _onNoteOnHandler = handler;
         }
 
-        void setHandleNoteOff(std::function<void(byte channel, byte note, byte velocity)> handler)
+        void setHandleNoteOff(std::function<void(uint8_t channel, uint8_t note, uint8_t velocity)> handler)
         {
             _onNoteOffHandler = handler;
         }
 
-        void setHandleControlChange(std::function<void(byte channel, byte control, byte value)> handler)
+        void setHandleControlChange(std::function<void(uint8_t channel, uint8_t control, uint8_t value)> handler)
         {
             _onControlChangeHandler = handler;
         }
 
-        void setHandleProgramChange(std::function<void(byte channel, byte program)> handler)
+        void setHandleProgramChange(std::function<void(uint8_t channel, uint8_t program)> handler)
         {
             _onProgramChangeHandler = handler;
         }
 
-        void setHandleAfterTouchChannel(std::function<void(byte channel, byte pressure)> handler)
+        void setHandleAfterTouchChannel(std::function<void(uint8_t channel, uint8_t pressure)> handler)
         {
             _onAfterTouchChannelHandler = handler;
         }
 
-        void setHandleAfterTouchPoly(std::function<void(byte channel, byte note, byte pressure)> handler)
+        void setHandleAfterTouchPoly(std::function<void(uint8_t channel, uint8_t note, uint8_t pressure)> handler)
         {
             _onAfterTouchPolyHandler = handler;
         }
 
-        void setHandlePitchBend(std::function<void(byte channel, int value)> handler) // uint16_t
+        void setHandlePitchBend(std::function<void(uint8_t channel, int value)> handler) // uint16_t
         {
             _onPitchBendHandler = handler;
         }
@@ -733,7 +733,7 @@ namespace enomik
             _onSongPositionHandler = handler;
         }
 
-        void setHandleSongSelect(std::function<void(byte songNumber)> handler)
+        void setHandleSongSelect(std::function<void(uint8_t songNumber)> handler)
         {
             _onSongSelectHandler = handler;
         }
@@ -754,9 +754,9 @@ namespace enomik
             // TODO: refactor to use sysex instead of control change
             // also add a heartbeat mechanism
 
-            byte channel = 16;
-            byte control = 127;
-            byte value = 127;
+            uint8_t channel = 16;
+            uint8_t control = 127;
+            uint8_t value = 127;
 
             for (int i = 0; i < peerStorage.count(); i++)
             {

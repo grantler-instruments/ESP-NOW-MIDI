@@ -88,7 +88,7 @@ namespace enomik
         }
 
         // MIDI Input Handlers
-        void onNoteOn(byte channel, byte note, byte velocity)
+        void onNoteOn(uint8_t channel, uint8_t note, uint8_t velocity)
         {
             for (auto &config : _pinConfigs)
             {
@@ -117,7 +117,7 @@ namespace enomik
             }
         }
 
-        void onNoteOff(byte channel, byte note, byte velocity)
+        void onNoteOff(uint8_t channel, uint8_t note, uint8_t velocity)
         {
             for (auto &config : _pinConfigs)
             {
@@ -139,7 +139,7 @@ namespace enomik
             }
         }
 
-        void onPitchBend(byte channel, int bend)
+        void onPitchBend(uint8_t channel, int bend)
         {
             for (auto &config : _pinConfigs)
             {
@@ -159,7 +159,7 @@ namespace enomik
             }
         }
 
-        void onControlChange(byte channel, byte control, byte value)
+        void onControlChange(uint8_t channel, uint8_t control, uint8_t value)
         {
             for (auto &config : _pinConfigs)
             {
@@ -180,7 +180,7 @@ namespace enomik
             }
         }
 
-        void onProgramChange(byte channel, byte program)
+        void onProgramChange(uint8_t channel, uint8_t program)
         {
             // Reserved for future use
         }
