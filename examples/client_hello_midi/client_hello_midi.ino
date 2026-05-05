@@ -23,7 +23,7 @@ void onProgramChange(byte channel, byte program) {
   Serial.printf("Program Change - Channel: %d, Program: %d\n", channel, program);
 }
 
-void onPitchBend(byte channel, uint16_t value) {
+void onPitchBend(byte channel, int value) {
   Serial.printf("Pitch Bend - Channel: %d, Value: %d\n", channel, value);
 }
 void onAfterTouch(byte channel, byte value) {
