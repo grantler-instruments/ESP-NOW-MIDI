@@ -117,7 +117,7 @@ namespace enomik
                     {
                         int mappedValue = (int)hw::map(velocity, config.min_midi_value,
                                                        config.max_midi_value, 0, PWM_MAX_VALUE);
-                        mappedValue = (int)hw::constrain(mappedValue, 0, PWM_MAX_VALUE);
+                        mappedValue = (int)hw::clamp(mappedValue, 0, PWM_MAX_VALUE);
                         hw::writeAnalog(config.pin, (uint8_t)mappedValue);
                     }
                 }
@@ -160,7 +160,7 @@ namespace enomik
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
                         int mappedValue = (int)hw::map(bend, 0, 16383, 0, PWM_MAX_VALUE);
-                        hw::writeAnalog(config.pin, (int)hw::constrain(mappedValue, 0, PWM_MAX_VALUE));
+                        hw::writeAnalog(config.pin, (int)hw::clamp(mappedValue, 0, PWM_MAX_VALUE));
                     }
                 }
             }
@@ -182,7 +182,7 @@ namespace enomik
                     {
                         int mappedValue = (int)hw::map(value, config.min_midi_value,
                                                        config.max_midi_value, 0, PWM_MAX_VALUE);
-                        hw::writeAnalog(config.pin, (int)hw::constrain(mappedValue, 0, PWM_MAX_VALUE));
+                        hw::writeAnalog(config.pin, (int)hw::clamp(mappedValue, 0, PWM_MAX_VALUE));
                     }
                 }
             }
@@ -442,7 +442,7 @@ namespace enomik
             {
                 // Map directly to 14-bit pitch bend range (0-16383)
                 currentValue = (int)hw::map((int)state.smoothedValue, 0, ADC_MAX_VALUE, 0, 16383);
-                currentValue = (int)hw::constrain(currentValue, 0, 16383);
+                currentValue = (int)hw::clamp(currentValue, 0, 16383);
 
                 // Use higher threshold for pitch bend since we have more resolution
                 if (state.lastValue != -1 && std::abs(currentValue - state.lastValue) < (ANALOG_THRESHOLD * 4))
@@ -453,7 +453,7 @@ namespace enomik
                 // For other MIDI types, use standard 7-bit range
                 int mappedValue = (int)hw::map((int)state.smoothedValue, 0, ADC_MAX_VALUE,
                                                config.min_midi_value, config.max_midi_value);
-                currentValue = (int)hw::constrain(mappedValue, 0, 127);
+                currentValue = (int)hw::clamp(mappedValue, 0, 127);
 
                 if (state.lastValue != -1 && std::abs(currentValue - state.lastValue) < ANALOG_THRESHOLD)
                     return false;
@@ -481,12 +481,12 @@ namespace enomik
 
                 // Invert mapping: lower touch value (stronger touch) = higher MIDI value
                 int mappedValue = (int)hw::map((int)state.smoothedValue, 0, 100, 127, 0);
-                mappedValue = (int)hw::constrain(mappedValue, 0, 127);
+                mappedValue = (int)hw::clamp(mappedValue, 0, 127);
 
                 // Apply user's min/max range
                 currentValue = (int)hw::map(mappedValue, 0, 127,
                                             config.min_midi_value, config.max_midi_value);
-                currentValue = (int)hw::constrain(currentValue,
+                currentValue = (int)hw::clamp(currentValue,
                                                   config.min_midi_value, config.max_midi_value);
 
                 if (state.lastValue != -1 && std::abs(currentValue - state.lastValue) < ANALOG_THRESHOLD)

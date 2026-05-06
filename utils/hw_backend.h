@@ -33,7 +33,7 @@ inline long map(long x, long il, long ih, long ol, long oh) {
     return (x - il) * (oh - ol) / (ih - il) + ol;
 }
 
-inline long constrain(long x, long lo, long hi) {
+inline long clamp(long x, long lo, long hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
