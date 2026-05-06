@@ -235,7 +235,7 @@ private:
         size_t size = sizeof(StorageFormat);
         esp_err_t err = nvs_get_blob(nvsHandle, "peers", &storage, &size);
 
-        if (err == ESP_ERR_NVS_NOT_FOUND) {
+        if (err == ESP_ERR_NVS_NOT_FOUND || storage.validFlag != VALID_FLAG) {
             enomik_log_debug("PeerStorage: Initializing fresh storage");
             peerCount = 0;
             memset(peers, 0, sizeof(peers));

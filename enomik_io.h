@@ -71,7 +71,7 @@ namespace enomik
 
             for (const auto &config : _pinConfigs)
             {
-                initializePinHardware(config);
+                hw::initPin(config);
                 _pinStates.push_back(PinState());
             }
 
@@ -517,11 +517,6 @@ namespace enomik
             return false;
         }
 
-        void initializePinHardware(const PinConfig &c)
-        {
-            hw::initPin(c);
-        }
-
         void sendMidiMessage(const PinConfig &config, int value)
         {
             if (!_onMIDISendRequest)
@@ -590,7 +585,7 @@ namespace enomik
 
             _pinConfigs.push_back(config);
             _pinStates.push_back(PinState());
-            initializePinHardware(config);
+            hw::initPin(config);
 
             enomik_log_debug("Config count after upsert: %d", (int)_pinConfigs.size());
             savePinConfigsToPrefs(_pinConfigs);
