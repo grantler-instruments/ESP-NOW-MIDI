@@ -1,43 +1,26 @@
 #pragma once
 
 #include <vector>
-#include <Preferences.h>
-#include "esp_now_midi.h"
+#include <cstdlib>
+#ifdef ARDUINO
+  #include <Preferences.h>
+  #include "utils/hw_arduino.h"
+#else
+  #include "utils/hw_idf.h"
+  #include "nvs_flash.h"
+  #include "nvs.h"
+#endif
 #include "utils/mac.h"
 #include "utils/log.h"
 #include "enomik_sysex.h"
 #include "./enomik_pinconfig.h"
 
-// Detect ESP32 variant and set ADC resolution
-#if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)
-#define ADC_RESOLUTION 13
-#define ADC_MAX_VALUE 8191
-#define TOUCH_MAX_VALUE 100
-#elif defined(CONFIG_IDF_TARGET_ESP32C3)
-#define ADC_RESOLUTION 12
-#define ADC_MAX_VALUE 4095
-#define TOUCH_MAX_VALUE 100
-#else // Original ESP32
-#define ADC_RESOLUTION 12
-#define ADC_MAX_VALUE 4095
-#define TOUCH_MAX_VALUE 100
-#endif
-
-// analogWrite() on ESP32 uses 8-bit PWM (0-255) by default. Using ADC_MAX_VALUE
-// would map most MIDI values above ~4 to 255, making vel/CC 60 behave like 127.
-#ifndef PWM_MAX_VALUE
-#define PWM_MAX_VALUE 255
-#endif
+// ADC_RESOLUTION, ADC_MAX_VALUE, PWM_MAX_VALUE are defined in utils/hw_backend.h
+// (included transitively above)
 
 namespace enomik
 {
-    // Pin mode constants for clarity
-    static constexpr uint8_t ENOMIK_INPUT = 0x00;
-    static constexpr uint8_t ENOMIK_OUTPUT = 0x01;
-    static constexpr uint8_t ENOMIK_INPUT_PULLUP = 0x02;
-    static constexpr uint8_t ENOMIK_ANALOG_INPUT = 0x03;
-    static constexpr uint8_t ENOMIK_ANALOG_OUTPUT = 0x04;
-    static constexpr uint8_t ENOMIK_INPUT_TOUCH = 0x05;
+    // Pin mode constants are defined in enomik_pinconfig.h (enomik namespace)
 
     struct PinState
     {
@@ -56,9 +39,33 @@ namespace enomik
         static constexpr unsigned long ANALOG_MIN_INTERVAL = 5;
         static constexpr float SMOOTHING_FACTOR = 0.3f;
 
+#ifndef ARDUINO
+        // Initialize the NVS flash partition. Call once at app startup before
+        // begin(). Handles the erase-and-reinit case automatically.
+        static bool initNVS() {
+            esp_err_t ret = nvs_flash_init();
+            if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+                enomik_log_debug("IO: NVS partition truncated or version changed, erasing");
+                if (nvs_flash_erase() != ESP_OK) {
+                    enomik_log_error("IO: Failed to erase NVS flash");
+                    return false;
+                }
+                ret = nvs_flash_init();
+            }
+            if (ret != ESP_OK) {
+                enomik_log_error("IO: Failed to initialize NVS flash");
+                return false;
+            }
+            return true;
+        }
+#endif
+
         void begin()
         {
-            analogReadResolution(ADC_RESOLUTION);
+            hw::beginHardware();
+#ifndef ARDUINO
+            nvs_open("pinconfigs", NVS_READWRITE, &_nvsHandle);
+#endif
             _pinConfigs = loadPinConfigsFromPrefs();
             _pinStates.clear();
 
@@ -73,7 +80,7 @@ namespace enomik
 
         void loop()
         {
-            unsigned long now = millis();
+            unsigned long now = hw::millis();
 
             for (size_t i = 0; i < _pinConfigs.size(); i++)
             {
@@ -104,14 +111,14 @@ namespace enomik
                     }
                     if (config.mode == ENOMIK_OUTPUT)
                     {
-                        digitalWrite(config.pin, HIGH);
+                        hw::writeDigital(config.pin, 1);
                     }
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
-                        int mappedValue = map(velocity, config.min_midi_value, config.max_midi_value,
-                                              0, PWM_MAX_VALUE);
-                        mappedValue = constrain(mappedValue, 0, PWM_MAX_VALUE);
-                        analogWrite(config.pin, (uint8_t)mappedValue);
+                        int mappedValue = (int)hw::map(velocity, config.min_midi_value,
+                                                       config.max_midi_value, 0, PWM_MAX_VALUE);
+                        mappedValue = (int)hw::constrain(mappedValue, 0, PWM_MAX_VALUE);
+                        hw::writeAnalog(config.pin, (uint8_t)mappedValue);
                     }
                 }
             }
@@ -129,11 +136,11 @@ namespace enomik
                 {
                     if (config.mode == ENOMIK_OUTPUT)
                     {
-                        digitalWrite(config.pin, LOW);
+                        hw::writeDigital(config.pin, 0);
                     }
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
-                        analogWrite(config.pin, 0);
+                        hw::writeAnalog(config.pin, 0);
                     }
                 }
             }
@@ -148,12 +155,12 @@ namespace enomik
                 {
                     if (config.mode == ENOMIK_OUTPUT)
                     {
-                        digitalWrite(config.pin, bend >= 8192 ? HIGH : LOW);
+                        hw::writeDigital(config.pin, bend >= 8192 ? 1 : 0);
                     }
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
-                        int mappedValue = map(bend, 0, 16383, 0, PWM_MAX_VALUE);
-                        analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
+                        int mappedValue = (int)hw::map(bend, 0, 16383, 0, PWM_MAX_VALUE);
+                        hw::writeAnalog(config.pin, (int)hw::constrain(mappedValue, 0, PWM_MAX_VALUE));
                     }
                 }
             }
@@ -169,12 +176,13 @@ namespace enomik
                 {
                     if (config.mode == ENOMIK_OUTPUT)
                     {
-                        digitalWrite(config.pin, value > 63 ? HIGH : LOW);
+                        hw::writeDigital(config.pin, value > 63 ? 1 : 0);
                     }
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
-                        int mappedValue = map(value, config.min_midi_value, config.max_midi_value, 0, PWM_MAX_VALUE);
-                        analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
+                        int mappedValue = (int)hw::map(value, config.min_midi_value,
+                                                       config.max_midi_value, 0, PWM_MAX_VALUE);
+                        hw::writeAnalog(config.pin, (int)hw::constrain(mappedValue, 0, PWM_MAX_VALUE));
                     }
                 }
             }
@@ -234,7 +242,12 @@ namespace enomik
         std::vector<PinConfig> _pinConfigs;
         std::vector<PinState> _pinStates;
         SysExHandler _sysexHandler;
+
+#ifdef ARDUINO
         Preferences _preferences;
+#else
+        nvs_handle_t _nvsHandle = 0;
+#endif
 
         // External callbacks
         std::function<void(midi_message)> _onMIDISendRequest;
@@ -316,7 +329,6 @@ namespace enomik
                 
                 if (_onAddPeerRequest)
                 {
-                    // Need to cast away const for the callback
                     uint8_t macCopy[6];
                     memcpy(macCopy, mac, 6);
                     bool success = _onAddPeerRequest(macCopy);
@@ -340,15 +352,18 @@ namespace enomik
             _sysexHandler.setOnReset([this]()
                                      {
                 enomik_log_debug("SysEx: Performing system reset");
-                
-                // Clear in-memory configurations
+
                 _pinConfigs.clear();
                 _pinStates.clear();
 
-                // Clear stored preferences
+#ifdef ARDUINO
                 _preferences.begin("pinconfigs", false);
                 _preferences.clear();
                 _preferences.end();
+#else
+                nvs_erase_all(_nvsHandle);
+                nvs_commit(_nvsHandle);
+#endif
 
                 if (_onResetRequest)
                 {
@@ -361,7 +376,6 @@ namespace enomik
             // Handler for sending SysEx messages back out
             _sysexHandler.setOnSend([this](const midi_sysex_message &msg)
                                     {
-                // Forward to external world if callback is set
                 if (_onSysExSendRequest)
                 {
                     _onSysExSendRequest(msg);
@@ -400,7 +414,7 @@ namespace enomik
         bool processDigitalInput(const PinConfig &config, PinState &state,
                                  unsigned long now, int &currentValue)
         {
-            currentValue = digitalRead(config.pin);
+            currentValue = hw::readDigital(config.pin);
 
             if (currentValue != state.lastValue)
             {
@@ -414,7 +428,7 @@ namespace enomik
         bool processAnalogInput(const PinConfig &config, PinState &state,
                                 unsigned long now, int &currentValue)
         {
-            int rawValue = analogRead(config.pin);
+            int rawValue = hw::readAnalog(config.pin);
 
             // Initialize smoothed value on first read
             if (state.lastValue == -1)
@@ -427,21 +441,21 @@ namespace enomik
             if (config.midi_type == MidiStatus::MIDI_PITCH_BEND)
             {
                 // Map directly to 14-bit pitch bend range (0-16383)
-                currentValue = map((int)state.smoothedValue, 0, ADC_MAX_VALUE, 0, 16383);
-                currentValue = constrain(currentValue, 0, 16383);
+                currentValue = (int)hw::map((int)state.smoothedValue, 0, ADC_MAX_VALUE, 0, 16383);
+                currentValue = (int)hw::constrain(currentValue, 0, 16383);
 
                 // Use higher threshold for pitch bend since we have more resolution
-                if (state.lastValue != -1 && abs(currentValue - state.lastValue) < (ANALOG_THRESHOLD * 4))
+                if (state.lastValue != -1 && std::abs(currentValue - state.lastValue) < (ANALOG_THRESHOLD * 4))
                     return false;
             }
             else
             {
                 // For other MIDI types, use standard 7-bit range
-                int mappedValue = map((int)state.smoothedValue, 0, ADC_MAX_VALUE,
-                                      config.min_midi_value, config.max_midi_value);
-                currentValue = constrain(mappedValue, 0, 127);
+                int mappedValue = (int)hw::map((int)state.smoothedValue, 0, ADC_MAX_VALUE,
+                                               config.min_midi_value, config.max_midi_value);
+                currentValue = (int)hw::constrain(mappedValue, 0, 127);
 
-                if (state.lastValue != -1 && abs(currentValue - state.lastValue) < ANALOG_THRESHOLD)
+                if (state.lastValue != -1 && std::abs(currentValue - state.lastValue) < ANALOG_THRESHOLD)
                     return false;
             }
 
@@ -454,7 +468,7 @@ namespace enomik
         bool processTouchInput(const PinConfig &config, PinState &state,
                                unsigned long now, int &currentValue)
         {
-            int touchValue = touchRead(config.pin);
+            int touchValue = hw::readTouch(config.pin);
 
             if (config.threshold == 0)
             {
@@ -466,15 +480,16 @@ namespace enomik
                                           (1.0f - SMOOTHING_FACTOR) * state.smoothedValue;
 
                 // Invert mapping: lower touch value (stronger touch) = higher MIDI value
-                int mappedValue = map((int)state.smoothedValue, 0, 100, 127, 0);
-                mappedValue = constrain(mappedValue, 0, 127);
+                int mappedValue = (int)hw::map((int)state.smoothedValue, 0, 100, 127, 0);
+                mappedValue = (int)hw::constrain(mappedValue, 0, 127);
 
                 // Apply user's min/max range
-                currentValue = map(mappedValue, 0, 127,
-                                   config.min_midi_value, config.max_midi_value);
-                currentValue = constrain(currentValue, config.min_midi_value, config.max_midi_value);
+                currentValue = (int)hw::map(mappedValue, 0, 127,
+                                            config.min_midi_value, config.max_midi_value);
+                currentValue = (int)hw::constrain(currentValue,
+                                                  config.min_midi_value, config.max_midi_value);
 
-                if (state.lastValue != -1 && abs(currentValue - state.lastValue) < ANALOG_THRESHOLD)
+                if (state.lastValue != -1 && std::abs(currentValue - state.lastValue) < ANALOG_THRESHOLD)
                     return false;
 
                 if (now - state.lastSendTime < ANALOG_MIN_INTERVAL)
@@ -504,24 +519,7 @@ namespace enomik
 
         void initializePinHardware(const PinConfig &c)
         {
-            if (c.mode == ENOMIK_OUTPUT || c.mode == ENOMIK_ANALOG_OUTPUT)
-            {
-                pinMode(c.pin, OUTPUT);
-                if (c.mode == ENOMIK_ANALOG_OUTPUT)
-                    analogWrite(c.pin, 0);
-            }
-            else if (c.mode == ENOMIK_INPUT)
-            {
-                pinMode(c.pin, INPUT);
-            }
-            else if (c.mode == ENOMIK_INPUT_PULLUP)
-            {
-                pinMode(c.pin, INPUT_PULLUP);
-            }
-            else if (c.mode == ENOMIK_INPUT_TOUCH)
-            {
-                touchAttachInterrupt(c.pin, nullptr, 40);
-            }
+            hw::initPin(c);
         }
 
         void sendMidiMessage(const PinConfig &config, int value)
@@ -562,11 +560,13 @@ namespace enomik
 
             case MidiStatus::MIDI_PITCH_BEND:
             {
-                int pb = map(value, 0, 127, 0, 16383);
+                int pb = (int)hw::map(value, 0, 127, 0, 16383);
                 msg.firstByte = pb & 0x7F;
                 msg.secondByte = (pb >> 7) & 0x7F;
                 break;
             }
+            default:
+                break;
             }
 
             _onMIDISendRequest(msg);
@@ -598,6 +598,7 @@ namespace enomik
 
         void savePinConfigsToPrefs(const std::vector<PinConfig> &configs)
         {
+#ifdef ARDUINO
             _preferences.begin("pinconfigs", false);
 
             for (size_t i = 0; i < configs.size(); i++)
@@ -617,12 +618,31 @@ namespace enomik
 
             _preferences.putUInt("count", configs.size());
             _preferences.end();
+#else
+            char key[8];
+            for (size_t i = 0; i < configs.size(); i++) {
+                snprintf(key, sizeof(key), "cfg%d", (int)i);
+                uint8_t buf[8] = {
+                    configs[i].pin,
+                    configs[i].mode,
+                    configs[i].midi_channel,
+                    static_cast<uint8_t>(configs[i].midi_type),
+                    configs[i].midi_cc,
+                    configs[i].midi_note,
+                    configs[i].min_midi_value,
+                    configs[i].max_midi_value
+                };
+                nvs_set_blob(_nvsHandle, key, buf, sizeof(buf));
+            }
+            nvs_set_u32(_nvsHandle, "count", (uint32_t)configs.size());
+            nvs_commit(_nvsHandle);
+#endif
         }
 
         std::vector<PinConfig> loadPinConfigsFromPrefs()
         {
             std::vector<PinConfig> out;
-
+#ifdef ARDUINO
             _preferences.begin("pinconfigs", true);
             size_t count = _preferences.getUInt("count", 0);
 
@@ -645,6 +665,27 @@ namespace enomik
             }
 
             _preferences.end();
+#else
+            uint32_t count = 0;
+            nvs_get_u32(_nvsHandle, "count", &count);
+
+            char key[8];
+            for (uint32_t i = 0; i < count; i++) {
+                snprintf(key, sizeof(key), "cfg%d", (int)i);
+                uint8_t buf[8];
+                size_t len = sizeof(buf);
+                if (nvs_get_blob(_nvsHandle, key, buf, &len) == ESP_OK && len == 8) {
+                    PinConfig cfg(buf[0], buf[1]);
+                    cfg.midi_channel   = buf[2];
+                    cfg.midi_type      = static_cast<MidiStatus>(buf[3]);
+                    cfg.midi_cc        = buf[4];
+                    cfg.midi_note      = buf[5];
+                    cfg.min_midi_value = buf[6];
+                    cfg.max_midi_value = buf[7];
+                    out.push_back(cfg);
+                }
+            }
+#endif
             return out;
         }
 

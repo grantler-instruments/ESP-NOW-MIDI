@@ -6,14 +6,14 @@
 #include "./version.h"
 #include "./utils/log.h"
 #include <esp_now.h>
-#include <esp_wifi.h> // Needed for wifi_tx_info_t in newer versions
-#include <WiFi.h>
-#include "./midiHelpers.h"
-
-// Version detection
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 3, 0)
-#define ESP_NOW_NEW_CALLBACK_SIGNATURE 1
+#include <esp_wifi.h>
+#ifdef ARDUINO
+  #include <WiFi.h>
+#else
+  #include "freertos/FreeRTOS.h"
+  #include "freertos/task.h"
 #endif
+#include "./midiHelpers.h"
 
 // Optimized peer storage with packed MAC address for fast comparison
 struct PeerInfo
@@ -35,28 +35,13 @@ struct PeerInfo
 class esp_now_midi
 {
 public:
-// Conditional callback typedef
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
-  typedef void (*DataSentCallback)(const wifi_tx_info_t *mac_addr, esp_now_send_status_t status);
-#else
-  typedef void (*DataSentCallback)(const uint8_t *mac_addr, esp_now_send_status_t status);
-#endif
+  typedef void (*DataSentCallback)(const wifi_tx_info_t *info, esp_now_send_status_t status);
 
-// Static callback adapter
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
   static void DefaultOnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
   {
     enomik_log_debug("Last Packet Send Status: %s", status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
   }
-#else
-  static void DefaultOnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
-  {
-    enomik_log_debug("Last Packet Send Status: %s", status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-  }
-#endif
 
-// Adapter function to handle both versions
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
   static void SendCallbackAdapter(const wifi_tx_info_t *info, esp_now_send_status_t status)
   {
     if (_instance && _instance->userDataSentCallback)
@@ -64,18 +49,7 @@ public:
       _instance->userDataSentCallback(info, status);
     }
   }
-#else
-  static void SendCallbackAdapter(const uint8_t *mac_addr, esp_now_send_status_t status)
-  {
-    if (_instance && _instance->userDataSentCallback)
-    {
-      _instance->userDataSentCallback(mac_addr, status);
-    }
-  }
-#endif
 
-// Fixed: Updated receive callback signature for new version
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
   static void OnDataRecvStatic(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
   {
     if (_instance)
@@ -83,28 +57,31 @@ public:
       _instance->OnDataRecv(recv_info->src_addr, incomingData, len);
     }
   }
-#else
-  static void OnDataRecvStatic(const uint8_t *mac, const uint8_t *incomingData, int len)
-  {
-    if (_instance)
-    {
-      _instance->OnDataRecv(mac, incomingData, len);
-    }
-  }
-#endif
+
   void begin(bool reducePowerAtCostOfLatency = false, bool autoPeerDiscovery = true, DataSentCallback callback = DefaultOnDataSent)
   {
     _instance = this;
     _autoPeerDiscovery = autoPeerDiscovery;
-    userDataSentCallback = callback; // This needs to be INSIDE the function
+    userDataSentCallback = callback;
 
-    // Initialize WiFi if needed
+    // Initialize WiFi in STA mode if not already set
+#ifdef ARDUINO
     if (WiFi.getMode() != WIFI_MODE_STA)
     {
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
       delay(100);
     }
+#else
+    wifi_mode_t mode;
+    esp_wifi_get_mode(&mode);
+    if (mode != WIFI_MODE_STA)
+    {
+      esp_wifi_set_mode(WIFI_MODE_STA);
+      esp_wifi_disconnect();
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
+#endif
 
     // Try to initialize ESP-NOW (gracefully handle if already initialized)
     esp_err_t init_result = esp_now_init();
@@ -135,14 +112,8 @@ public:
 
     _peersCount = 0;
 
-    // Register callbacks
     esp_now_register_send_cb(SendCallbackAdapter);
-
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
     esp_now_register_recv_cb(OnDataRecvStatic);
-#else
-    esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecvStatic));
-#endif
   }
 
   // Add a new peer
@@ -158,21 +129,18 @@ public:
       macAddress[0], macAddress[1], macAddress[2],
       macAddress[3], macAddress[4], macAddress[5]);
 
-    // Create the peer info structure
     esp_now_peer_info_t peerInfo;
     memset(&peerInfo, 0, sizeof(peerInfo));
-    memcpy(peerInfo.peer_addr, macAddress, 6); // Always use exact size (6 bytes)
+    memcpy(peerInfo.peer_addr, macAddress, 6);
     peerInfo.channel = ESP_NOW_MIDI_CHANNEL;
     peerInfo.encrypt = false;
 
-    // Add the peer to ESP-NOW
     if (esp_now_add_peer(&peerInfo) != ESP_OK)
     {
       enomik_log_error("Failed to add peer");
       return false;
     }
 
-    // Store the peer in our array AFTER successful ESP-NOW registration
     memcpy(_peers[_peersCount].mac, macAddress, 6);
     _peers[_peersCount].packed_mac = PeerInfo::packMac(macAddress);
     _peersCount++;
@@ -184,7 +152,6 @@ public:
   {
     enomik_log_debug("Clearing all peers from ESP-NOW...");
 
-    // Remove all peers from ESP-NOW
     for (int i = 0; i < _peersCount; i++)
     {
       esp_err_t result = esp_now_del_peer(_peers[i].mac);
@@ -200,7 +167,6 @@ public:
       }
     }
 
-    // Clear the internal peer list
     memset(_peers, 0, sizeof(_peers));
     _peersCount = 0;
 
@@ -239,7 +205,7 @@ public:
       esp_err_t err = esp_now_send(_peers[i].mac, data, len);
       if (err != ESP_OK)
       {
-        result = err; // Return last error if any
+        result = err;
       }
     }
     return result;
@@ -337,13 +303,11 @@ public:
 
   inline esp_err_t sendPitchBend(int16_t value, uint8_t channel)
   {
-    // clamp to signed 14-bit range
     if (value < -8192)
       value = -8192;
     if (value > 8191)
       value = 8191;
 
-    // translate signed (-8192..8191) -> unsigned (0..16383)
     uint16_t raw = value + 8192;
     return sendPitchBendRaw(raw, channel);
   }
@@ -351,7 +315,7 @@ public:
   inline esp_err_t sendStart()
   {
     midi_message message;
-    message.channel = 0; // System messages don't use channel
+    message.channel = 0;
     message.status = MIDI_START;
     message.firstByte = 0;
     message.secondByte = 0;
@@ -458,6 +422,7 @@ public:
     midi_message_packet packet = midi_message_packet::fromMessage(message);
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
+
   inline esp_err_t sendSystemReset()
   {
     midi_message message;
@@ -493,10 +458,9 @@ public:
       return;
     }
 
-    // Convert variable-length packet to internal message format
     midi_message_packet packet;
-    memset(&packet, 0, sizeof(packet)); // Zero out the packet first
-    memcpy(&packet, incomingData, len); // Copy only received bytes
+    memset(&packet, 0, sizeof(packet));
+    memcpy(&packet, incomingData, len);
     midi_message message = packet.toMessage();
 
     switch (message.status)
@@ -640,13 +604,12 @@ public:
   }
 
 private:
-  PeerInfo _peers[MAX_PEERS];     // Array to store peer info with optimized MAC storage
-  int _peersCount;                // Current number of peers
-  static esp_now_midi *_instance; // Static pointer to hold the instance
+  PeerInfo _peers[MAX_PEERS];
+  int _peersCount;
+  static esp_now_midi *_instance;
   DataSentCallback userDataSentCallback = nullptr;
   bool _autoPeerDiscovery = true;
 
-  // MIDI Handlers
   void (*onNoteOnHandler)(uint8_t channel, uint8_t note, uint8_t velocity) = nullptr;
   void (*onNoteOffHandler)(uint8_t channel, uint8_t note, uint8_t velocity) = nullptr;
   void (*onControlChangeHandler)(uint8_t channel, uint8_t control, uint8_t value) = nullptr;

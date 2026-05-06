@@ -1,7 +1,9 @@
 #include "./config.h"
 #include "esp_now_midi.h"
 #include <esp_now.h>
-#include <WiFi.h>
+#ifdef ARDUINO
+  #include <WiFi.h>
+#endif
 #include "enomik_io.h"
 #include "PeerStorage.h"
 #include "utils/esp.h"
@@ -47,15 +49,9 @@ namespace enomik
         // --- System Exclusive ---
         std::function<void(uint8_t *data, unsigned int length)> _onSysExHandler;
 
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 3, 0)
         static void onDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
         {
         }
-#else
-        static void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
-        {
-        }
-#endif
 
         void onSystemExclusive(uint8_t *data, unsigned int length)
         {
@@ -394,7 +390,12 @@ namespace enomik
             USBMIDI.setHandleSongSelect(handleSongSelectStatic);
 #endif
 
-            // Initialize peer storage (handles EEPROM internally)
+#ifndef ARDUINO
+            PeerStorage::initNVS();
+            IO::initNVS();
+#endif
+
+            // Initialize peer storage
             if (!peerStorage.begin())
             {
                 enomik_log_error("Failed to initialize peer storage");

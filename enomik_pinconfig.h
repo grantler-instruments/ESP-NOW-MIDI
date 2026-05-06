@@ -1,5 +1,15 @@
 #pragma once
 #include "./midiHelpers.h"
+
+namespace enomik {
+    static constexpr uint8_t ENOMIK_INPUT         = 0x00;
+    static constexpr uint8_t ENOMIK_OUTPUT        = 0x01;
+    static constexpr uint8_t ENOMIK_INPUT_PULLUP  = 0x02;
+    static constexpr uint8_t ENOMIK_ANALOG_INPUT  = 0x03;
+    static constexpr uint8_t ENOMIK_ANALOG_OUTPUT = 0x04;
+    static constexpr uint8_t ENOMIK_INPUT_TOUCH   = 0x05;
+}
+
 struct PinConfig
 {
     uint8_t pin;
