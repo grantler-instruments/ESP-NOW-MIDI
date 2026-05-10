@@ -50,6 +50,8 @@ jobs:
           arduino-cli lib install "AceButton"
           arduino-cli lib install "ESP32Servo"
           arduino-cli lib install "MPU9250_WE"
+          arduino-cli lib install "AudioTools"
+          git clone https://github.com/algomusic/M16.git $HOME/Arduino/libraries/M16
           
       - name: Compile all examples for ${{ matrix.board.name }}
         run: |
