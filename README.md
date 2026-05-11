@@ -41,6 +41,8 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
       * MIDI Ch 1, NOTE 0, VEL: 127 -> DMX Channel 1, value: 127*2
       * MIDI Ch 4, NOTE 127, VEL: 127 -> DMX Channel 512, value: 127*2
   * **client_servo** - control a servo via MIDI CC using [ESP32Servo](https://github.com/madhephaestus/ESP32Servo/)
+  * **client_audio_m16_i2s** - MIDI-controlled synthesizer using the [M16](https://github.com/algomusic/M16) audio library, outputting audio over I2S (e.g. MAX98357A). Receives Note On/Off and plays a sine wave with an ADSR envelope
+  * **client_audio_audiotools_i2s** - MIDI-controlled sine wave synth using [arduino-audio-tools](https://github.com/pschatzmann/arduino-audio-tools), streaming audio over I2S. Receives Note On/Off and adjusts frequency and amplitude accordingly
 
 ## Breaking changes (this library is under active development => please make sure you are using the latest version)
 * This repo uses Semantic Versioning, although strict adherence will only come into effect at version 1.0.0.
@@ -135,6 +137,8 @@ Practical reading:
 * examples/client_dac_i2s depends on mozzi
 * examples/client_dmx uses Grove DMX512 (SN75176) with a built-in minimal sender (no extra library). Optional: use **luksal/ESP32-DMX** or **pierrejay/esp32-EZDMX** instead (see comment in the sketch). 
 * examples/client_servo depends on **ESP32Servo**
+* examples/client_audio_m16_i2s depends on [M16](https://github.com/algomusic/M16)
+* examples/client_audio_audiotools_i2s depends on [arduino-audio-tools](https://github.com/pschatzmann/arduino-audio-tools)
 
 ## Contributing
 If you find any bugs feel free to submit an issue on github, also PRs are very welcome.
