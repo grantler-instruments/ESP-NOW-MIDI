@@ -524,6 +524,18 @@ public:
       if (onSongSelectHandler)
         onSongSelectHandler(message.firstByte);
       break;
+    case MIDI_TIME_CODE:
+      if (onTimeCodeHandler)
+        onTimeCodeHandler(message.firstByte);
+      break;
+    case MIDI_ACTIVE_SENSING:
+      if (onActiveSensingHandler)
+        onActiveSensingHandler();
+      break;
+    case MIDI_SYSTEM_RESET:
+      if (onSystemResetHandler)
+        onSystemResetHandler();
+      break;
     }
   }
 
@@ -592,6 +604,21 @@ public:
     onSongSelectHandler = callback;
   }
 
+  void setHandleTimeCode(void (*callback)(byte value))
+  {
+    onTimeCodeHandler = callback;
+  }
+
+  void setHandleActiveSensing(void (*callback)())
+  {
+    onActiveSensingHandler = callback;
+  }
+
+  void setHandleSystemReset(void (*callback)())
+  {
+    onSystemResetHandler = callback;
+  }
+
   bool hasPeer(const uint8_t mac[6]) const
   {
     uint64_t packed = PeerInfo::packMac(mac);
@@ -623,6 +650,9 @@ private:
   void (*onClockHandler)() = nullptr;
   void (*onSongPositionHandler)(uint16_t value) = nullptr;
   void (*onSongSelectHandler)(uint8_t value) = nullptr;
+  void (*onTimeCodeHandler)(uint8_t value) = nullptr;
+  void (*onActiveSensingHandler)() = nullptr;
+  void (*onSystemResetHandler)() = nullptr;
 };
 
 esp_now_midi *esp_now_midi::_instance = nullptr;

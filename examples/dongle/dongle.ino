@@ -337,8 +337,7 @@ void setup() {
 
   if (TinyUSBDevice.mounted()) {
     TinyUSBDevice.detach();
-    delay(10);
-    TinyUSBDevice.attach();
+    delay(100);
   }
 
   // TinyUSBDevice.setVbusDetection(false);
