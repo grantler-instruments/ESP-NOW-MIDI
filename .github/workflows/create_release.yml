@@ -94,3 +94,53 @@ jobs:
           files: all-binaries/*.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  release_enomik:
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-binaries
+          pattern: esp32-binaries-*
+          merge-multiple: true
+      - name: Publish firmware to enomik-app repo
+        env:
+          PAT: ${{ secrets.ENOMIK_APP_PAT }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          FOLDER=$(echo "${TAG}" | sed 's/\./-/g')
+          git clone https://x-access-token:${PAT}@github.com/grantler-instruments/enomik-app.git enomik-app
+          mkdir -p "enomik-app/app/public/firmware/${FOLDER}"
+          for sketch in client dongle print_mac; do
+            cp all-binaries/lolin_s2_mini_${sketch}_*.ino.bin "enomik-app/app/public/firmware/${FOLDER}/"
+          done
+          python3 << 'PY'
+          import json, os
+
+          root = "enomik-app/app/public/firmware"
+          dirs = [
+              d
+              for d in os.listdir(root)
+              if os.path.isdir(os.path.join(root, d)) and not d.startswith(".")
+          ]
+
+          def sort_key(name: str):
+              try:
+                  return tuple(int(p) for p in name.split("-"))
+              except ValueError:
+                  return (-1, name)
+
+          dirs.sort(key=sort_key, reverse=True)
+          path = os.path.join(root, "versions.json")
+          with open(path, "w", encoding="utf-8") as f:
+              json.dump({"versions": dirs}, f, indent=2)
+              f.write("\n")
+          PY
+          cd enomik-app
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "app/public/firmware/${FOLDER}" app/public/firmware/versions.json
+          git commit -m "firmware: add binaries for ${FOLDER}; refresh versions.json"
+          git push
