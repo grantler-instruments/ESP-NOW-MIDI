@@ -1,4 +1,6 @@
 #include "./Display.h"
+#include "./config.h"
+#include "./logo.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
@@ -15,10 +17,10 @@ public:
     if (!oled_.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
       return false;
     }
-    oled_.clearDisplay();
     oled_.setTextSize(1);
     oled_.setTextColor(SSD1306_WHITE);
-    oled_.display();
+    drawSplash();
+    splashUntilMs_ = millis() + SPLASH_DURATION_MS;
     return true;
   }
 
@@ -29,6 +31,11 @@ public:
     const MidiMessageHistory* history,
     int historySize,
     int historyHead) override {
+    if (splashUntilMs_ != 0 && millis() < splashUntilMs_) {
+      return;
+    }
+    splashUntilMs_ = 0;
+
     oled_.clearDisplay();
     drawHeader(mac, version, peerCount);
     drawHistory(history, historySize, historyHead);
@@ -37,6 +44,15 @@ public:
 
 private:
   Adafruit_SSD1306 oled_;
+  uint32_t splashUntilMs_ = 0;
+
+  void drawSplash() {
+    oled_.clearDisplay();
+    const int x = (SCREEN_WIDTH - LOGO_WIDTH) / 2;
+    const int y = (SCREEN_HEIGHT - LOGO_HEIGHT) / 2;
+    oled_.drawXBitmap(x, y, logo_bits, LOGO_WIDTH, LOGO_HEIGHT, SSD1306_WHITE);
+    oled_.display();
+  }
 
   /* ---------- Header ---------- */
 
