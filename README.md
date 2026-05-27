@@ -155,3 +155,9 @@ This library is licensed under the **GNU Lesser General Public License (LGPL) ve
 
 For the full license text, see the `LICENSE` file included with this library or visit: [https://www.gnu.org/licenses/lgpl-3.0.html](https://www.gnu.org/licenses/lgpl-3.0.html).
 
+## Support
+
+If you find this library useful, you can support development:
+
+[![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/thomasgeissl)
+
