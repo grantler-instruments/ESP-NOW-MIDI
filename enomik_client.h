@@ -46,16 +46,6 @@ namespace enomik
         // --- System Exclusive ---
         std::function<void(uint8_t *data, unsigned int length)> _onSysExHandler;
 
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 3, 0)
-        static void onDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
-        {
-        }
-#else
-        static void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
-        {
-        }
-#endif
-
         void onSystemExclusive(uint8_t *data, unsigned int length)
         {
             io.onSysEx(data, length);

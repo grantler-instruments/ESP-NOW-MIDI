@@ -7,20 +7,8 @@
 uint8_t peerMacAddress[6] = { 0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62 };
 esp_now_midi ESP_NOW_MIDI;
 
-// there has been a change in the callback signature with esp32 board version 3.3.0, hence this is here for backwards compatibility
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 3, 0)
-void customOnDataSent(const wifi_tx_info_t* info, esp_now_send_status_t status) {
+void customOnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failure");
-}
-#else
-void customOnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failure");
-}
-#endif
-
-void customOnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  // Serial.print("Custom Callback - Status: ");
-  // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failure");
 }
 
 void onNoteOn(byte channel, byte note, byte velocity) {
@@ -52,7 +40,7 @@ void onPolyAfterTouch(byte channel, byte note, byte value) {
 void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
-  ESP_NOW_MIDI.begin();
+  ESP_NOW_MIDI.begin(false, true, customOnDataSent);
   ESP_NOW_MIDI.addPeer(peerMacAddress);
 
   ESP_NOW_MIDI.setHandleNoteOn(onNoteOn);

@@ -5,15 +5,10 @@
 #endif
 #include "./version.h"
 #include <esp_now.h>
-#include <esp_wifi.h> // Needed for wifi_tx_info_t in newer versions
+#include <esp_wifi.h>
 #include <WiFi.h>
 #include "./midiHelpers.h"
 #define ESP_NOW_DEBUGGING 0
-
-// Version detection
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 3, 0)
-#define ESP_NOW_NEW_CALLBACK_SIGNATURE 1
-#endif
 
 // Optimized peer storage with packed MAC address for fast comparison
 struct PeerInfo
@@ -35,15 +30,8 @@ struct PeerInfo
 class esp_now_midi
 {
 public:
-// Conditional callback typedef
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
-  typedef void (*DataSentCallback)(const wifi_tx_info_t *mac_addr, esp_now_send_status_t status);
-#else
-  typedef void (*DataSentCallback)(const uint8_t *mac_addr, esp_now_send_status_t status);
-#endif
+  typedef void (*DataSentCallback)(const wifi_tx_info_t *info, esp_now_send_status_t status);
 
-// Static callback adapter
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
   static void DefaultOnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
   {
 #if ESP_NOW_DEBUGGING == 1
@@ -51,18 +39,7 @@ public:
     Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 #endif
   }
-#else
-  static void DefaultOnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
-  {
-#if ESP_NOW_DEBUGGING == 1
-    Serial.print("\r\nLast Packet Send Status:\t");
-    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-#endif
-  }
-#endif
 
-// Adapter function to handle both versions
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
   static void SendCallbackAdapter(const wifi_tx_info_t *info, esp_now_send_status_t status)
   {
     if (_instance && _instance->userDataSentCallback)
@@ -70,18 +47,7 @@ public:
       _instance->userDataSentCallback(info, status);
     }
   }
-#else
-  static void SendCallbackAdapter(const uint8_t *mac_addr, esp_now_send_status_t status)
-  {
-    if (_instance && _instance->userDataSentCallback)
-    {
-      _instance->userDataSentCallback(mac_addr, status);
-    }
-  }
-#endif
 
-// Fixed: Updated receive callback signature for new version
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
   static void OnDataRecvStatic(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
   {
     if (_instance)
@@ -89,15 +55,6 @@ public:
       _instance->OnDataRecv(recv_info->src_addr, incomingData, len);
     }
   }
-#else
-  static void OnDataRecvStatic(const uint8_t *mac, const uint8_t *incomingData, int len)
-  {
-    if (_instance)
-    {
-      _instance->OnDataRecv(mac, incomingData, len);
-    }
-  }
-#endif
   void begin(bool reducePowerAtCostOfLatency = false, bool autoPeerDiscovery = true, DataSentCallback callback = DefaultOnDataSent)
   {
     _instance = this;
@@ -143,12 +100,7 @@ public:
 
     // Register callbacks
     esp_now_register_send_cb(SendCallbackAdapter);
-
-#ifdef ESP_NOW_NEW_CALLBACK_SIGNATURE
     esp_now_register_recv_cb(OnDataRecvStatic);
-#else
-    esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecvStatic));
-#endif
   }
 
   // Add a new peer
