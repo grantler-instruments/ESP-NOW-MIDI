@@ -5,6 +5,7 @@
 #include <esp_now_midi.h>
 #include <esp_system.h>
 #include "MidiMessageHistory.h"
+#include "UsbMidiQueue.h"
 
 #if HAS_DISPLAY == 1
 #include "SSD1306Display.h"
@@ -28,6 +29,7 @@ String macStr;
 
 MidiMessageHistory messageHistory[MAX_HISTORY];
 int messageIndex = 0;
+static UsbMidiQueue usbMidiQueue;
 
 // Function to add a new message to the history
 void addToHistory(const midi_message& msg, bool outgoing = false) {
@@ -35,6 +37,149 @@ void addToHistory(const midi_message& msg, bool outgoing = false) {
   messageHistory[messageIndex].outgoing = outgoing;
   messageHistory[messageIndex].timestamp = millis();
   messageIndex = (messageIndex + 1) % MAX_HISTORY;
+}
+
+void queueFromEspNow(const midi_message& msg, bool addHistory = true) {
+  if (addHistory) {
+    addToHistory(msg, false);
+  }
+  usbMidiQueue.enqueue(msg);
+}
+
+bool sendQueuedMidi(const midi_message& msg) {
+  const uint8_t ch = (msg.channel - 1) & 0x0F;
+  uint8_t packet[4] = {0, 0, 0, 0};
+
+  switch (msg.status) {
+    case MIDI_NOTE_ON:
+      packet[0] = 0x09;
+      packet[1] = MIDI_NOTE_ON | ch;
+      packet[2] = msg.firstByte;
+      packet[3] = msg.secondByte;
+      break;
+    case MIDI_NOTE_OFF:
+      packet[0] = 0x08;
+      packet[1] = MIDI_NOTE_OFF | ch;
+      packet[2] = msg.firstByte;
+      packet[3] = msg.secondByte;
+      break;
+    case MIDI_CONTROL_CHANGE:
+      packet[0] = 0x0B;
+      packet[1] = MIDI_CONTROL_CHANGE | ch;
+      packet[2] = msg.firstByte;
+      packet[3] = msg.secondByte;
+      break;
+    case MIDI_PROGRAM_CHANGE:
+      packet[0] = 0x0C;
+      packet[1] = MIDI_PROGRAM_CHANGE | ch;
+      packet[2] = msg.firstByte;
+      break;
+    case MIDI_AFTERTOUCH:
+      packet[0] = 0x0D;
+      packet[1] = MIDI_AFTERTOUCH | ch;
+      packet[2] = msg.firstByte;
+      break;
+    case MIDI_POLY_AFTERTOUCH:
+      packet[0] = 0x0A;
+      packet[1] = MIDI_POLY_AFTERTOUCH | ch;
+      packet[2] = msg.firstByte;
+      packet[3] = msg.secondByte;
+      break;
+    case MIDI_PITCH_BEND:
+      packet[0] = 0x0E;
+      packet[1] = MIDI_PITCH_BEND | ch;
+      packet[2] = msg.firstByte;
+      packet[3] = msg.secondByte;
+      break;
+    case MIDI_START:
+      packet[0] = 0x0F;
+      packet[1] = MIDI_START;
+      break;
+    case MIDI_STOP:
+      packet[0] = 0x0F;
+      packet[1] = MIDI_STOP;
+      break;
+    case MIDI_CONTINUE:
+      packet[0] = 0x0F;
+      packet[1] = MIDI_CONTINUE;
+      break;
+    case MIDI_TIME_CLOCK:
+      packet[0] = 0x0F;
+      packet[1] = MIDI_TIME_CLOCK;
+      break;
+    case MIDI_SONG_POS_POINTER:
+      packet[0] = 0x03;
+      packet[1] = MIDI_SONG_POS_POINTER;
+      packet[2] = msg.firstByte;
+      packet[3] = msg.secondByte;
+      break;
+    case MIDI_SONG_SELECT:
+      packet[0] = 0x02;
+      packet[1] = MIDI_SONG_SELECT;
+      packet[2] = msg.firstByte;
+      break;
+    default:
+      return true;
+  }
+
+  return usb_midi.writePacket(packet);
+}
+
+void drainUsbMidiQueue() {
+  if (!TinyUSBDevice.mounted()) {
+    return;
+  }
+
+  if (TinyUSBDevice.suspended()) {
+    if (usbMidiQueue.hasPending()) {
+      TinyUSBDevice.remoteWakeup();
+    }
+    return;
+  }
+
+  if (!TinyUSBDevice.ready()) {
+    return;
+  }
+
+  midi_message msg;
+  while (usbMidiQueue.peek(msg)) {
+    if (!sendQueuedMidi(msg)) {
+      break;
+    }
+    usbMidiQueue.consumeHead();
+  }
+}
+
+char getUsbStatusChar() {
+  if (!TinyUSBDevice.mounted()) {
+    return 'D';
+  }
+  if (TinyUSBDevice.suspended()) {
+    return 'S';
+  }
+  if (usbMidiQueue.hasPending()) {
+    return 'Q';
+  }
+  return 'C';  // Connected / ready
+}
+
+void logUsbState(unsigned long now) {
+  static char lastStatus = 0;
+  static uint32_t lastLogMs = 0;
+  const char status = getUsbStatusChar();
+
+  if (status == lastStatus && (status == 'C' || (now - lastLogMs) < 10000)) {
+    return;
+  }
+
+  lastStatus = status;
+  lastLogMs = now;
+  Serial.printf("USB status=%c mounted=%d suspended=%d ready=%d queue=%u\n",
+                status,
+                TinyUSBDevice.mounted(),
+                TinyUSBDevice.suspended(),
+                TinyUSBDevice.ready(),
+                usbMidiQueue.pendingCount());
 }
 
 void readMacAddress() {
@@ -53,16 +198,14 @@ void readMacAddress() {
 void updateDisplay();
 #endif
 
-// ESP-NOW MIDI receive handlers - forward to USB MIDI
+// ESP-NOW MIDI receive handlers - queue for USB MIDI (sent from loop())
 void handleNoteOn(byte channel, byte note, byte velocity) {
   midi_message msg;
   msg.status = MIDI_NOTE_ON;
   msg.channel = channel;
   msg.firstByte = note;
   msg.secondByte = velocity;
-  addToHistory(msg, false);
-
-  MIDI.sendNoteOn(note, velocity, channel);
+  queueFromEspNow(msg);
 }
 
 void handleNoteOff(byte channel, byte note, byte velocity) {
@@ -71,9 +214,7 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
   msg.channel = channel;
   msg.firstByte = note;
   msg.secondByte = velocity;
-  addToHistory(msg, false);
-
-  MIDI.sendNoteOff(note, velocity, channel);
+  queueFromEspNow(msg);
 }
 
 void handleControlChange(byte channel, byte control, byte value) {
@@ -82,9 +223,7 @@ void handleControlChange(byte channel, byte control, byte value) {
   msg.channel = channel;
   msg.firstByte = control;
   msg.secondByte = value;
-  addToHistory(msg, false);
-
-  MIDI.sendControlChange(control, value, channel);
+  queueFromEspNow(msg);
 }
 
 void handleProgramChange(byte channel, byte program) {
@@ -93,9 +232,7 @@ void handleProgramChange(byte channel, byte program) {
   msg.channel = channel;
   msg.firstByte = program;
   msg.secondByte = 0;
-  addToHistory(msg, false);
-
-  MIDI.sendProgramChange(program, channel);
+  queueFromEspNow(msg);
 }
 
 void handleAfterTouchChannel(byte channel, byte pressure) {
@@ -104,9 +241,7 @@ void handleAfterTouchChannel(byte channel, byte pressure) {
   msg.channel = channel;
   msg.firstByte = pressure;
   msg.secondByte = 0;
-  addToHistory(msg, false);
-
-  MIDI.sendAfterTouch(pressure, channel);
+  queueFromEspNow(msg);
 }
 
 void handleAfterTouchPoly(byte channel, byte note, byte pressure) {
@@ -115,21 +250,17 @@ void handleAfterTouchPoly(byte channel, byte note, byte pressure) {
   msg.channel = channel;
   msg.firstByte = note;
   msg.secondByte = pressure;
-  addToHistory(msg, false);
-
-  MIDI.sendAfterTouch(note, pressure, channel);
+  queueFromEspNow(msg);
 }
 
 void handlePitchBend(byte channel, int value) {
   midi_message msg;
   msg.status = MIDI_PITCH_BEND;
   msg.channel = channel;
-  int unsignedValue = value + 8192;  // Convert to unsigned
+  const int unsignedValue = value + 8192;
   msg.firstByte = unsignedValue & 0x7F;
   msg.secondByte = (unsignedValue >> 7) & 0x7F;
-  addToHistory(msg, false);
-
-  MIDI.sendPitchBend(value + 8192, channel);  // MIDI library expects 0-16383
+  queueFromEspNow(msg);
 }
 
 void handleStart() {
@@ -138,9 +269,7 @@ void handleStart() {
   msg.channel = 0;
   msg.firstByte = 0;
   msg.secondByte = 0;
-  addToHistory(msg, false);
-
-  MIDI.sendStart();
+  queueFromEspNow(msg);
 }
 
 void handleStop() {
@@ -149,9 +278,7 @@ void handleStop() {
   msg.channel = 0;
   msg.firstByte = 0;
   msg.secondByte = 0;
-  addToHistory(msg, false);
-
-  MIDI.sendStop();
+  queueFromEspNow(msg);
 }
 
 void handleContinue() {
@@ -160,19 +287,20 @@ void handleContinue() {
   msg.channel = 0;
   msg.firstByte = 0;
   msg.secondByte = 0;
-  addToHistory(msg, false);
-
-  MIDI.sendContinue();
+  queueFromEspNow(msg);
 }
 
 void handleClock() {
-  // Don't print or add to history - too many messages
-  MIDI.sendClock();
+  usbMidiQueue.enqueueClock();
 }
 
 void handleSongPosition(uint16_t value) {
-  // Don't add to history - too frequent
-  MIDI.sendSongPosition(value);
+  midi_message msg;
+  msg.status = MIDI_SONG_POS_POINTER;
+  msg.channel = 0;
+  msg.firstByte = value & 0x7F;
+  msg.secondByte = (value >> 7) & 0x7F;
+  queueFromEspNow(msg, false);
 }
 
 void handleSongSelect(byte value) {
@@ -181,9 +309,7 @@ void handleSongSelect(byte value) {
   msg.channel = 0;
   msg.firstByte = value;
   msg.secondByte = 0;
-  addToHistory(msg, false);
-
-  MIDI.sendSongSelect(value);
+  queueFromEspNow(msg);
 }
 
 // USB MIDI receive handlers - forward to ESP-NOW
@@ -411,13 +537,18 @@ void loop() {
   unsigned long now = millis();
   static bool usbMidiInitialized = false;
 
+  if (usbMidiInitialized && !TinyUSBDevice.mounted()) {
+    Serial.println("USB disconnected");
+    usbMidiInitialized = false;
+    usbMidiQueue.clear();
+  }
+
   // Wait for USB to mount, then initialize MIDI
   if (!usbMidiInitialized && TinyUSBDevice.mounted()) {
     Serial.println("USB mounted - initializing MIDI");
 
     MIDI.begin(MIDI_CHANNEL_OMNI);
     MIDI.turnThruOff();
-
 
     // Set USB MIDI handlers
     MIDI.setHandleNoteOn(onNoteOn);
@@ -438,11 +569,12 @@ void loop() {
     Serial.println("USB MIDI ready!");
   }
 
-  // Only read MIDI if initialized
   if (usbMidiInitialized) {
     MIDI.read();
+    drainUsbMidiQueue();
   }
 
+  logUsbState(now);
 
 #if HAS_DISPLAY == 1
   if (display && (now - lastDisplayUpdate) >= UPDATE_DISPLAY_INTERVAL) {
@@ -452,6 +584,7 @@ void loop() {
       baseMac,
       version.c_str(),
       espnowMIDI->getPeersCount(),
+      getUsbStatusChar(),
       messageHistory,
       MAX_HISTORY,
       messageIndex);

@@ -8,6 +8,7 @@ public:
         const uint8_t mac[6],
         const char* version,
         int peerCount,
+        char usbStatus,
         const MidiMessageHistory* history,
         int historySize,
         int historyHead

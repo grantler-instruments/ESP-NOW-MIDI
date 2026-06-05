@@ -28,6 +28,7 @@ public:
     const uint8_t mac[6],
     const char* version,
     int peerCount,
+    char usbStatus,
     const MidiMessageHistory* history,
     int historySize,
     int historyHead) override {
@@ -37,7 +38,7 @@ public:
     splashUntilMs_ = 0;
 
     oled_.clearDisplay();
-    drawHeader(mac, version, peerCount);
+    drawHeader(mac, version, peerCount, usbStatus);
     drawHistory(history, historySize, historyHead);
     oled_.display();
   }
@@ -58,7 +59,8 @@ private:
 
 void drawHeader(const uint8_t mac[6],
                 const char* version,
-                int peers) {
+                int peers,
+                char usbStatus) {
   // Static buffers avoid repeated stack or heap pressure
   static char macStr[18];
   static char buf[64];
@@ -77,9 +79,15 @@ void drawHeader(const uint8_t mac[6],
   snprintf(buf, sizeof(buf), "mac:%s", macStr);
   oled_.println(buf);
 
-  // Line 2: version, connections, and uptime
-  snprintf(buf, sizeof(buf), "v%s con:%d t:%lu",
-           version, peers, displayUptime);
+  // Line 2: alternate con / usb every 4s
+  const bool showCon = ((millis() / HEADER_ALT_INTERVAL_MS) % 2) == 0;
+  if (showCon) {
+    snprintf(buf, sizeof(buf), "v%s con:%d t:%lu",
+             version, peers, displayUptime);
+  } else {
+    snprintf(buf, sizeof(buf), "v%s usb:%c t:%lu",
+             version, usbStatus, displayUptime);
+  }
   oled_.println(buf);
 
   // Divider line positioned to match the old layout
