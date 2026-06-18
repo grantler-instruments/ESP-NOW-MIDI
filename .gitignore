@@ -1,4 +1,5 @@
 .arduino-build/
+test/native/build/
 
 .pio
 .vscode

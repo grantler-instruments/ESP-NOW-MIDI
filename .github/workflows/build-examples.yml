@@ -1,14 +1,27 @@
 name: Build ESP32-S2 Mini Sketches
 on:
   push:
-    branches: 
+    branches:
       - main
-      - feature/enomik
   pull_request:
-    branches: 
+    branches:
       - main
-      - feature/enomik
 jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure native tests
+        run: cmake -S test/native -B test/native/build
+
+      - name: Build native tests
+        run: cmake --build test/native/build -j
+
+      - name: Run native tests
+        run: ctest --test-dir test/native/build --output-on-failure
+
   build:
     runs-on: ubuntu-latest
     
