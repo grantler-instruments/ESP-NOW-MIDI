@@ -22,6 +22,30 @@ jobs:
       - name: Run native tests
         run: ctest --test-dir test/native/build --output-on-failure
 
+  circuitpython-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install mpy-cross
+        run: |
+          curl -fsSL -o mpy-cross \
+            https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/linux-amd64/mpy-cross-linux-amd64-9.2.8.static
+          chmod +x mpy-cross
+          sudo mv mpy-cross /usr/local/bin/mpy-cross
+
+      - name: Compile CircuitPython library
+        run: mpy-cross esp_now_midi.py -o esp_now_midi.mpy
+
+      - name: Run CircuitPython unit tests
+        run: python3 -m unittest discover -s test/circuitpython -v
+
   build:
     runs-on: ubuntu-latest
     
@@ -57,6 +81,7 @@ jobs:
           
           # Install any external dependencies (add more as needed)
           arduino-cli lib install "Adafruit TinyUSB Library"
+          arduino-cli lib install "MIDI Library"
           arduino-cli lib install "Adafruit MPU6050"
           arduino-cli lib install "Adafruit_VL53L0X"
           arduino-cli lib install "Mozzi"
