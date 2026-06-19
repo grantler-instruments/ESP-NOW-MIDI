@@ -6,6 +6,17 @@ Based on the C++ esp_now_midi library - packet format compatible
 
 import espnow
 
+# Keep in sync with version.h
+VERSION_MAJOR = 0
+VERSION_MINOR = 12
+VERSION_PATCH = 1
+VERSION = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
+
+
+def get_version():
+    """Return library version string (matches C++ getVersion())."""
+    return VERSION
+
 # MIDI Status Bytes
 MIDI_UNKNOWN = 0x00
 # Channel voice messages
@@ -34,6 +45,7 @@ MIDI_SYSTEM_RESET = 0xFF
 MIDI_MIN_BEND = 0
 MIDI_MAX_BEND = 16383
 MAX_PEERS = 20
+ESP_NOW_MIDI_CHANNEL = 6
 
 
 class ESPNowMidi:
@@ -72,19 +84,38 @@ class ESPNowMidi:
         self._on_clock_handler = None
         self._on_song_position_handler = None
         self._on_song_select_handler = None
+        self._on_time_code_handler = None
+        self._on_active_sensing_handler = None
+        self._on_system_reset_handler = None
     
-    def begin(self, reduce_power_at_cost_of_latency=False, auto_peer_discovery=True):
+    def begin(self, reduce_power_at_cost_of_latency=False, auto_peer_discovery=True, channel=ESP_NOW_MIDI_CHANNEL):
         """
         Initialize ESP-NOW
         
         Args:
             reduce_power_at_cost_of_latency: Not implemented in CircuitPython
             auto_peer_discovery: Enable automatic peer discovery on receive
+            channel: WiFi channel for ESP-NOW (default matches C++ ESP_NOW_MIDI_CHANNEL)
         """
         self._auto_peer_discovery = auto_peer_discovery
+        self._configure_wifi_channel(channel)
         self.e = espnow.ESPNow()
         self.e.active(True)
         print("ESP-NOW MIDI initialized")
+    
+    def _configure_wifi_channel(self, channel):
+        """Best-effort WiFi channel setup before ESP-NOW init."""
+        try:
+            import wifi
+            wifi.radio.configure(channel=channel)
+        except (ImportError, AttributeError, TypeError):
+            try:
+                import network
+                wlan = network.WLAN(network.STA_IF)
+                if not wlan.active():
+                    wlan.active(True)
+            except ImportError:
+                pass
     
     def _create_packet(self, status, channel, first_byte, second_byte):
         """
@@ -188,6 +219,22 @@ class ESPNowMidi:
             print(f"Failed to add peer")
             return False
     
+    def clear_peers(self):
+        """
+        Remove all registered peers from ESP-NOW
+        Matches C++ clearPeers
+        """
+        print("Clearing all peers from ESP-NOW...")
+        for peer in self.peers:
+            try:
+                self.e.remove_peer(peer)
+                mac_str = ':'.join(['%02X' % b for b in peer])
+                print(f"Removed peer: {mac_str}")
+            except Exception:
+                print("Failed to remove peer")
+        self.peers = []
+        print("All peers cleared")
+    
     def get_peers_count(self):
         """Get the number of registered peers"""
         return len(self.peers)
@@ -211,7 +258,6 @@ class ESPNowMidi:
             bool: True if sent to at least one peer successfully
         """
         if not self.peers:
-            print("No peers registered!")
             return False
         
         success = False
@@ -489,11 +535,12 @@ class ESPNowMidi:
             bool: True if sent successfully
         """
         # Create sysex message structure matching C++ midi_sysex_message
-        # struct: data[128] + length byte
-        sysex_data = bytearray(128)
-        for i in range(min(length, 128)):
+        # struct: data[128] + length byte at offset 128
+        length = min(length, 128)
+        sysex_data = bytearray(129)
+        for i in range(length):
             sysex_data[i] = data[i]
-        sysex_data.append(length)
+        sysex_data[128] = length
         
         return self.send_to_all_peers(bytes(sysex_data))
     
@@ -608,6 +655,18 @@ class ESPNowMidi:
         elif status == MIDI_SONG_SELECT:
             if self._on_song_select_handler:
                 self._on_song_select_handler(first_byte)
+        
+        elif status == MIDI_TIME_CODE:
+            if self._on_time_code_handler:
+                self._on_time_code_handler(first_byte)
+        
+        elif status == MIDI_ACTIVE_SENSING:
+            if self._on_active_sensing_handler:
+                self._on_active_sensing_handler()
+        
+        elif status == MIDI_SYSTEM_RESET:
+            if self._on_system_reset_handler:
+                self._on_system_reset_handler()
     
     def read(self):
         """
@@ -762,6 +821,37 @@ class ESPNowMidi:
                      value is byte: 0-127
         """
         self._on_song_select_handler = callback
+    
+    def set_handle_time_code(self, callback):
+        """
+        Set handler for Time Code messages
+        Matches C++ setHandleTimeCode
+        
+        Args:
+            callback: function(value)
+                     value is byte: 0-127
+        """
+        self._on_time_code_handler = callback
+    
+    def set_handle_active_sensing(self, callback):
+        """
+        Set handler for Active Sensing messages
+        Matches C++ setHandleActiveSensing
+        
+        Args:
+            callback: function()
+        """
+        self._on_active_sensing_handler = callback
+    
+    def set_handle_system_reset(self, callback):
+        """
+        Set handler for System Reset messages
+        Matches C++ setHandleSystemReset
+        
+        Args:
+            callback: function()
+        """
+        self._on_system_reset_handler = callback
     
     def has_peer(self, mac):
         """
