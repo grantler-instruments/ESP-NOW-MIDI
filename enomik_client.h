@@ -31,7 +31,7 @@ namespace enomik
         std::function<void(byte channel, byte program)> _onProgramChangeHandler;
         std::function<void(byte channel, byte pressure)> _onAfterTouchChannelHandler;         // Channel aftertouch
         std::function<void(byte channel, byte note, byte pressure)> _onAfterTouchPolyHandler; // Poly aftertouch
-        std::function<void(byte channel, int value)> _onPitchBendHandler;                     // uint16_t
+        std::function<void(byte channel, int value)> _onPitchBendHandler; // signed; center = 0
 
         // --- System Real-Time ---
         std::function<void()> _onStartHandler;
@@ -118,7 +118,7 @@ namespace enomik
             }
         }
 
-        static void handlePitchBendStatic(byte channel, int value) // uint16_t
+        static void handlePitchBendStatic(byte channel, int value)
         {
             if (Client::instancePtr)
             {
@@ -542,7 +542,7 @@ namespace enomik
             return true;
         }
 
-        bool sendPitchBend(int value, byte channel) // uint16_t
+        bool sendPitchBend(int value, byte channel) // signed; center = 0
         {
             auto err = espnowMIDI.sendPitchBend(value, channel);
 #ifdef HAS_USB_MIDI
@@ -700,7 +700,7 @@ namespace enomik
             _onAfterTouchPolyHandler = handler;
         }
 
-        void setHandlePitchBend(std::function<void(byte channel, int value)> handler) // uint16_t
+        void setHandlePitchBend(std::function<void(byte channel, int value)> handler) // signed; center = 0
         {
             _onPitchBendHandler = handler;
         }

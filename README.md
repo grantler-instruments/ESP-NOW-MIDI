@@ -75,6 +75,18 @@ See **plain_echo** and similar: initialize the library, `addPeer()` with the don
 
 USB MIDI sent to the dongle is forwarded over ESP-NOW. For the first link-up, the remote side typically needs the dongle registered as a peer (`addPeer` or SysEx pairing as above); the dongle learns the client when the client sends ESP-NOW MIDI traffic.
 
+### Pitch bend
+
+Use the **signed** API everywhere unless you already have raw wire bytes:
+
+| API | Value range | Center (no bend) |
+|-----|-------------|------------------|
+| `sendPitchBend(value, channel)` | −8192 … +8191 | **0** |
+| `setHandlePitchBend(...)` callback `value` | −8192 … +8191 | **0** |
+| `sendPitchBendRaw(value, channel)` | 0 … 16383 (wire) | **8192** |
+
+`sendPitchBend()` and receive callbacks match the [FortySevenEffects MIDI library](https://github.com/FortySevenEffects/arduino_midi_library) convention. Pass handler values through unchanged — do not add or subtract 8192.
+
 ### enomik 3000 (WIP)
 Drop `enomik::Client` into your firmware and your board turns into a MIDI SysEx–configurable device: routing, pin modes, and basic I/O can be set from a host over SysEx instead of hard-coding every mapping. This library is integrated with the [ESP-NOW MIDI Kit](https://grantler-instruments.github.io/enomik-app/) — the no-code app for creating (wireless) MIDI devices.
 
