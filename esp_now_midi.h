@@ -302,6 +302,8 @@ public:
 
   inline esp_err_t sendPitchBendRaw(int value, byte channel)
   {
+    // Wire-format 14-bit value: 0..16383, center (no bend) = 8192.
+    // Prefer sendPitchBend() unless you already have raw MIDI bytes.
     midi_message message;
     message.channel = channel;
     message.status = MIDI_PITCH_BEND;
@@ -315,6 +317,8 @@ public:
 
   inline esp_err_t sendPitchBend(int16_t value, byte channel)
   {
+    // Signed pitch bend: -8192..8191, center (no bend) = 0.
+    // Matches FortySevenEffects MIDI library send/receive callbacks.
     // clamp to signed 14-bit range
     if (value < -8192)
       value = -8192;
@@ -573,6 +577,7 @@ public:
     onProgramChangeHandler = callback;
   }
 
+  // Callback value is signed pitch bend: -8192..8191, center = 0.
   void setHandlePitchBend(void (*callback)(byte channel, int value))
   {
     onPitchBendHandler = callback;

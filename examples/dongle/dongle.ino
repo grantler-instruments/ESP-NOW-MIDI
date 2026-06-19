@@ -383,12 +383,12 @@ void onPitchBend(byte channel, int value) {
   midi_message msg;
   msg.status = MIDI_PITCH_BEND;
   msg.channel = channel;
-  msg.firstByte = value & 0x7F;
-  msg.secondByte = (value >> 7) & 0x7F;
+  const int raw = value + 8192;
+  msg.firstByte = raw & 0x7F;
+  msg.secondByte = (raw >> 7) & 0x7F;
   addToHistory(msg, true);
 
-  // Convert from MIDI library format (0-16383) to signed (-8192 to 8191)
-  espnowMIDI->sendPitchBend(value - 8192, channel);
+  espnowMIDI->sendPitchBend(value, channel);
 }
 
 void onStart() {

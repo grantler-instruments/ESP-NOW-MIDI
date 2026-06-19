@@ -41,10 +41,15 @@ TEST_CASE("channel voice messages round-trip", "[midi][packet]")
     midi_message original{3, MIDI_CONTROL_CHANGE, 7, 100};
     auto round = encode(original).toMessage();
 
-    REQUIRE(round.channel == 3);
-    REQUIRE(round.status == MIDI_CONTROL_CHANGE);
-    REQUIRE(round.firstByte == 7);
-    REQUIRE(round.secondByte == 100);
+    const uint8_t channel = round.channel;
+    const MidiStatus status = round.status;
+    const uint8_t firstByte = round.firstByte;
+    const uint8_t secondByte = round.secondByte;
+
+    REQUIRE(channel == 3);
+    REQUIRE(status == MIDI_CONTROL_CHANGE);
+    REQUIRE(firstByte == 7);
+    REQUIRE(secondByte == 100);
 }
 
 TEST_CASE("two-byte channel messages", "[midi][packet]")
@@ -82,8 +87,11 @@ TEST_CASE("system messages ignore channel", "[midi][packet]")
     REQUIRE(pkt.getDataSize() == 1);
 
     auto round = pkt.toMessage();
-    REQUIRE(round.channel == 0);
-    REQUIRE(round.status == MIDI_START);
+    const uint8_t channel = round.channel;
+    const MidiStatus status = round.status;
+
+    REQUIRE(channel == 0);
+    REQUIRE(status == MIDI_START);
 }
 
 TEST_CASE("system message sizes", "[midi][packet]")
@@ -113,17 +121,36 @@ TEST_CASE("system message sizes", "[midi][packet]")
 
 TEST_CASE("pitch bend round trip", "[midi][packet]")
 {
-    for (int16_t signedValue : {int16_t{-8192}, int16_t{0}, int16_t{8191}})
+    SECTION("signed API: center is 0")
     {
-        uint16_t raw = static_cast<uint16_t>(signedValue + 8192);
-        auto pkt = encode({
-            1,
-            MIDI_PITCH_BEND,
-            static_cast<uint8_t>(raw & 0x7F),
-            static_cast<uint8_t>((raw >> 7) & 0x7F),
-        });
+        for (int16_t signedValue : {int16_t{-8192}, int16_t{0}, int16_t{8191}})
+        {
+            uint16_t raw = static_cast<uint16_t>(signedValue + 8192);
+            auto pkt = encode({
+                1,
+                MIDI_PITCH_BEND,
+                static_cast<uint8_t>(raw & 0x7F),
+                static_cast<uint8_t>((raw >> 7) & 0x7F),
+            });
 
-        REQUIRE(decodePitchBend(pkt) == signedValue);
-        REQUIRE(pkt.getDataSize() == 3);
+            REQUIRE(decodePitchBend(pkt) == signedValue);
+            REQUIRE(pkt.getDataSize() == 3);
+        }
+    }
+
+    SECTION("raw wire: center is 8192")
+    {
+        for (uint16_t raw : {uint16_t{0}, uint16_t{8192}, uint16_t{16383}})
+        {
+            auto pkt = encode({
+                1,
+                MIDI_PITCH_BEND,
+                static_cast<uint8_t>(raw & 0x7F),
+                static_cast<uint8_t>((raw >> 7) & 0x7F),
+            });
+
+            REQUIRE(decodePitchBend(pkt) == static_cast<int16_t>(raw - 8192));
+            REQUIRE(pkt.getDataSize() == 3);
+        }
     }
 }
