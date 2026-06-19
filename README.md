@@ -142,6 +142,56 @@ Practical reading:
 
 * e.g. reset and clear pin configs: `0xF0, 0x7D, 0x09, 0xF7`
 
+## PlatformIO
+
+This library includes `library.json` and a `platformio.ini` in each Arduino example.
+
+### Use in your own project
+
+Add to your `platformio.ini`:
+
+```ini
+[env:lolin_s2_mini]
+platform = espressif32 @ 6.10.0
+board = lolin_s2_mini
+framework = arduino
+platform_packages =
+    framework-arduinoespressif32 @ https://github.com/espressif/arduino-esp32.git#3.3.0
+
+lib_deps =
+    https://github.com/grantler-instruments/ESP-NOW-MIDI.git
+    adafruit/Adafruit TinyUSB Library
+    https://github.com/FortySevenEffects/arduino_midi_library.git
+    WiFi
+    Preferences
+    EEPROM
+```
+
+For ESP32-S3 boards with USB MIDI, also set:
+
+```ini
+board_build.usb_mode = tinyusb
+```
+
+### Build an example
+
+From an example folder (e.g. `examples/dongle`):
+
+```bash
+pio run
+pio run -t upload
+```
+
+Build every example from the repo root:
+
+```bash
+bash scripts/platformio_build_examples.sh
+```
+
+Shared board settings live in `platformio/common.ini`. Example-specific dependencies are listed in each example's `platformio.ini`.
+
+**Note:** This library requires **Arduino-ESP32 3.3.0+**. The example configs pin that core via `platform_packages`. On **macOS Apple Silicon**, PlatformIO may currently fail while installing `toolchain-riscv32-esp` for recent `espressif32` platforms — use GitHub Actions, Docker/Linux, or Arduino CLI on Mac until PlatformIO publishes a compatible toolchain package.
+
 ## Dependencies
 * dependencies for the library should be automatically installed
 * examples/dongle additionally depends on

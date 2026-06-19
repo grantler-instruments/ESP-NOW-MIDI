@@ -1,0 +1,53 @@
+{
+  "name": "ESP-NOW-MIDI",
+  "version": "0.12.1",
+  "description": "Arduino library for sending and receiving MIDI messages via the ESP-NOW protocol.",
+  "keywords": [
+    "midi",
+    "esp-now",
+    "esp32",
+    "wireless",
+    "usb-midi"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grantler-instruments/ESP-NOW-MIDI.git"
+  },
+  "authors": [
+    {
+      "name": "Thomas Geissl",
+      "email": "thomas.geissl@gmail.com",
+      "maintainer": true
+    }
+  ],
+  "license": "LGPL-3.0",
+  "homepage": "https://github.com/grantler-instruments/ESP-NOW-MIDI",
+  "frameworks": [
+    "arduino"
+  ],
+  "platforms": [
+    "espressif32"
+  ],
+  "headers": [
+    "esp_now_midi.h",
+    "enomik_client.h",
+    "enomik_io.h",
+    "midiHelpers.h"
+  ],
+  "export": {
+    "exclude": [
+      "idf_examples",
+      ".arduino-build",
+      "benchmarks",
+      "scripts",
+      "test",
+      "examples"
+    ]
+  },
+  "dependencies": [
+    {
+      "name": "Adafruit TinyUSB Library",
+      "owners": "adafruit"
+    }
+  ]
+}

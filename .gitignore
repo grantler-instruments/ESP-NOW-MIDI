@@ -1,6 +1,8 @@
 .arduino-build/
 test/native/build/
+scripts/wizard/.venv/
 
 .pio
 .vscode
 .DS_Store
+__pycache__
