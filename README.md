@@ -152,19 +152,21 @@ Add to your `platformio.ini`:
 
 ```ini
 [env:lolin_s2_mini]
-platform = espressif32 @ 6.10.0
+platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.30/platform-espressif32.zip
 board = lolin_s2_mini
 framework = arduino
-platform_packages =
-    framework-arduinoespressif32 @ https://github.com/espressif/arduino-esp32.git#3.3.0
+
+build_flags =
+    -I ${PROJECT_PACKAGES_DIR}/framework-arduinoespressif32/libraries/Network/src
 
 lib_deps =
     https://github.com/grantler-instruments/ESP-NOW-MIDI.git
-    adafruit/Adafruit TinyUSB Library
-    https://github.com/FortySevenEffects/arduino_midi_library.git
     WiFi
+    Networking
     Preferences
     EEPROM
+    adafruit/Adafruit TinyUSB Library
+    https://github.com/FortySevenEffects/arduino_midi_library.git
 ```
 
 For ESP32-S3 boards with USB MIDI, also set:
@@ -190,7 +192,7 @@ bash scripts/platformio_build_examples.sh
 
 Shared board settings live in `platformio/common.ini`. Example-specific dependencies are listed in each example's `platformio.ini`.
 
-**Note:** This library requires **Arduino-ESP32 3.3.0+**. The example configs pin that core via `platform_packages`. On **macOS Apple Silicon**, PlatformIO may currently fail while installing `toolchain-riscv32-esp` for recent `espressif32` platforms — use GitHub Actions, Docker/Linux, or Arduino CLI on Mac until PlatformIO publishes a compatible toolchain package.
+**Note:** This library requires **Arduino-ESP32 3.3.0+**. Example configs use the [pioarduino `espressif32` platform](https://github.com/pioarduino/platform-espressif32) because official `platformio/espressif32` does not support Arduino core 3.x.
 
 ## Dependencies
 * dependencies for the library should be automatically installed
