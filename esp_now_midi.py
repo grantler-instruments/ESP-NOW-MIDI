@@ -9,7 +9,7 @@ import espnow
 # Keep in sync with version.h
 VERSION_MAJOR = 0
 VERSION_MINOR = 12
-VERSION_PATCH = 1
+VERSION_PATCH = 2
 VERSION = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
 
 
