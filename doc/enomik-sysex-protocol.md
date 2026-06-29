@@ -51,8 +51,8 @@ When building messages for Web MIDI / `mido`, the inner data is everything **bet
 | `0x04` | GET_ALL_PIN_CONFIGS | (none) | one `0x44` + pin config per stored pin |
 | `0x05` | DELETE_PIN_CONFIG | pin (1 byte) | `0x45` + pin byte, or [error](#errors) |
 | `0x06` | GET_MAC | (none) | `0x46` + [MAC nibbles](#mac-address-encoding) |
-| `0x07` | ADD_PEER | [MAC nibbles](#mac-address-encoding) (12 bytes) | `0x47` + success byte (`1` / `0`) |
-| `0x08` | GET_PEERS | (none) | `0x48` + 12 nibbles per peer MAC |
+| `0x07` | ADD_PEER | [12 MAC nibbles](#mac-address-encoding) (not 6 raw octets) | `0x47` + success byte (`1` / `0`) |
+| `0x08` | GET_PEERS | (none) | `0x48` + [12 nibbles](#mac-address-encoding) per peer MAC |
 | `0x09` | RESET | (none) | `0x49` (empty) |
 | `0x0A` | GET_VERSION | (none) | `0x4A` + major + minor |
 
@@ -97,13 +97,33 @@ Decode: `midi_type = stored * 2`.
 
 ### MAC address encoding
 
-MAC addresses are sent as **12 nibbles** (high nibble, low nibble per octet):
+A MAC address is **6 octets** (e.g. `84:F7:03:F2:54:62`). On the SysEx wire it is **always encoded as 12 nibbles** — never as 6 raw bytes.
+
+Each octet is split into two 4-bit values (high nibble, low nibble). Every nibble is sent as its own SysEx data byte in the range **0–15**:
+
+```
+Octet   0x84      0xF7      0x03      0xF2      0x54      0x62
+Nibble  8    4    F    7    0    3    F    2    5    4    6    2
+        └─12 SysEx payload bytes (each 0–15)─────────────────────┘
+```
+
+**Correct** — 12 nibbles (used by firmware, wizard, and enomik app deploy):
 
 ```
 MAC 84:F7:03:F2:54:62  →  08 04 0F 07 00 03 0F 02 05 04 06 02
 ```
 
-Used in GET_MAC / GET_PEERS responses and ADD_PEER requests.
+**Wrong** — 6 raw octets (firmware rejects with `DECODE_FAILED`; `decodeMAC` requires length ≥ 12):
+
+```
+MAC 84:F7:03:F2:54:62  →  84 F7 03 F2 54 62   ← do not use
+```
+
+Hosts may build nibbles by splitting the hex string **one character at a time** (`"84F7…".split("")` → parse each digit as 0–15). That yields 12 nibbles, not 6 bytes — even though the address itself is 6 octets. Do **not** parse two-character pairs into full octets and send those six values.
+
+Encode: `hi = (octet >> 4) & 0x0F`, `lo = octet & 0x0F`. Decode: `octet = (hi << 4) | lo`.
+
+Used in **ADD_PEER** requests, **GET_MAC** responses (`0x46`), and **GET_PEERS** responses (`0x48`, concatenated per peer).
 
 ## Success response details
 
@@ -202,6 +222,22 @@ Response:
 
 ```
 F0  7D  00  0C  46  [12 nibbles]  F7
+```
+
+### Add peer (dongle MAC)
+
+Request for `84:F7:03:F2:54:62` — note **12** nibble bytes after the header, not 6 octets:
+
+```
+F0  7D  00  0C  07  08 04 0F 07 00 03 0F 02 05 04 06 02  F7
+              │   └────────────────── 12 nibbles ──────────┘
+              └── ADD_PEER
+```
+
+Response on success:
+
+```
+F0  7D  00  0C  47  01  F7
 ```
 
 ### Reset
