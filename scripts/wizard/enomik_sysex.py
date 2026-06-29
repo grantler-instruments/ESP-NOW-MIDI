@@ -132,21 +132,17 @@ def parse(data: list[int]) -> dict | None:
     if not d or d[0] != MANUFACTURER_ID:
         return None
 
-    # GET_PEERS response is special: it has no MAJOR/MINOR version header.
-    # Layout: 7D 48 <12 nibbles per peer>. While PROTOCOL_MAJOR == 0 the second
-    # byte of a standard packet is 0, so 0x48 here is unambiguous.
-    if len(d) >= 2 and d[1] == RESP_GET_PEERS:
-        macs = []
-        nibbles = d[2:]
-        for i in range(0, len(nibbles) - 11, 12):
-            macs.append(_nibbles_to_mac(nibbles[i : i + 12]))
-        return {"cmd": "get_peers", "peers": macs}
-
     if len(d) < 4:
         return None
 
     cmd = d[3]
     payload = d[4:]
+
+    if cmd == RESP_GET_PEERS:
+        macs = []
+        for i in range(0, len(payload) - 11, 12):
+            macs.append(_nibbles_to_mac(payload[i : i + 12]))
+        return {"cmd": "get_peers", "peers": macs}
 
     if cmd == CMD_GET_MAC:
         return {"cmd": "get_mac", "mac": _nibbles_to_mac(payload[:12])}

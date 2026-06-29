@@ -284,6 +284,8 @@ namespace enomik
         Serial.println("GET_PEERS request received");
         
         // Print peers
+        const uint8_t *peerMacs[MAX_PEERS];
+        size_t peerCount = 0;
         for (int i = 0; i < this->peerStorage.count(); i++)
         {
             const uint8_t *mac = this->peerStorage.get(i);
@@ -294,34 +296,15 @@ namespace enomik
                 Serial.print(": ");
                 macPrint(mac);
                 Serial.println();
-            }
-        } 
-        
-        midi_sysex_message msg;
-        msg.data[0] = 0xF0;
-        msg.data[1] = 0x7D; // Manufacturer ID (non-commercial)
-        msg.data[2] = static_cast<uint8_t>(SysExCommand::GET_PEERS_RESPONSE);
-        auto index = 3;
-        
-        for (int i = 0; i < this->peerStorage.count(); i++)
-        {
-            const uint8_t *mac = this->peerStorage.get(i);
-            if (mac)
-            {
-                // Encode MAC address (6 bytes -> 12 bytes in 7-bit format)
-                for (int j = 0; j < 6; j++)
-                {
-                    msg.data[index++] = (mac[j] >> 4) & 0x0F;  // High nibble
-                    msg.data[index++] = mac[j] & 0x0F;         // Low nibble
-                }
+                peerMacs[peerCount++] = mac;
             }
         }
-        
-        msg.data[index] = 0xF7;
-        msg.length = index + 1;
+
+        SysExPacket pkt = SysExEncoder::encodePeersResponse(peerMacs, peerCount);
+        midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
         Serial.println("Sending peer list via SysEx");
-        Serial.println("Total peers: " + String(this->peerStorage.count()));
-        
+        Serial.println("Total peers: " + String(peerCount));
+
         this->sendSysEx(msg.data, msg.length); });
 
             io.setOnResetRequest([this]()
