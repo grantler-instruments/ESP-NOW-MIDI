@@ -25,15 +25,7 @@ void requireCommand(const enomik::SysExPacket &pkt, enomik::SysExCommand cmd)
     REQUIRE(pkt.getCommand() == cmd);
 }
 
-} // namespace
-
-TEST_CASE("SysEx protocol version matches version.h", "[sysex][protocol]")
-{
-    REQUIRE(enomik::PROTOCOL_VERSION_MAJOR == ESP_NOW_MIDI_VERSION_MAJOR);
-    REQUIRE(enomik::PROTOCOL_VERSION_MINOR == ESP_NOW_MIDI_VERSION_MINOR);
-}
-
-TEST_CASE("pin config response encoding", "[sysex][response]")
+PinConfig samplePinConfig()
 {
     PinConfig cfg(7, 0x03);
     cfg.threshold = 5;
@@ -42,9 +34,11 @@ TEST_CASE("pin config response encoding", "[sysex][response]")
     cfg.midi_cc = 42;
     cfg.min_midi_value = 10;
     cfg.max_midi_value = 100;
+    return cfg;
+}
 
-    const auto pkt = enomik::SysExEncoder::encodePinConfig(cfg);
-    requireCommand(pkt, enomik::SysExCommand::GET_PIN_CONFIG_RESPONSE);
+void requirePinConfigPayload(const enomik::SysExPacket &pkt)
+{
     REQUIRE(pkt.length == 14);
     REQUIRE(pkt.data[5] == 7);
     REQUIRE(pkt.data[6] == 0x03);
@@ -56,11 +50,70 @@ TEST_CASE("pin config response encoding", "[sysex][response]")
     REQUIRE(pkt.data[12] == 100);
 }
 
+} // namespace
+
+TEST_CASE("SysEx protocol version matches version.h", "[sysex][protocol]")
+{
+    REQUIRE(enomik::PROTOCOL_VERSION_MAJOR == ESP_NOW_MIDI_VERSION_MAJOR);
+    REQUIRE(enomik::PROTOCOL_VERSION_MINOR == ESP_NOW_MIDI_VERSION_MINOR);
+}
+
+TEST_CASE("response commands are request + 64", "[sysex][protocol]")
+{
+    const enomik::SysExCommand requests[] = {
+        enomik::SysExCommand::SET_PIN_CONFIG,
+        enomik::SysExCommand::GET_PIN_CONFIG,
+        enomik::SysExCommand::CLEAR_PIN_CONFIGS,
+        enomik::SysExCommand::GET_ALL_PIN_CONFIGS,
+        enomik::SysExCommand::DELETE_PIN_CONFIG,
+        enomik::SysExCommand::GET_MAC,
+        enomik::SysExCommand::ADD_PEER,
+        enomik::SysExCommand::GET_PEERS,
+        enomik::SysExCommand::RESET,
+        enomik::SysExCommand::GET_VERSION,
+    };
+
+    for (const auto request : requests)
+    {
+        REQUIRE(enomik::responseCommand(request) ==
+                static_cast<enomik::SysExCommand>(static_cast<uint8_t>(request) + 64));
+    }
+}
+
+TEST_CASE("pin config response encoding", "[sysex][response]")
+{
+    const auto cfg = samplePinConfig();
+
+    SECTION("set pin config")
+    {
+        const auto pkt = enomik::SysExEncoder::encodePinConfig(
+            cfg, enomik::SysExCommand::SET_PIN_CONFIG_RESPONSE);
+        requireCommand(pkt, enomik::SysExCommand::SET_PIN_CONFIG_RESPONSE);
+        requirePinConfigPayload(pkt);
+    }
+
+    SECTION("get pin config")
+    {
+        const auto pkt = enomik::SysExEncoder::encodePinConfig(
+            cfg, enomik::SysExCommand::GET_PIN_CONFIG_RESPONSE);
+        requireCommand(pkt, enomik::SysExCommand::GET_PIN_CONFIG_RESPONSE);
+        requirePinConfigPayload(pkt);
+    }
+
+    SECTION("get all pin configs")
+    {
+        const auto pkt = enomik::SysExEncoder::encodePinConfig(
+            cfg, enomik::SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE);
+        requireCommand(pkt, enomik::SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE);
+        requirePinConfigPayload(pkt);
+    }
+}
+
 TEST_CASE("clear pin configs response encoding", "[sysex][response]")
 {
     const auto pkt = enomik::SysExEncoder::encodeSimpleResponse(
-        enomik::SysExCommand::CLEAR_PIN_CONFIGS);
-    requireCommand(pkt, enomik::SysExCommand::CLEAR_PIN_CONFIGS);
+        enomik::SysExCommand::CLEAR_PIN_CONFIGS_RESPONSE);
+    requireCommand(pkt, enomik::SysExCommand::CLEAR_PIN_CONFIGS_RESPONSE);
     REQUIRE(pkt.length == 6);
     REQUIRE(pkt.getPayloadLength() == 0);
 }
@@ -68,8 +121,8 @@ TEST_CASE("clear pin configs response encoding", "[sysex][response]")
 TEST_CASE("delete pin config response encoding", "[sysex][response]")
 {
     const auto pkt = enomik::SysExEncoder::encodeByteResponse(
-        enomik::SysExCommand::DELETE_PIN_CONFIG, 12);
-    requireCommand(pkt, enomik::SysExCommand::DELETE_PIN_CONFIG);
+        enomik::SysExCommand::DELETE_PIN_CONFIG_RESPONSE, 12);
+    requireCommand(pkt, enomik::SysExCommand::DELETE_PIN_CONFIG_RESPONSE);
     REQUIRE(pkt.length == 7);
     REQUIRE(pkt.data[5] == 12);
 }
@@ -77,7 +130,7 @@ TEST_CASE("delete pin config response encoding", "[sysex][response]")
 TEST_CASE("get MAC response encoding", "[sysex][response]")
 {
     const auto pkt = enomik::SysExEncoder::encodeMAC(kSampleMac);
-    requireCommand(pkt, enomik::SysExCommand::GET_MAC);
+    requireCommand(pkt, enomik::SysExCommand::GET_MAC_RESPONSE);
     REQUIRE(pkt.length == 18);
 
     uint8_t decoded[6] = {};

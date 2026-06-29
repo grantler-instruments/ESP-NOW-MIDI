@@ -8,6 +8,8 @@ Wire layout of a standard packet:
     F0 7D MAJOR MINOR CMD <payload...> F7
 so the inner data is:
     7D MAJOR MINOR CMD <payload...>
+
+Response CMD bytes are always request CMD + 64 (0x40).
 """
 
 from __future__ import annotations
@@ -30,13 +32,23 @@ CMD_GET_PEERS = 0x08
 CMD_RESET = 0x09
 CMD_GET_VERSION = 0x0A
 
-# Response codes
-RESP_GET_PIN_CONFIG = 0x42
-RESP_GET_ALL_PIN_CONFIGS = 0x44
-RESP_ADD_PEER = 0x47
-RESP_GET_PEERS = 0x48
-RESP_RESET = 0x49
-RESP_GET_VERSION = 0x4A
+# Response codes (request + 64)
+RESP_SET_PIN_CONFIG = CMD_SET_PIN_CONFIG + 0x40
+RESP_GET_PIN_CONFIG = CMD_GET_PIN_CONFIG + 0x40
+RESP_CLEAR_PIN_CONFIGS = CMD_CLEAR_PIN_CONFIGS + 0x40
+RESP_GET_ALL_PIN_CONFIGS = CMD_GET_ALL_PIN_CONFIGS + 0x40
+RESP_DELETE_PIN_CONFIG = CMD_DELETE_PIN_CONFIG + 0x40
+RESP_GET_MAC = CMD_GET_MAC + 0x40
+RESP_ADD_PEER = CMD_ADD_PEER + 0x40
+RESP_GET_PEERS = CMD_GET_PEERS + 0x40
+RESP_RESET = CMD_RESET + 0x40
+RESP_GET_VERSION = CMD_GET_VERSION + 0x40
+
+PIN_CONFIG_RESPONSES = {
+    RESP_SET_PIN_CONFIG,
+    RESP_GET_PIN_CONFIG,
+    RESP_GET_ALL_PIN_CONFIGS,
+}
 
 # Pin modes (enomik_io.h)
 MODE_INPUT = 0x00
@@ -120,6 +132,22 @@ def build_set_pin_config(
     ]
 
 
+def _parse_pin_config(payload: list[int]) -> dict | None:
+    if len(payload) < 8:
+        return None
+    return {
+        "cmd": "pin_config",
+        "pin": payload[0],
+        "mode": payload[1],
+        "threshold": payload[2],
+        "channel": payload[3],
+        "midi_type": payload[4] * 2,
+        "note_or_cc": payload[5],
+        "min": payload[6],
+        "max": payload[7],
+    }
+
+
 # --- Parser ------------------------------------------------------------------
 def parse(data: list[int]) -> dict | None:
     """Parse the inner data of a received SysEx message.
@@ -144,7 +172,13 @@ def parse(data: list[int]) -> dict | None:
             macs.append(_nibbles_to_mac(payload[i : i + 12]))
         return {"cmd": "get_peers", "peers": macs}
 
-    if cmd == CMD_GET_MAC:
+    if cmd == RESP_CLEAR_PIN_CONFIGS:
+        return {"cmd": "clear_pin_configs"}
+
+    if cmd == RESP_DELETE_PIN_CONFIG and len(payload) >= 1:
+        return {"cmd": "delete_pin_config", "pin": payload[0]}
+
+    if cmd == RESP_GET_MAC:
         return {"cmd": "get_mac", "mac": _nibbles_to_mac(payload[:12])}
 
     if cmd == RESP_GET_VERSION:
@@ -154,18 +188,8 @@ def parse(data: list[int]) -> dict | None:
             "minor": payload[1] if len(payload) > 1 else None,
         }
 
-    if cmd == RESP_GET_PIN_CONFIG and len(payload) >= 8:
-        return {
-            "cmd": "pin_config",
-            "pin": payload[0],
-            "mode": payload[1],
-            "threshold": payload[2],
-            "channel": payload[3],
-            "midi_type": payload[4] * 2,
-            "note_or_cc": payload[5],
-            "min": payload[6],
-            "max": payload[7],
-        }
+    if cmd in PIN_CONFIG_RESPONSES:
+        return _parse_pin_config(payload)
 
     if cmd == RESP_ADD_PEER and len(payload) >= 1:
         return {"cmd": "add_peer", "success": bool(payload[0])}

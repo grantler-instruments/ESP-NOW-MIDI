@@ -20,14 +20,23 @@ namespace enomik
         RESET = 0x09,
         GET_VERSION = 0x0A,
 
-        // Response codes (command + 64)
-        GET_PIN_CONFIG_RESPONSE = 0x42,      // 66
-        GET_ALL_PIN_CONFIGS_RESPONSE = 0x44, // 68
-        ADD_PEER_RESPONSE = 0x47,            // 71
-        GET_PEERS_RESPONSE = 0x48,           // 72
-        RESET_RESPONSE = 0x49,               // 73 (RESET + 64)
-        GET_VERSION_RESPONSE = 0x4A          // 74
+        // Response codes: always request command + 64 (0x40)
+        SET_PIN_CONFIG_RESPONSE = 0x41,
+        GET_PIN_CONFIG_RESPONSE = 0x42,
+        CLEAR_PIN_CONFIGS_RESPONSE = 0x43,
+        GET_ALL_PIN_CONFIGS_RESPONSE = 0x44,
+        DELETE_PIN_CONFIG_RESPONSE = 0x45,
+        GET_MAC_RESPONSE = 0x46,
+        ADD_PEER_RESPONSE = 0x47,
+        GET_PEERS_RESPONSE = 0x48,
+        RESET_RESPONSE = 0x49,
+        GET_VERSION_RESPONSE = 0x4A
     };
+
+    inline constexpr SysExCommand responseCommand(SysExCommand request)
+    {
+        return static_cast<SysExCommand>(static_cast<uint8_t>(request) + 64);
+    }
 
     struct SysExPacket
     {
@@ -132,14 +141,14 @@ namespace enomik
             return pkt;
         }
 
-        static SysExPacket encodePinConfig(const PinConfig &cfg)
+        static SysExPacket encodePinConfig(const PinConfig &cfg, SysExCommand responseCmd)
         {
             SysExPacket pkt;
             pkt.data[0] = SysExPacket::START_BYTE;
             pkt.data[1] = SysExPacket::MANUFACTURER_ID;
             pkt.data[2] = PROTOCOL_VERSION_MAJOR;
             pkt.data[3] = PROTOCOL_VERSION_MINOR;
-            pkt.data[4] = static_cast<uint8_t>(SysExCommand::GET_PIN_CONFIG_RESPONSE);
+            pkt.data[4] = static_cast<uint8_t>(responseCmd);
             pkt.data[5] = cfg.pin;
             pkt.data[6] = cfg.mode;
             pkt.data[7] = cfg.threshold;
@@ -161,7 +170,7 @@ namespace enomik
             pkt.data[1] = SysExPacket::MANUFACTURER_ID;
             pkt.data[2] = PROTOCOL_VERSION_MAJOR;
             pkt.data[3] = PROTOCOL_VERSION_MINOR;
-            pkt.data[4] = static_cast<uint8_t>(SysExCommand::GET_MAC);
+            pkt.data[4] = static_cast<uint8_t>(SysExCommand::GET_MAC_RESPONSE);
 
             int idx = 5;
             for (int i = 0; i < 6; i++)
@@ -329,12 +338,12 @@ namespace enomik
         }
 
         // Send responses
-        void sendPinConfigResponse(const PinConfig &cfg)
+        void sendPinConfigResponse(const PinConfig &cfg, SysExCommand responseCmd)
         {
             if (!_onSend)
                 return;
 
-            SysExPacket pkt = SysExEncoder::encodePinConfig(cfg);
+            SysExPacket pkt = SysExEncoder::encodePinConfig(cfg, responseCmd);
             midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
             _onSend(msg);
         }
@@ -375,7 +384,7 @@ namespace enomik
                 return;
 
             SysExPacket pkt = SysExEncoder::encodeByteResponse(
-                SysExCommand::DELETE_PIN_CONFIG, pin);
+                SysExCommand::DELETE_PIN_CONFIG_RESPONSE, pin);
             midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
             _onSend(msg);
         }

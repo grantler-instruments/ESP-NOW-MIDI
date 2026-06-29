@@ -259,7 +259,7 @@ namespace enomik
                                             {
                 Serial.println("SysEx: Setting pin config");
                 upsertPinConfig(cfg);
-                _sysexHandler.sendPinConfigResponse(cfg); });
+                _sysexHandler.sendPinConfigResponse(cfg, SysExCommand::SET_PIN_CONFIG_RESPONSE); });
 
             // Handler for getting single pin configuration
             _sysexHandler.setOnGetPinConfig([this](uint8_t pin)
@@ -270,7 +270,7 @@ namespace enomik
                 {
                     if (cfg.pin == pin)
                     {
-                        _sysexHandler.sendPinConfigResponse(cfg);
+                        _sysexHandler.sendPinConfigResponse(cfg, SysExCommand::GET_PIN_CONFIG_RESPONSE);
                         return;
                     }
                 }
@@ -282,7 +282,7 @@ namespace enomik
                 Serial.println("SysEx: Getting all pin configs");
                 for (const auto &cfg : _pinConfigs)
                 {
-                    _sysexHandler.sendPinConfigResponse(cfg);
+                    _sysexHandler.sendPinConfigResponse(cfg, SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE);
                 } });
 
             // Handler for deleting pin configuration
@@ -310,7 +310,7 @@ namespace enomik
                 _pinConfigs.clear();
                 _pinStates.clear();
                 savePinConfigsToPrefs(_pinConfigs);
-                _sysexHandler.sendSimpleResponse(SysExCommand::CLEAR_PIN_CONFIGS); });
+                _sysexHandler.sendSimpleResponse(SysExCommand::CLEAR_PIN_CONFIGS_RESPONSE); });
 
             // Handler for getting MAC address
             _sysexHandler.setOnGetMAC([this]()
