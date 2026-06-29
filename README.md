@@ -43,6 +43,7 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
   * **client_servo** - control a servo via MIDI CC using [ESP32Servo](https://github.com/madhephaestus/ESP32Servo/)
   * **client_audio_m16_i2s** - MIDI-controlled synthesizer using the [M16](https://github.com/algomusic/M16) audio library, outputting audio over I2S (e.g. MAX98357A). Receives Note On/Off and plays a sine wave with an ADSR envelope
   * **client_audio_audiotools_i2s** - MIDI-controlled sine wave synth using [arduino-audio-tools](https://github.com/pschatzmann/arduino-audio-tools), streaming audio over I2S. Receives Note On/Off and adjusts frequency and amplitude accordingly
+  * **client_audio_pd** - MIDI-controlled Pure Data synth using [ESPdLib](https://github.com/algomusic/ESPdLib), streaming audio over I2S. Routes Note On/Off, CC and Pitch Bend to Pd `[r ...]` objects. Instead of pre-loading a patch onto the LittleFS partition, the `.pd` patch is received at runtime via SysEx (transfer protocol still to be implemented)
   * **din_midi_bridge** - bidirectional DIN MIDI ↔ ESP-NOW bridge: forwards incoming serial MIDI (5-pin DIN) over ESP-NOW, and plays back received ESP-NOW MIDI to a DIN MIDI OUT port
 
 ## Breaking changes (this library is under active development => please make sure you are using the latest version)
@@ -152,6 +153,7 @@ Practical reading:
 * examples/client_servo depends on **ESP32Servo**
 * examples/client_audio_m16_i2s depends on [M16](https://github.com/algomusic/M16)
 * examples/client_audio_audiotools_i2s depends on [arduino-audio-tools](https://github.com/pschatzmann/arduino-audio-tools)
+* examples/client_audio_pd depends on [ESPdLib](https://github.com/algomusic/ESPdLib)
 * examples/din_midi_bridge depends on [Arduino MIDI Library](https://github.com/FortySevenEffects/arduino_midi_library) by FortySevenEffects
 
 ## Contributing
