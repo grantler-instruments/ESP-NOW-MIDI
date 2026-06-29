@@ -9,7 +9,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VERSION_H = REPO_ROOT / "version.h"
-ENOMIK_SYSEX_H = REPO_ROOT / "enomik_sysex.h"
+ENOMIK_SYSEX_CODEC_H = REPO_ROOT / "enomik_sysex_codec.h"
 
 REQUEST_COMMANDS = (
     "SET_PIN_CONFIG",
@@ -51,7 +51,7 @@ def parse_cpp_enum(text: str, enum_name: str) -> dict[str, int]:
         re.DOTALL,
     )
     if not match:
-        raise ValueError(f"enum class {enum_name} not found in enomik_sysex.h")
+        raise ValueError(f"enum class {enum_name} not found in enomik_sysex_codec.h")
 
     body = re.sub(r"//[^\n]*", "", match.group(1))
     values: dict[str, int] = {}
@@ -63,7 +63,7 @@ def parse_cpp_enum(text: str, enum_name: str) -> dict[str, int]:
 def parse_manufacturer_id(text: str) -> int:
     match = re.search(r"MANUFACTURER_ID\s*=\s*0x([0-9A-Fa-f]+)", text)
     if not match:
-        raise ValueError("MANUFACTURER_ID not found in enomik_sysex.h")
+        raise ValueError("MANUFACTURER_ID not found in enomik_sysex_codec.h")
     return int(match.group(1), 16)
 
 
@@ -81,7 +81,7 @@ def load_python_constants():
 def collect_mismatches() -> list[str]:
     mismatches: list[str] = []
 
-    cpp_text = ENOMIK_SYSEX_H.read_text(encoding="utf-8")
+    cpp_text = ENOMIK_SYSEX_CODEC_H.read_text(encoding="utf-8")
     commands = parse_cpp_enum(cpp_text, "SysExCommand")
     errors = parse_cpp_enum(cpp_text, "SysExErrorCode")
     manufacturer_id = parse_manufacturer_id(cpp_text)
@@ -155,7 +155,7 @@ def check_sysex_constants() -> None:
         details = "\n".join(f"  - {line}" for line in mismatches)
         raise AssertionError(
             "enomik SysEx constants out of sync between "
-            "enomik_sysex.h and scripts/wizard/enomik_sysex.py:\n"
+            "enomik_sysex_codec.h and scripts/wizard/enomik_sysex.py:\n"
             f"{details}"
         )
 
@@ -166,7 +166,7 @@ def main() -> int:
     except (AssertionError, ValueError) as err:
         print(err, file=sys.stderr)
         return 1
-    print("SysEx constants OK (enomik_sysex.h ↔ enomik_sysex.py ↔ version.h)")
+    print("SysEx constants OK (enomik_sysex_codec.h ↔ enomik_sysex.py ↔ version.h)")
     return 0
 
 

@@ -1,8 +1,13 @@
 __pycache__/
 
-.arduino-build/
-test/native/build/
+# Local build output (Arduino IDE 2.x, CMake, etc.)
+build/
 
-.pio
+# PlatformIO
+.pio/
+
+# Arduino CLI / IDE
+.arduino-build/
+
 .vscode
 .DS_Store

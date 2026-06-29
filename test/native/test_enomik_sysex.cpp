@@ -1,7 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "arduino_stubs.h"
-#include "enomik_sysex.h"
+#include "enomik_sysex_codec.h"
 
 namespace {
 
@@ -48,6 +47,35 @@ void requirePinConfigPayload(const enomik::SysExPacket &pkt)
     REQUIRE(pkt.data[10] == 42);
     REQUIRE(pkt.data[11] == 10);
     REQUIRE(pkt.data[12] == 100);
+}
+
+void requirePinConfigEqual(const PinConfig &actual, const PinConfig &expected)
+{
+    REQUIRE(actual.pin == expected.pin);
+    REQUIRE(actual.mode == expected.mode);
+    REQUIRE(actual.threshold == expected.threshold);
+    REQUIRE(actual.midi_channel == expected.midi_channel);
+    REQUIRE(actual.midi_type == expected.midi_type);
+    REQUIRE(actual.min_midi_value == expected.min_midi_value);
+    REQUIRE(actual.max_midi_value == expected.max_midi_value);
+
+    const uint8_t wireMidiByte = (expected.midi_type == MidiStatus::MIDI_CONTROL_CHANGE)
+                                     ? expected.midi_cc
+                                     : expected.midi_note;
+    REQUIRE(actual.midi_cc == wireMidiByte);
+    REQUIRE(actual.midi_note == wireMidiByte);
+}
+
+PinConfig notePinConfig()
+{
+    PinConfig cfg(5, 0x01);
+    cfg.threshold = 2;
+    cfg.midi_channel = 10;
+    cfg.midi_type = MidiStatus::MIDI_NOTE_ON;
+    cfg.midi_note = 60;
+    cfg.min_midi_value = 0;
+    cfg.max_midi_value = 127;
+    return cfg;
 }
 
 } // namespace
@@ -266,5 +294,97 @@ TEST_CASE("error response encoding", "[sysex][response]")
         REQUIRE(static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE) == 0x7F);
         REQUIRE(static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE) !=
                 static_cast<uint8_t>(enomik::responseCommand(enomik::SysExCommand::SET_PIN_CONFIG)));
+    }
+}
+
+TEST_CASE("decodePinConfig round-trips encoded payloads", "[sysex][decode]")
+{
+    SECTION("control change config")
+    {
+        const auto expected = samplePinConfig();
+        const auto pkt = enomik::SysExEncoder::encodePinConfig(
+            expected, enomik::SysExCommand::SET_PIN_CONFIG_RESPONSE);
+
+        PinConfig decoded(0, 0);
+        REQUIRE(enomik::SysExDecoder::decodePinConfig(pkt.getPayload(), pkt.getPayloadLength(), decoded));
+        requirePinConfigEqual(decoded, expected);
+    }
+
+    SECTION("note on config")
+    {
+        const auto expected = notePinConfig();
+        const auto pkt = enomik::SysExEncoder::encodePinConfig(
+            expected, enomik::SysExCommand::SET_PIN_CONFIG);
+
+        PinConfig decoded(0, 0);
+        REQUIRE(enomik::SysExDecoder::decodePinConfig(pkt.getPayload(), pkt.getPayloadLength(), decoded));
+        requirePinConfigEqual(decoded, expected);
+    }
+
+    SECTION("rejects short payload")
+    {
+        const uint8_t payload[7] = {1, 2, 3, 4, 5, 6, 7};
+        PinConfig decoded(0, 0);
+        REQUIRE_FALSE(enomik::SysExDecoder::decodePinConfig(payload, 7, decoded));
+    }
+}
+
+TEST_CASE("decodePin extracts pin number", "[sysex][decode]")
+{
+    SECTION("round-trip from byte response")
+    {
+        const auto pkt = enomik::SysExEncoder::encodeByteResponse(
+            enomik::SysExCommand::GET_PIN_CONFIG, 12);
+
+        uint8_t pin = 0;
+        REQUIRE(enomik::SysExDecoder::decodePin(pkt.getPayload(), pkt.getPayloadLength(), pin));
+        REQUIRE(pin == 12);
+    }
+
+    SECTION("rejects empty payload")
+    {
+        uint8_t pin = 99;
+        REQUIRE_FALSE(enomik::SysExDecoder::decodePin(nullptr, 0, pin));
+    }
+}
+
+TEST_CASE("decodeMAC extracts MAC from nibbles", "[sysex][decode]")
+{
+    SECTION("round-trip from GET_MAC response")
+    {
+        const auto pkt = enomik::SysExEncoder::encodeMAC(kSampleMac);
+
+        uint8_t decoded[6] = {};
+        REQUIRE(enomik::SysExDecoder::decodeMAC(pkt.getPayload(), pkt.getPayloadLength(), decoded));
+        for (int i = 0; i < 6; ++i)
+        {
+            REQUIRE(decoded[i] == kSampleMac[i]);
+        }
+    }
+
+    SECTION("decodes each peer from GET_PEERS payload")
+    {
+        const uint8_t *const macs[] = {kSampleMac, kOtherMac};
+        const auto pkt = enomik::SysExEncoder::encodePeersResponse(macs, 2);
+        const uint8_t *payload = pkt.getPayload();
+        const uint16_t length = pkt.getPayloadLength();
+
+        uint8_t first[6] = {};
+        uint8_t second[6] = {};
+        REQUIRE(enomik::SysExDecoder::decodeMAC(payload, 12, first));
+        REQUIRE(enomik::SysExDecoder::decodeMAC(payload + 12, 12, second));
+
+        for (int i = 0; i < 6; ++i)
+        {
+            REQUIRE(first[i] == kSampleMac[i]);
+            REQUIRE(second[i] == kOtherMac[i]);
+        }
+    }
+
+    SECTION("rejects incomplete nibble pairs")
+    {
+        const uint8_t payload[11] = {0x08, 0x04, 0x0F, 0x07, 0x00, 0x03, 0x00, 0x0F, 0x02, 0x05, 0x04};
+        uint8_t decoded[6] = {};
+        REQUIRE_FALSE(enomik::SysExDecoder::decodeMAC(payload, 11, decoded));
     }
 }

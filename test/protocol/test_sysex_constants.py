@@ -1,4 +1,4 @@
-"""CI: enomik_sysex.h must stay in sync with scripts/wizard/enomik_sysex.py."""
+"""CI: enomik_sysex_codec.h must stay in sync with scripts/wizard/enomik_sysex.py."""
 
 from __future__ import annotations
 
