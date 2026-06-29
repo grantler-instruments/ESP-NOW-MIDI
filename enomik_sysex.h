@@ -30,7 +30,21 @@ namespace enomik
         ADD_PEER_RESPONSE = 0x47,
         GET_PEERS_RESPONSE = 0x48,
         RESET_RESPONSE = 0x49,
-        GET_VERSION_RESPONSE = 0x4A
+        GET_VERSION_RESPONSE = 0x4A,
+
+        // Global error response (reserved; not request + 64). Request 0x3F is
+        // reserved so its success response (0x7F) never collides with errors.
+        ERROR_RESPONSE = 0x7F
+    };
+
+    enum class SysExErrorCode : uint8_t
+    {
+        BAD_VERSION = 0x01,
+        UNKNOWN_COMMAND = 0x02,
+        DECODE_FAILED = 0x03,
+        PIN_NOT_FOUND = 0x04,
+        NOT_READY = 0x05,
+        OPERATION_FAILED = 0x06,
     };
 
     inline constexpr SysExCommand responseCommand(SysExCommand request)
@@ -212,6 +226,38 @@ namespace enomik
             return pkt;
         }
 
+        // Error: F0 7D MAJOR MINOR 7F <failed_request> <error_code> [context] F7
+        static SysExPacket encodeError(uint8_t failedRequest, SysExErrorCode errorCode)
+        {
+            SysExPacket pkt;
+            pkt.data[0] = SysExPacket::START_BYTE;
+            pkt.data[1] = SysExPacket::MANUFACTURER_ID;
+            pkt.data[2] = PROTOCOL_VERSION_MAJOR;
+            pkt.data[3] = PROTOCOL_VERSION_MINOR;
+            pkt.data[4] = static_cast<uint8_t>(SysExCommand::ERROR_RESPONSE);
+            pkt.data[5] = failedRequest;
+            pkt.data[6] = static_cast<uint8_t>(errorCode);
+            pkt.data[7] = SysExPacket::END_BYTE;
+            pkt.length = 8;
+            return pkt;
+        }
+
+        static SysExPacket encodeError(uint8_t failedRequest, SysExErrorCode errorCode, uint8_t context)
+        {
+            SysExPacket pkt;
+            pkt.data[0] = SysExPacket::START_BYTE;
+            pkt.data[1] = SysExPacket::MANUFACTURER_ID;
+            pkt.data[2] = PROTOCOL_VERSION_MAJOR;
+            pkt.data[3] = PROTOCOL_VERSION_MINOR;
+            pkt.data[4] = static_cast<uint8_t>(SysExCommand::ERROR_RESPONSE);
+            pkt.data[5] = failedRequest;
+            pkt.data[6] = static_cast<uint8_t>(errorCode);
+            pkt.data[7] = context;
+            pkt.data[8] = SysExPacket::END_BYTE;
+            pkt.length = 9;
+            return pkt;
+        }
+
         // Convert SysExPacket to midi_sysex_message
         static midi_sysex_message toMidiMessage(const SysExPacket &pkt)
         {
@@ -305,6 +351,7 @@ namespace enomik
             if (length < SysExPacket::MIN_PACKET_SIZE)
             {
                 Serial.println("SysEx: Invalid packet length");
+                sendErrorResponse(0, SysExErrorCode::DECODE_FAILED);
                 return;
             }
 
@@ -316,6 +363,7 @@ namespace enomik
             if (!packet.isValid())
             {
                 Serial.println("SysEx: Invalid packet format");
+                sendErrorResponse(0, SysExErrorCode::DECODE_FAILED);
                 return;
             }
 
@@ -330,11 +378,32 @@ namespace enomik
                 Serial.print(PROTOCOL_VERSION_MAJOR);
                 Serial.print(".x)");
                 Serial.println();
+                sendErrorResponse(static_cast<uint8_t>(packet.getCommand()), SysExErrorCode::BAD_VERSION);
                 return;
             }
 
             // Route to appropriate handler
             routeCommand(packet);
+        }
+
+        void sendErrorResponse(uint8_t failedRequest, SysExErrorCode errorCode)
+        {
+            if (!_onSend)
+                return;
+
+            SysExPacket pkt = SysExEncoder::encodeError(failedRequest, errorCode);
+            midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
+            _onSend(msg);
+        }
+
+        void sendErrorResponse(uint8_t failedRequest, SysExErrorCode errorCode, uint8_t context)
+        {
+            if (!_onSend)
+                return;
+
+            SysExPacket pkt = SysExEncoder::encodeError(failedRequest, errorCode, context);
+            midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
+            _onSend(msg);
         }
 
         // Send responses
@@ -467,6 +536,7 @@ namespace enomik
             default:
                 Serial.print("SysEx: Unknown command: 0x");
                 Serial.println(static_cast<uint8_t>(cmd), HEX);
+                sendErrorResponse(static_cast<uint8_t>(cmd), SysExErrorCode::UNKNOWN_COMMAND);
                 break;
             }
         }
@@ -476,6 +546,7 @@ namespace enomik
             if (!_onSetPinConfig)
             {
                 Serial.println("SysEx: No SET_PIN_CONFIG handler");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_PIN_CONFIG), SysExErrorCode::NOT_READY);
                 return;
             }
 
@@ -489,6 +560,7 @@ namespace enomik
             else
             {
                 Serial.println("SysEx: Failed to decode pin config");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_PIN_CONFIG), SysExErrorCode::DECODE_FAILED);
             }
         }
 
@@ -497,6 +569,7 @@ namespace enomik
             if (!_onGetPinConfig)
             {
                 Serial.println("SysEx: No GET_PIN_CONFIG handler");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PIN_CONFIG), SysExErrorCode::NOT_READY);
                 return;
             }
 
@@ -510,6 +583,7 @@ namespace enomik
             else
             {
                 Serial.println("SysEx: Failed to decode pin number");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PIN_CONFIG), SysExErrorCode::DECODE_FAILED);
             }
         }
 
@@ -518,6 +592,7 @@ namespace enomik
             if (!_onDeletePinConfig)
             {
                 Serial.println("SysEx: No DELETE_PIN_CONFIG handler");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::DELETE_PIN_CONFIG), SysExErrorCode::NOT_READY);
                 return;
             }
 
@@ -531,6 +606,7 @@ namespace enomik
             else
             {
                 Serial.println("SysEx: Failed to decode pin number");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::DELETE_PIN_CONFIG), SysExErrorCode::DECODE_FAILED);
             }
         }
 
@@ -541,6 +617,10 @@ namespace enomik
                 Serial.println("SysEx: Clearing all pin configs");
                 _onClearPinConfigs();
             }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::CLEAR_PIN_CONFIGS), SysExErrorCode::NOT_READY);
+            }
         }
 
         void handleGetAllPinConfigs()
@@ -549,6 +629,10 @@ namespace enomik
             {
                 Serial.println("SysEx: Getting all pin configs");
                 _onGetAllPinConfigs();
+            }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_ALL_PIN_CONFIGS), SysExErrorCode::NOT_READY);
             }
         }
 
@@ -559,6 +643,10 @@ namespace enomik
                 Serial.println("SysEx: Getting MAC address");
                 _onGetMAC();
             }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_MAC), SysExErrorCode::NOT_READY);
+            }
         }
 
         void handleAddPeer(const uint8_t *payload, uint16_t length)
@@ -566,6 +654,7 @@ namespace enomik
             if (!_onAddPeer)
             {
                 Serial.println("SysEx: No ADD_PEER handler");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::ADD_PEER), SysExErrorCode::NOT_READY);
                 return;
             }
 
@@ -585,6 +674,7 @@ namespace enomik
             else
             {
                 Serial.println("SysEx: Failed to decode MAC address");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::ADD_PEER), SysExErrorCode::DECODE_FAILED);
             }
         }
 
@@ -595,6 +685,10 @@ namespace enomik
                 Serial.println("SysEx: Getting peers");
                 _onGetPeers();
             }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PEERS), SysExErrorCode::NOT_READY);
+            }
         }
 
         void handleReset()
@@ -604,6 +698,10 @@ namespace enomik
                 Serial.println("SysEx: Performing reset");
                 _onReset();
             }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::RESET), SysExErrorCode::NOT_READY);
+            }
         }
 
         void handleGetVersion()
@@ -612,6 +710,10 @@ namespace enomik
             {
                 Serial.println("SysEx: Getting version");
                 _onGetVersion();
+            }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_VERSION), SysExErrorCode::NOT_READY);
             }
         }
     };

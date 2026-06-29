@@ -9,7 +9,7 @@ Wire layout of a standard packet:
 so the inner data is:
     7D MAJOR MINOR CMD <payload...>
 
-Response CMD bytes are always request CMD + 64 (0x40).
+Response CMD bytes are always request CMD + 64 (0x40), except errors at 0x7F.
 """
 
 from __future__ import annotations
@@ -43,6 +43,16 @@ RESP_ADD_PEER = CMD_ADD_PEER + 0x40
 RESP_GET_PEERS = CMD_GET_PEERS + 0x40
 RESP_RESET = CMD_RESET + 0x40
 RESP_GET_VERSION = CMD_GET_VERSION + 0x40
+
+RESP_ERROR = 0x7F
+
+# Error codes (enomik::SysExErrorCode)
+ERR_BAD_VERSION = 0x01
+ERR_UNKNOWN_COMMAND = 0x02
+ERR_DECODE_FAILED = 0x03
+ERR_PIN_NOT_FOUND = 0x04
+ERR_NOT_READY = 0x05
+ERR_OPERATION_FAILED = 0x06
 
 PIN_CONFIG_RESPONSES = {
     RESP_SET_PIN_CONFIG,
@@ -196,6 +206,16 @@ def parse(data: list[int]) -> dict | None:
 
     if cmd == RESP_RESET:
         return {"cmd": "reset"}
+
+    if cmd == RESP_ERROR and len(payload) >= 2:
+        result: dict = {
+            "cmd": "error",
+            "failed_request": payload[0],
+            "error_code": payload[1],
+        }
+        if len(payload) >= 3:
+            result["context"] = payload[2]
+        return result
 
     return {"cmd": "unknown", "raw": d}
 

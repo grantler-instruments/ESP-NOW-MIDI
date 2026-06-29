@@ -234,3 +234,37 @@ TEST_CASE("toMidiMessage copies full packet", "[sysex][protocol]")
         REQUIRE(msg.data[i] == pkt.data[i]);
     }
 }
+
+TEST_CASE("error response encoding", "[sysex][response]")
+{
+    SECTION("without context")
+    {
+        const auto pkt = enomik::SysExEncoder::encodeError(
+            static_cast<uint8_t>(enomik::SysExCommand::GET_PIN_CONFIG),
+            enomik::SysExErrorCode::DECODE_FAILED);
+        requireCommand(pkt, enomik::SysExCommand::ERROR_RESPONSE);
+        REQUIRE(pkt.length == 8);
+        REQUIRE(pkt.data[5] == static_cast<uint8_t>(enomik::SysExCommand::GET_PIN_CONFIG));
+        REQUIRE(pkt.data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::DECODE_FAILED));
+    }
+
+    SECTION("with context")
+    {
+        const auto pkt = enomik::SysExEncoder::encodeError(
+            static_cast<uint8_t>(enomik::SysExCommand::GET_PIN_CONFIG),
+            enomik::SysExErrorCode::PIN_NOT_FOUND,
+            7);
+        requireCommand(pkt, enomik::SysExCommand::ERROR_RESPONSE);
+        REQUIRE(pkt.length == 9);
+        REQUIRE(pkt.data[5] == static_cast<uint8_t>(enomik::SysExCommand::GET_PIN_CONFIG));
+        REQUIRE(pkt.data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::PIN_NOT_FOUND));
+        REQUIRE(pkt.data[7] == 7);
+    }
+
+    SECTION("error cmd is 127 and reserved from success pairs")
+    {
+        REQUIRE(static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE) == 0x7F);
+        REQUIRE(static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE) !=
+                static_cast<uint8_t>(enomik::responseCommand(enomik::SysExCommand::SET_PIN_CONFIG)));
+    }
+}

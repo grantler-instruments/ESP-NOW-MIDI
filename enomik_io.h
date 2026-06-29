@@ -274,7 +274,11 @@ namespace enomik
                         return;
                     }
                 }
-                Serial.println("SysEx: Pin config not found"); });
+                Serial.println("SysEx: Pin config not found");
+                _sysexHandler.sendErrorResponse(
+                    static_cast<uint8_t>(SysExCommand::GET_PIN_CONFIG),
+                    SysExErrorCode::PIN_NOT_FOUND,
+                    pin); });
 
             // Handler for getting all pin configurations
             _sysexHandler.setOnGetAllPinConfigs([this]()
@@ -301,7 +305,12 @@ namespace enomik
                         _sysexHandler.sendDeleteResponse(pin);
                         return;
                     }
-                } });
+                }
+                Serial.println("SysEx: Pin config not found for delete");
+                _sysexHandler.sendErrorResponse(
+                    static_cast<uint8_t>(SysExCommand::DELETE_PIN_CONFIG),
+                    SysExErrorCode::PIN_NOT_FOUND,
+                    pin); });
 
             // Handler for clearing all pin configurations
             _sysexHandler.setOnClearPinConfigs([this]()
