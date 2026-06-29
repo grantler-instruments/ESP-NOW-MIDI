@@ -375,6 +375,12 @@ namespace enomik
                 _sysexHandler.sendSimpleResponse(SysExCommand::RESET_RESPONSE);
                 Serial.println("System reset complete"); });
 
+            // Handler for getting protocol version
+            _sysexHandler.setOnGetVersion([this]()
+                                          {
+                Serial.println("SysEx: Getting version");
+                _sysexHandler.sendVersionResponse(); });
+
             // Handler for sending SysEx messages back out
             _sysexHandler.setOnSend([this](const midi_sysex_message &msg)
                                     {
