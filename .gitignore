@@ -1,3 +1,5 @@
+__pycache__/
+
 .arduino-build/
 test/native/build/
 

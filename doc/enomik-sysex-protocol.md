@@ -268,6 +268,7 @@ F0  7D  00  0C  7F  02  04  07  F7
 
 - **Web MIDI:** request SysEx access (`{ sysex: true }`). Incoming SysEx includes `F0`/`F7` in `event.data`.
 - **Python (wizard):** [`scripts/wizard/enomik_sysex.py`](../scripts/wizard/enomik_sysex.py) — builders and `parse()` for inner data.
+- **Constant sync (CI):** [`scripts/check_sysex_constants.py`](../scripts/check_sysex_constants.py) — verifies C++ and Python enums stay aligned.
 - **Tests:** Catch2 encoder tests in [`test/native/test_enomik_sysex.cpp`](../test/native/test_enomik_sysex.cpp).
 
 When adding a new command:

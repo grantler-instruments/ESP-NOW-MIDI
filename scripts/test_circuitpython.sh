@@ -7,6 +7,12 @@ cd "$ROOT"
 echo "Running CircuitPython unit tests..."
 python3 -m unittest discover -s test/circuitpython -v
 
+echo "Checking SysEx constant sync..."
+python3 scripts/check_sysex_constants.py
+
+echo "Running protocol constant tests..."
+python3 -m unittest discover -s test/protocol -v
+
 if command -v mpy-cross >/dev/null 2>&1; then
   echo "Compiling esp_now_midi.py with mpy-cross..."
   mpy-cross esp_now_midi.py -o /tmp/esp_now_midi.mpy

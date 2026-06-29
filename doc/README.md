@@ -6,4 +6,6 @@
 
 Implementation reference: [`enomik_sysex.h`](../enomik_sysex.h) (firmware), [`scripts/wizard/enomik_sysex.py`](../scripts/wizard/enomik_sysex.py) (host tools).
 
-Tests: [`test/native/test_enomik_sysex.cpp`](../test/native/test_enomik_sysex.cpp).
+CI sync check: [`scripts/check_sysex_constants.py`](../scripts/check_sysex_constants.py).
+
+Tests: [`test/native/test_enomik_sysex.cpp`](../test/native/test_enomik_sysex.cpp), [`test/protocol/test_sysex_constants.py`](../test/protocol/test_sysex_constants.py).
