@@ -181,4 +181,23 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
         REQUIRE(sent[0].data[5] == 0x3E);
         REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::UNKNOWN_COMMAND));
     }
+
+    SECTION("GET_PEERS callback triggers sendPeersResponse")
+    {
+        bool called = false;
+        handler.setOnGetPeers([&]() {
+            called = true;
+            const uint8_t *const macs[] = {kSampleMac};
+            handler.sendPeersResponse(macs, 1);
+        });
+
+        const auto request = enomik::SysExEncoder::encodeSimpleResponse(
+            enomik::SysExCommand::GET_PEERS);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(called);
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_PEERS_RESPONSE));
+        REQUIRE(sent[0].length == 18);
+    }
 }

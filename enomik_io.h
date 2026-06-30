@@ -200,7 +200,7 @@ namespace enomik
             _onAddPeerRequest = callback;
         }
 
-        void setOnGetPeersRequest(std::function<void()> callback)
+        void setOnGetPeersRequest(std::function<size_t(const uint8_t **peerMacs, size_t maxPeers)> callback)
         {
             _onGetPeersRequest = callback;
         }
@@ -249,7 +249,7 @@ namespace enomik
         // External callbacks
         std::function<void(midi_message)> _onMIDISendRequest;
         std::function<bool(uint8_t mac[])> _onAddPeerRequest;
-        std::function<void()> _onGetPeersRequest;
+        std::function<size_t(const uint8_t **peerMacs, size_t maxPeers)> _onGetPeersRequest;
         std::function<void()> _onResetRequest;
 
         void setupSysExHandlers()
@@ -357,10 +357,13 @@ namespace enomik
             _sysexHandler.setOnGetPeers([this]()
                                         {
                 Serial.println("SysEx: Getting peers list");
+                const uint8_t *peerMacs[MAX_PEERS];
+                size_t peerCount = 0;
                 if (_onGetPeersRequest)
                 {
-                    _onGetPeersRequest();
-                } });
+                    peerCount = _onGetPeersRequest(peerMacs, MAX_PEERS);
+                }
+                _sysexHandler.sendPeersResponse(peerMacs, peerCount); });
 
             // Handler for system reset
             _sysexHandler.setOnReset([this]()

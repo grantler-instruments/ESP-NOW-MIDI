@@ -4,6 +4,15 @@ The enomik configuration protocol lets a host configure an ESP-NOW MIDI client o
 
 All multi-byte values in SysEx payloads are **7-bit** (0–127), as required by MIDI.
 
+## Source code
+
+| File | Role |
+|---|---|
+| [`enomik_sysex_codec.h`](../enomik_sysex_codec.h) | Protocol constants, `SysExPacket`, `SysExEncoder`, `SysExDecoder` — pure encode/decode, no Arduino |
+| [`enomik_sysex.h`](../enomik_sysex.h) | `SysExHandler` — incoming command routing, callbacks, `Serial` debug logging |
+| [`enomik_io.h`](../enomik_io.h) / [`enomik_client.h`](../enomik_client.h) | Pin config, NVS, ESP-NOW, USB MIDI wiring |
+| [`scripts/wizard/enomik_sysex.py`](../scripts/wizard/enomik_sysex.py) | Host-side builders and parser (wizard, tests) |
+
 ## Packet layout
 
 Every message uses this wire format:
@@ -267,15 +276,17 @@ F0  7D  00  0C  7F  02  04  07  F7
 ## Host implementation notes
 
 - **Web MIDI:** request SysEx access (`{ sysex: true }`). Incoming SysEx includes `F0`/`F7` in `event.data`.
+- **Firmware codec:** [`enomik_sysex_codec.h`](../enomik_sysex_codec.h) — enums and encode/decode (testable natively without Arduino).
+- **Firmware handler:** [`enomik_sysex.h`](../enomik_sysex.h) — routes requests to IO callbacks and sends responses.
 - **Python (wizard):** [`scripts/wizard/enomik_sysex.py`](../scripts/wizard/enomik_sysex.py) — builders and `parse()` for inner data.
-- **Constant sync (CI):** [`scripts/check_sysex_constants.py`](../scripts/check_sysex_constants.py) — verifies C++ and Python enums stay aligned.
-- **Tests:** Catch2 encoder tests in [`test/native/test_enomik_sysex.cpp`](../test/native/test_enomik_sysex.cpp).
+- **Constant sync (CI):** [`scripts/check_sysex_constants.py`](../scripts/check_sysex_constants.py) — verifies C++ codec and Python enums stay aligned.
+- **Tests:** Catch2 codec tests in [`test/native/test_enomik_sysex.cpp`](../test/native/test_enomik_sysex.cpp), handler tests in [`test/native/test_enomik_sysex_handler.cpp`](../test/native/test_enomik_sysex_handler.cpp), CI constant check in [`test/protocol/test_sysex_constants.py`](../test/protocol/test_sysex_constants.py).
 
 When adding a new command:
 
 1. Assign the next request byte (≤ `0x3E` recommended).
 2. Success response = request + `0x40`.
-3. Update `enomik_sysex.h`, `enomik_sysex.py`, tests, and this document.
+3. Update `enomik_sysex_codec.h`, `enomik_sysex.py`, tests, and this document.
 4. Do not use `0x7F` except for errors.
 
 ## Version history (protocol semantics)

@@ -251,7 +251,7 @@ namespace enomik
                                         Serial.println("Sent other MIDI message");
                                 } });
 
-            // TODO: this should be part of the other handler
+            // Forward SysEx responses (including GET_PEERS) via the handler send path
             io.setOnSysExSendRequest([this](midi_sysex_message msg)
                                      { this->sendSysEx(msg.data, msg.length); });
 
@@ -279,14 +279,10 @@ namespace enomik
                                    return false;
                                } });
 
-            io.setOnGetPeersRequest([this]()
+            io.setOnGetPeersRequest([this](const uint8_t **peerMacs, size_t maxPeers) -> size_t
                                     {
-        Serial.println("GET_PEERS request received");
-        
-        // Print peers
-        const uint8_t *peerMacs[MAX_PEERS];
         size_t peerCount = 0;
-        for (int i = 0; i < this->peerStorage.count(); i++)
+        for (int i = 0; i < this->peerStorage.count() && peerCount < maxPeers; i++)
         {
             const uint8_t *mac = this->peerStorage.get(i);
             if (mac)
@@ -300,12 +296,8 @@ namespace enomik
             }
         }
 
-        SysExPacket pkt = SysExEncoder::encodePeersResponse(peerMacs, peerCount);
-        midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
-        Serial.println("Sending peer list via SysEx");
         Serial.println("Total peers: " + String(peerCount));
-
-        this->sendSysEx(msg.data, msg.length); });
+        return peerCount; });
 
             io.setOnResetRequest([this]()
                                  {

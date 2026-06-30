@@ -157,6 +157,16 @@ namespace enomik
             _onSend(msg);
         }
 
+        void sendPeersResponse(const uint8_t *const *macs, size_t count)
+        {
+            if (!_onSend)
+                return;
+
+            SysExPacket pkt = SysExEncoder::encodePeersResponse(macs, count);
+            midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
+            _onSend(msg);
+        }
+
     private:
         PinConfigCallback _onSetPinConfig;
         PinQueryCallback _onGetPinConfig;
