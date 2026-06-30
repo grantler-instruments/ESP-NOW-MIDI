@@ -22,9 +22,11 @@ namespace enomik
         DELETE_PIN_CONFIG = 0x05,
         GET_MAC = 0x06,
         ADD_PEER = 0x07,
-        GET_PEERS = 0x08,
+        GET_ALL_PEERS = 0x08,
         RESET = 0x09,
         GET_VERSION = 0x0A,
+        GET_PEER = 0x0B,
+        GET_CONFIG = 0x0C,
 
         // Response codes: always request command + 64 (0x40)
         SET_PIN_CONFIG_RESPONSE = 0x41,
@@ -34,9 +36,11 @@ namespace enomik
         DELETE_PIN_CONFIG_RESPONSE = 0x45,
         GET_MAC_RESPONSE = 0x46,
         ADD_PEER_RESPONSE = 0x47,
-        GET_PEERS_RESPONSE = 0x48,
+        GET_ALL_PEERS_RESPONSE = 0x48,
         RESET_RESPONSE = 0x49,
         GET_VERSION_RESPONSE = 0x4A,
+        GET_PEER_RESPONSE = 0x4B,
+        GET_CONFIG_RESPONSE = 0x4C,
 
         // Global error response (reserved; not request + 64). Request 0x3F is
         // reserved so its success response (0x7F) never collides with errors.
@@ -51,7 +55,10 @@ namespace enomik
         PIN_NOT_FOUND = 0x04,
         NOT_READY = 0x05,
         OPERATION_FAILED = 0x06,
+        PEER_NOT_FOUND = 0x07,
     };
+
+    static constexpr size_t PEER_ENTRY_PAYLOAD_SIZE = 13; // index + 12 MAC nibbles
 
     inline constexpr SysExCommand responseCommand(SysExCommand request)
     {
@@ -206,29 +213,26 @@ namespace enomik
             return pkt;
         }
 
-        // Encode peer list (variable number of MAC addresses)
-        static SysExPacket encodePeersResponse(const uint8_t *const *macs, size_t count)
+        // Encode one peer entry: [index][12 MAC nibbles]
+        static SysExPacket encodePeerEntry(uint8_t index, const uint8_t mac[6], SysExCommand responseCmd)
         {
             SysExPacket pkt;
             pkt.data[0] = SysExPacket::START_BYTE;
             pkt.data[1] = SysExPacket::MANUFACTURER_ID;
             pkt.data[2] = PROTOCOL_VERSION_MAJOR;
             pkt.data[3] = PROTOCOL_VERSION_MINOR;
-            pkt.data[4] = static_cast<uint8_t>(SysExCommand::GET_PEERS_RESPONSE);
+            pkt.data[4] = static_cast<uint8_t>(responseCmd);
+            pkt.data[5] = index;
 
-            int idx = 5;
-            for (size_t p = 0; p < count; p++)
+            int idx = 6;
+            for (int i = 0; i < 6; i++)
             {
-                const uint8_t *mac = macs[p];
-                for (int i = 0; i < 6; i++)
-                {
-                    pkt.data[idx++] = (mac[i] >> 4) & 0x0F;
-                    pkt.data[idx++] = mac[i] & 0x0F;
-                }
+                pkt.data[idx++] = (mac[i] >> 4) & 0x0F;
+                pkt.data[idx++] = mac[i] & 0x0F;
             }
 
             pkt.data[idx++] = SysExPacket::END_BYTE;
-            pkt.length = idx;
+            pkt.length = static_cast<uint16_t>(idx);
             return pkt;
         }
 
@@ -311,13 +315,28 @@ namespace enomik
             return true;
         }
 
-        // Decode single pin number
-        static bool decodePin(const uint8_t *payload, uint16_t length, uint8_t &pin)
+        // Decode single index byte (pin number or peer index)
+        static bool decodeIndex(const uint8_t *payload, uint16_t length, uint8_t &index)
         {
             if (length < 1)
                 return false;
-            pin = payload[0];
+            index = payload[0];
             return true;
+        }
+
+        static bool decodePin(const uint8_t *payload, uint16_t length, uint8_t &pin)
+        {
+            return decodeIndex(payload, length, pin);
+        }
+
+        // Decode peer entry: [index][12 MAC nibbles]
+        static bool decodePeerEntry(const uint8_t *payload, uint16_t length, uint8_t &index, uint8_t mac[6])
+        {
+            if (length < PEER_ENTRY_PAYLOAD_SIZE)
+                return false;
+
+            index = payload[0];
+            return decodeMAC(payload + 1, 12, mac);
         }
     };
 }

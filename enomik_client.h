@@ -251,7 +251,7 @@ namespace enomik
                                         Serial.println("Sent other MIDI message");
                                 } });
 
-            // Forward SysEx responses (including GET_PEERS) via the handler send path
+            // Forward SysEx responses (including GET_ALL_PEERS) via the handler send path
             io.setOnSysExSendRequest([this](midi_sysex_message msg)
                                      { this->sendSysEx(msg.data, msg.length); });
 
@@ -279,25 +279,8 @@ namespace enomik
                                    return false;
                                } });
 
-            io.setOnGetPeersRequest([this](const uint8_t **peerMacs, size_t maxPeers) -> size_t
-                                    {
-        size_t peerCount = 0;
-        for (int i = 0; i < this->peerStorage.count() && peerCount < maxPeers; i++)
-        {
-            const uint8_t *mac = this->peerStorage.get(i);
-            if (mac)
-            {
-                Serial.print("Peer ");
-                Serial.print(i);
-                Serial.print(": ");
-                macPrint(mac);
-                Serial.println();
-                peerMacs[peerCount++] = mac;
-            }
-        }
-
-        Serial.println("Total peers: " + String(peerCount));
-        return peerCount; });
+            io.setOnGetPeerRequest([this](uint8_t index) -> const uint8_t *
+                                    { return this->peerStorage.get(index); });
 
             io.setOnResetRequest([this]()
                                  {

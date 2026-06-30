@@ -1,6 +1,6 @@
 """Build and parse enomik SysEx messages.
 
-The byte layout mirrors enomik_sysex.h. All builders return the *inner* SysEx
+The byte layout mirrors enomik_sysex_codec.h. All builders return the *inner* SysEx
 data (i.e. everything between the 0xF0 start and 0xF7 end bytes), which is the
 form `mido.Message('sysex', data=...)` expects.
 
@@ -10,13 +10,15 @@ so the inner data is:
     7D MAJOR MINOR CMD <payload...>
 
 Response CMD bytes are always request CMD + 64 (0x40), except errors at 0x7F.
+GET_ALL_PIN_CONFIGS and GET_ALL_PEERS stream one entry per message, then an
+empty response with the same CMD as stream end.
 """
 
 from __future__ import annotations
 
 # Keep these in sync with version.h
 PROTOCOL_MAJOR = 0
-PROTOCOL_MINOR = 12
+PROTOCOL_MINOR = 14
 
 MANUFACTURER_ID = 0x7D
 
@@ -28,9 +30,11 @@ CMD_GET_ALL_PIN_CONFIGS = 0x04
 CMD_DELETE_PIN_CONFIG = 0x05
 CMD_GET_MAC = 0x06
 CMD_ADD_PEER = 0x07
-CMD_GET_PEERS = 0x08
+CMD_GET_ALL_PEERS = 0x08
 CMD_RESET = 0x09
 CMD_GET_VERSION = 0x0A
+CMD_GET_PEER = 0x0B
+CMD_GET_CONFIG = 0x0C
 
 # Response codes (request + 64)
 RESP_SET_PIN_CONFIG = CMD_SET_PIN_CONFIG + 0x40
@@ -40,9 +44,11 @@ RESP_GET_ALL_PIN_CONFIGS = CMD_GET_ALL_PIN_CONFIGS + 0x40
 RESP_DELETE_PIN_CONFIG = CMD_DELETE_PIN_CONFIG + 0x40
 RESP_GET_MAC = CMD_GET_MAC + 0x40
 RESP_ADD_PEER = CMD_ADD_PEER + 0x40
-RESP_GET_PEERS = CMD_GET_PEERS + 0x40
+RESP_GET_ALL_PEERS = CMD_GET_ALL_PEERS + 0x40
 RESP_RESET = CMD_RESET + 0x40
 RESP_GET_VERSION = CMD_GET_VERSION + 0x40
+RESP_GET_PEER = CMD_GET_PEER + 0x40
+RESP_GET_CONFIG = CMD_GET_CONFIG + 0x40
 
 RESP_ERROR = 0x7F
 
@@ -53,12 +59,20 @@ ERR_DECODE_FAILED = 0x03
 ERR_PIN_NOT_FOUND = 0x04
 ERR_NOT_READY = 0x05
 ERR_OPERATION_FAILED = 0x06
+ERR_PEER_NOT_FOUND = 0x07
 
 PIN_CONFIG_RESPONSES = {
     RESP_SET_PIN_CONFIG,
     RESP_GET_PIN_CONFIG,
     RESP_GET_ALL_PIN_CONFIGS,
 }
+
+PEER_ENTRY_RESPONSES = {
+    RESP_GET_ALL_PEERS,
+    RESP_GET_PEER,
+}
+
+PEER_ENTRY_PAYLOAD_SIZE = 13
 
 # Pin modes (enomik_io.h)
 MODE_INPUT = 0x00
@@ -106,8 +120,20 @@ def build_reset() -> list[int]:
     return _header(CMD_RESET)
 
 
-def build_get_peers() -> list[int]:
-    return _header(CMD_GET_PEERS)
+def build_get_all_pin_configs() -> list[int]:
+    return _header(CMD_GET_ALL_PIN_CONFIGS)
+
+
+def build_get_all_peers() -> list[int]:
+    return _header(CMD_GET_ALL_PEERS)
+
+
+def build_get_config() -> list[int]:
+    return _header(CMD_GET_CONFIG)
+
+
+def build_get_peer(index: int) -> list[int]:
+    return _header(CMD_GET_PEER) + [index]
 
 
 def build_add_peer(mac: list[int]) -> list[int]:
@@ -158,6 +184,16 @@ def _parse_pin_config(payload: list[int]) -> dict | None:
     }
 
 
+def _parse_peer_entry(payload: list[int]) -> dict | None:
+    if len(payload) < PEER_ENTRY_PAYLOAD_SIZE:
+        return None
+    return {
+        "cmd": "peer_entry",
+        "index": payload[0],
+        "mac": _nibbles_to_mac(payload[1:13]),
+    }
+
+
 # --- Parser ------------------------------------------------------------------
 def parse(data: list[int]) -> dict | None:
     """Parse the inner data of a received SysEx message.
@@ -176,11 +212,18 @@ def parse(data: list[int]) -> dict | None:
     cmd = d[3]
     payload = d[4:]
 
-    if cmd == RESP_GET_PEERS:
-        macs = []
-        for i in range(0, len(payload) - 11, 12):
-            macs.append(_nibbles_to_mac(payload[i : i + 12]))
-        return {"cmd": "get_peers", "peers": macs}
+    if cmd in PIN_CONFIG_RESPONSES:
+        if len(payload) == 0:
+            return {"cmd": "pin_config_stream_end"}
+        return _parse_pin_config(payload)
+
+    if cmd in PEER_ENTRY_RESPONSES:
+        if len(payload) == 0:
+            return {"cmd": "peer_stream_end"}
+        return _parse_peer_entry(payload)
+
+    if cmd == RESP_GET_CONFIG:
+        return {"cmd": "get_config_ok"}
 
     if cmd == RESP_CLEAR_PIN_CONFIGS:
         return {"cmd": "clear_pin_configs"}
@@ -197,9 +240,6 @@ def parse(data: list[int]) -> dict | None:
             "major": payload[0] if len(payload) > 0 else None,
             "minor": payload[1] if len(payload) > 1 else None,
         }
-
-    if cmd in PIN_CONFIG_RESPONSES:
-        return _parse_pin_config(payload)
 
     if cmd == RESP_ADD_PEER and len(payload) >= 1:
         return {"cmd": "add_peer", "success": bool(payload[0])}

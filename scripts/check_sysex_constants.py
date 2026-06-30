@@ -19,9 +19,11 @@ REQUEST_COMMANDS = (
     "DELETE_PIN_CONFIG",
     "GET_MAC",
     "ADD_PEER",
-    "GET_PEERS",
+    "GET_ALL_PEERS",
     "RESET",
     "GET_VERSION",
+    "GET_PEER",
+    "GET_CONFIG",
 )
 
 ERROR_CODES = (
@@ -31,6 +33,7 @@ ERROR_CODES = (
     "PIN_NOT_FOUND",
     "NOT_READY",
     "OPERATION_FAILED",
+    "PEER_NOT_FOUND",
 )
 
 RESPONSE_OFFSET = 0x40

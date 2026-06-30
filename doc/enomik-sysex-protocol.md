@@ -44,8 +44,8 @@ When building messages for Web MIDI / `mido`, the inner data is everything **bet
 
 | Kind | Rule | Range (current) |
 |---|---|---|
-| Request | assigned sequentially | `0x01` … `0x0A` |
-| Success response | **request + 64** (`0x40`) | `0x41` … `0x4A` |
+| Request | assigned sequentially | `0x01` … `0x0C` |
+| Success response | **request + 64** (`0x40`) | `0x41` … `0x4C` |
 | Error response | fixed **`0x7F`** | always `0x7F` |
 
 **Reserved:** request `0x3F` must not be used — its success pair would be `0x7F`, which is reserved for errors. Future requests should stay ≤ `0x3E` if the `+ 64` rule is kept.
@@ -61,9 +61,11 @@ When building messages for Web MIDI / `mido`, the inner data is everything **bet
 | `0x05` | DELETE_PIN_CONFIG | pin (1 byte) | `0x45` + pin byte, or [error](#errors) |
 | `0x06` | GET_MAC | (none) | `0x46` + [MAC nibbles](#mac-address-encoding) |
 | `0x07` | ADD_PEER | [12 MAC nibbles](#mac-address-encoding) (not 6 raw octets) | `0x47` + success byte (`1` / `0`) |
-| `0x08` | GET_PEERS | (none) | `0x48` + [12 nibbles](#mac-address-encoding) per peer MAC |
+| `0x08` | GET_ALL_PEERS | (none) | one `0x48` + [peer entry](#peer-entry-payload) per peer, then empty `0x48` |
 | `0x09` | RESET | (none) | `0x49` (empty) |
 | `0x0A` | GET_VERSION | (none) | `0x4A` + major + minor |
+| `0x0B` | GET_PEER | index (1 byte) | `0x4B` + peer entry, or [error](#errors) |
+| `0x0C` | GET_CONFIG | (none) | all `0x44` pin configs, then all `0x48` peer entries, then empty `0x4C` |
 
 ### Pin config payload
 
@@ -104,6 +106,30 @@ The protocol stores `midi_type / 2` in one byte because SysEx data is 7-bit.
 
 Decode: `midi_type = stored * 2`.
 
+### Peer entry payload
+
+Used in **GET_PEER** (`0x4B`) and **GET_ALL_PEERS** (`0x48`) success responses:
+
+| Offset | Field | Description |
+|---|---|---|
+| 0 | index | Peer slot in device storage (0 … count−1) |
+| 1–12 | MAC | [12 nibbles](#mac-address-encoding) |
+
+Peer **index** is a storage slot, not a permanent ID — it can change when peers are deleted. The MAC is the stable identity.
+
+### Stream end markers
+
+**GET_ALL_PIN_CONFIGS** and **GET_ALL_PEERS** send one entry per message, then a **terminal empty response** with the same response cmd and no payload:
+
+```
+F0  7D  MAJOR  MINOR  44  F7     ← pin stream end
+F0  7D  MAJOR  MINOR  48  F7     ← peer stream end
+```
+
+If there are zero entries, the host receives only the stream-end message.
+
+**GET_CONFIG** uses the same `0x44` and `0x48` entry shapes but sends **one** final empty `0x4C` instead of separate pin/peer stream-end markers.
+
 ### MAC address encoding
 
 A MAC address is **6 octets** (e.g. `84:F7:03:F2:54:62`). On the SysEx wire it is **always encoded as 12 nibbles** — never as 6 raw bytes.
@@ -132,7 +158,7 @@ Hosts may build nibbles by splitting the hex string **one character at a time** 
 
 Encode: `hi = (octet >> 4) & 0x0F`, `lo = octet & 0x0F`. Decode: `octet = (hi << 4) | lo`.
 
-Used in **ADD_PEER** requests, **GET_MAC** responses (`0x46`), and **GET_PEERS** responses (`0x48`, concatenated per peer).
+Used in **ADD_PEER** requests, **GET_MAC** responses (`0x46`), and [peer entry](#peer-entry-payload) payloads.
 
 ## Success response details
 
@@ -146,7 +172,7 @@ Returns configuration for the requested pin. If the pin is not configured, see [
 
 ### GET_ALL_PIN_CONFIGS → `0x44`
 
-Sends **one SysEx message per pin** (each with cmd `0x44`). There is no explicit “done” packet; hosts should use a timeout or count.
+Sends **one SysEx message per pin** (each with cmd `0x44` and an 8-byte [pin config](#pin-config-payload)), then an empty `0x44` [stream end](#stream-end-markers).
 
 ### DELETE_PIN_CONFIG → `0x45`
 
@@ -160,9 +186,23 @@ Payload: 12 MAC nibbles.
 
 Payload: one byte — `1` success, `0` failure. Decode errors use [errors](#errors) instead.
 
-### GET_PEERS → `0x48`
+### GET_ALL_PEERS → `0x48`
 
-Payload: concatenated 12-nibble MAC blocks, one per peer. Empty list = header + `F7` only.
+Sends **one SysEx message per peer** (each with cmd `0x48` and a [peer entry](#peer-entry-payload)), then an empty `0x48` [stream end](#stream-end-markers).
+
+### GET_PEER → `0x4B`
+
+Returns the peer at the requested storage **index**. If the index is out of range, see [PEER_NOT_FOUND](#error-codes).
+
+### GET_CONFIG → `0x4C`
+
+One-shot full board snapshot for **pins + peers** (v0.14+):
+
+1. Every stored pin config as `0x44` (same 8-byte payload as GET_ALL_PIN_CONFIGS).
+2. Every stored peer as `0x48` (same [peer entry](#peer-entry-payload) as GET_ALL_PEERS).
+3. Empty `0x4C` — **done** (no separate empty `0x44` / `0x48` in this stream).
+
+Order is always **pins first, then peers**. Empty board → only `0x4C`.
 
 ### RESET → `0x49`
 
@@ -184,7 +224,7 @@ F0  7D  MAJOR  MINOR  7F  <failed_request>  <error_code>  [context]  F7
 |---|---|
 | failed_request | Request cmd that failed, or `0x00` if unknown |
 | error_code | See table below |
-| context | Optional; e.g. pin number for PIN_NOT_FOUND |
+| context | Optional; e.g. pin number for PIN_NOT_FOUND, peer index for PEER_NOT_FOUND |
 
 ### Error codes
 
@@ -196,6 +236,7 @@ F0  7D  MAJOR  MINOR  7F  <failed_request>  <error_code>  [context]  F7
 | `0x04` | PIN_NOT_FOUND | GET/DELETE for unconfigured pin (context = pin) |
 | `0x05` | NOT_READY | Handler not registered on device |
 | `0x06` | OPERATION_FAILED | Reserved for handler-level failures |
+| `0x07` | PEER_NOT_FOUND | GET_PEER for invalid index (context = index) |
 
 ## Examples
 
@@ -204,7 +245,7 @@ F0  7D  MAJOR  MINOR  7F  <failed_request>  <error_code>  [context]  F7
 Request:
 
 ```
-F0  7D  00  0C  01  03  02  00  01  48  3C  00  7F  F7
+F0  7D  00  0D  01  03  02  00  01  48  3C  00  7F  F7
          │   │   │   │   │   │   │   │   │   │   └── max
          │   │   │   │   │   │   │   │   └── note 60
          │   │   │   │   │   │   │   └── Note On / 2 = 0x48
@@ -213,7 +254,7 @@ F0  7D  00  0C  01  03  02  00  01  48  3C  00  7F  F7
          │   │   │   │   └── INPUT_PULLUP
          │   │   │   └── pin 3
          │   │   └── SET_PIN_CONFIG
-         │   └── minor (example: 12)
+         │   └── minor (example: 13)
          └── major
 ```
 
@@ -224,13 +265,13 @@ Success response (`0x41`) repeats the same 8-byte config after the header.
 Request:
 
 ```
-F0  7D  00  0C  06  F7
+F0  7D  00  0D  06  F7
 ```
 
 Response:
 
 ```
-F0  7D  00  0C  46  [12 nibbles]  F7
+F0  7D  00  0D  46  [12 nibbles]  F7
 ```
 
 ### Add peer (dongle MAC)
@@ -238,7 +279,7 @@ F0  7D  00  0C  46  [12 nibbles]  F7
 Request for `84:F7:03:F2:54:62` — note **12** nibble bytes after the header, not 6 octets:
 
 ```
-F0  7D  00  0C  07  08 04 0F 07 00 03 0F 02 05 04 06 02  F7
+F0  7D  00  0D  07  08 04 0F 07 00 03 0F 02 05 04 06 02  F7
               │   └────────────────── 12 nibbles ──────────┘
               └── ADD_PEER
 ```
@@ -246,7 +287,7 @@ F0  7D  00  0C  07  08 04 0F 07 00 03 0F 02 05 04 06 02  F7
 Response on success:
 
 ```
-F0  7D  00  0C  47  01  F7
+F0  7D  00  0D  47  01  F7
 ```
 
 ### Reset
@@ -254,19 +295,19 @@ F0  7D  00  0C  47  01  F7
 Request:
 
 ```
-F0  7D  00  0C  09  F7
+F0  7D  00  0D  09  F7
 ```
 
 Response:
 
 ```
-F0  7D  00  0C  49  F7
+F0  7D  00  0D  49  F7
 ```
 
 ### Error: pin 7 not found (GET_PIN_CONFIG)
 
 ```
-F0  7D  00  0C  7F  02  04  07  F7
+F0  7D  00  0D  7F  02  04  07  F7
               │   │   │   └── pin 7
               │   │   └── PIN_NOT_FOUND
               │   └── failed GET_PIN_CONFIG (0x02)
@@ -293,9 +334,12 @@ When adding a new command:
 
 | Change | Notes |
 |---|---|
+| v0.14 GET_CONFIG | One request streams `0x44` pins + `0x48` peers + empty `0x4C` done |
+| v0.13 peer model | GET_PEER (`0x0B`), GET_ALL_PEERS streams one `0x48` per peer + end marker; PEER_NOT_FOUND |
+| v0.13 stream end | GET_ALL_PIN_CONFIGS and GET_ALL_PEERS terminate with empty response packet |
 | Version header on all packets | `MAJOR` / `MINOR` after manufacturer ID |
 | Unified success responses | All success cmds = request + 64 |
-| GET_PEERS response | Includes version header (not legacy `7D 48 …`) |
+| GET_ALL_PEERS response | Includes version header (not legacy `7D 48 …`) |
 | GET_VERSION | Wired and responds with `0x4A` |
 | Error response | Global `0x7F` with failed_request + error_code |
 

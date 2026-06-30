@@ -16,6 +16,7 @@ namespace enomik
         // Callbacks for different SysEx commands
         using PinConfigCallback = std::function<void(const PinConfig &)>;
         using PinQueryCallback = std::function<void(uint8_t pin)>;
+        using PeerQueryCallback = std::function<void(uint8_t index)>;
         using VoidCallback = std::function<void()>;
         using MACCallback = std::function<void(const uint8_t mac[6])>;
         using SendCallback = std::function<void(const midi_sysex_message &)>;
@@ -27,7 +28,9 @@ namespace enomik
         void setOnGetAllPinConfigs(VoidCallback cb) { _onGetAllPinConfigs = cb; }
         void setOnGetMAC(VoidCallback cb) { _onGetMAC = cb; }
         void setOnAddPeer(MACCallback cb) { _onAddPeer = cb; }
-        void setOnGetPeers(VoidCallback cb) { _onGetPeers = cb; }
+        void setOnGetAllPeers(VoidCallback cb) { _onGetAllPeers = cb; }
+        void setOnGetPeer(PeerQueryCallback cb) { _onGetPeer = cb; }
+        void setOnGetConfig(VoidCallback cb) { _onGetConfig = cb; }
         void setOnReset(VoidCallback cb) { _onReset = cb; }
         void setOnGetVersion(VoidCallback cb) { _onGetVersion = cb; }
         void setOnSend(SendCallback cb) { _onSend = cb; }
@@ -157,14 +160,19 @@ namespace enomik
             _onSend(msg);
         }
 
-        void sendPeersResponse(const uint8_t *const *macs, size_t count)
+        void sendPeerResponse(uint8_t index, const uint8_t mac[6], SysExCommand responseCmd)
         {
             if (!_onSend)
                 return;
 
-            SysExPacket pkt = SysExEncoder::encodePeersResponse(macs, count);
+            SysExPacket pkt = SysExEncoder::encodePeerEntry(index, mac, responseCmd);
             midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
             _onSend(msg);
+        }
+
+        void sendStreamEnd(SysExCommand responseCmd)
+        {
+            sendSimpleResponse(responseCmd);
         }
 
     private:
@@ -175,7 +183,9 @@ namespace enomik
         VoidCallback _onGetAllPinConfigs;
         VoidCallback _onGetMAC;
         MACCallback _onAddPeer;
-        VoidCallback _onGetPeers;
+        VoidCallback _onGetAllPeers;
+        PeerQueryCallback _onGetPeer;
+        VoidCallback _onGetConfig;
         VoidCallback _onReset;
         VoidCallback _onGetVersion;
         SendCallback _onSend;
@@ -219,8 +229,16 @@ namespace enomik
                 handleAddPeer(payload, payloadLen);
                 break;
 
-            case SysExCommand::GET_PEERS:
-                handleGetPeers();
+            case SysExCommand::GET_ALL_PEERS:
+                handleGetAllPeers();
+                break;
+
+            case SysExCommand::GET_PEER:
+                handleGetPeer(payload, payloadLen);
+                break;
+
+            case SysExCommand::GET_CONFIG:
+                handleGetConfig();
                 break;
 
             case SysExCommand::RESET:
@@ -376,16 +394,52 @@ namespace enomik
             }
         }
 
-        void handleGetPeers()
+        void handleGetAllPeers()
         {
-            if (_onGetPeers)
+            if (_onGetAllPeers)
             {
-                Serial.println("SysEx: Getting peers");
-                _onGetPeers();
+                Serial.println("SysEx: Getting all peers");
+                _onGetAllPeers();
             }
             else
             {
-                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PEERS), SysExErrorCode::NOT_READY);
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_ALL_PEERS), SysExErrorCode::NOT_READY);
+            }
+        }
+
+        void handleGetPeer(const uint8_t *payload, uint16_t length)
+        {
+            if (!_onGetPeer)
+            {
+                Serial.println("SysEx: No GET_PEER handler");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PEER), SysExErrorCode::NOT_READY);
+                return;
+            }
+
+            uint8_t index;
+            if (SysExDecoder::decodeIndex(payload, length, index))
+            {
+                Serial.print("SysEx: Getting peer at index ");
+                Serial.println(index);
+                _onGetPeer(index);
+            }
+            else
+            {
+                Serial.println("SysEx: Failed to decode peer index");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PEER), SysExErrorCode::DECODE_FAILED);
+            }
+        }
+
+        void handleGetConfig()
+        {
+            if (_onGetConfig)
+            {
+                Serial.println("SysEx: Getting full board config");
+                _onGetConfig();
+            }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_CONFIG), SysExErrorCode::NOT_READY);
             }
         }
 

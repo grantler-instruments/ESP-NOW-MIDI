@@ -182,22 +182,86 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
         REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::UNKNOWN_COMMAND));
     }
 
-    SECTION("GET_PEERS callback triggers sendPeersResponse")
+    SECTION("GET_ALL_PEERS callback streams peer entries and end marker")
     {
         bool called = false;
-        handler.setOnGetPeers([&]() {
+        handler.setOnGetAllPeers([&]() {
             called = true;
-            const uint8_t *const macs[] = {kSampleMac};
-            handler.sendPeersResponse(macs, 1);
+            handler.sendPeerResponse(0, kSampleMac, enomik::SysExCommand::GET_ALL_PEERS_RESPONSE);
+            handler.sendStreamEnd(enomik::SysExCommand::GET_ALL_PEERS_RESPONSE);
         });
 
         const auto request = enomik::SysExEncoder::encodeSimpleResponse(
-            enomik::SysExCommand::GET_PEERS);
+            enomik::SysExCommand::GET_ALL_PEERS);
         handler.handleSysEx(request.data, request.length);
 
         REQUIRE(called);
+        REQUIRE(sent.size() == 2);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_ALL_PEERS_RESPONSE));
+        REQUIRE(sent[0].length == 19);
+        REQUIRE(sent[1].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_ALL_PEERS_RESPONSE));
+        REQUIRE(sent[1].length == 6);
+    }
+
+    SECTION("GET_PEER invokes callback and sends peer entry")
+    {
+        const auto request = enomik::SysExEncoder::encodeByteResponse(
+            enomik::SysExCommand::GET_PEER, 1);
+
+        uint8_t receivedIndex = 255;
+        bool called = false;
+        handler.setOnGetPeer([&](uint8_t index) {
+            receivedIndex = index;
+            called = true;
+            handler.sendPeerResponse(index, kSampleMac, enomik::SysExCommand::GET_PEER_RESPONSE);
+        });
+
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(called);
+        REQUIRE(receivedIndex == 1);
         REQUIRE(sent.size() == 1);
-        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_PEERS_RESPONSE));
-        REQUIRE(sent[0].length == 18);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_PEER_RESPONSE));
+        REQUIRE(sent[0].data[5] == 1);
+    }
+
+    SECTION("GET_PEER missing peer sends PEER_NOT_FOUND error")
+    {
+        handler.setOnGetPeer([&](uint8_t index) {
+            handler.sendErrorResponse(
+                static_cast<uint8_t>(enomik::SysExCommand::GET_PEER),
+                enomik::SysExErrorCode::PEER_NOT_FOUND,
+                index);
+        });
+
+        const auto request = enomik::SysExEncoder::encodeByteResponse(
+            enomik::SysExCommand::GET_PEER, 3);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE));
+        REQUIRE(sent[0].data[5] == static_cast<uint8_t>(enomik::SysExCommand::GET_PEER));
+        REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::PEER_NOT_FOUND));
+        REQUIRE(sent[0].data[7] == 3);
+    }
+
+    SECTION("GET_CONFIG streams pins, peers, then completion")
+    {
+        handler.setOnGetConfig([&]() {
+            PinConfig cfg(3, 0x02);
+            handler.sendPinConfigResponse(cfg, enomik::SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE);
+            handler.sendPeerResponse(0, kSampleMac, enomik::SysExCommand::GET_ALL_PEERS_RESPONSE);
+            handler.sendSimpleResponse(enomik::SysExCommand::GET_CONFIG_RESPONSE);
+        });
+
+        const auto request = enomik::SysExEncoder::encodeSimpleResponse(
+            enomik::SysExCommand::GET_CONFIG);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(sent.size() == 3);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE));
+        REQUIRE(sent[1].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_ALL_PEERS_RESPONSE));
+        REQUIRE(sent[2].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_CONFIG_RESPONSE));
+        REQUIRE(sent[2].length == 6);
     }
 }

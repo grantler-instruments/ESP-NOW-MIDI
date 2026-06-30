@@ -200,9 +200,9 @@ namespace enomik
             _onAddPeerRequest = callback;
         }
 
-        void setOnGetPeersRequest(std::function<size_t(const uint8_t **peerMacs, size_t maxPeers)> callback)
+        void setOnGetPeerRequest(std::function<const uint8_t *(uint8_t index)> callback)
         {
-            _onGetPeersRequest = callback;
+            _onGetPeerRequest = callback;
         }
 
         void setOnResetRequest(std::function<void()> callback)
@@ -249,7 +249,7 @@ namespace enomik
         // External callbacks
         std::function<void(midi_message)> _onMIDISendRequest;
         std::function<bool(uint8_t mac[])> _onAddPeerRequest;
-        std::function<size_t(const uint8_t **peerMacs, size_t maxPeers)> _onGetPeersRequest;
+        std::function<const uint8_t *(uint8_t index)> _onGetPeerRequest;
         std::function<void()> _onResetRequest;
 
         void setupSysExHandlers()
@@ -287,7 +287,8 @@ namespace enomik
                 for (const auto &cfg : _pinConfigs)
                 {
                     _sysexHandler.sendPinConfigResponse(cfg, SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE);
-                } });
+                }
+                _sysexHandler.sendStreamEnd(SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE); });
 
             // Handler for deleting pin configuration
             _sysexHandler.setOnDeletePinConfig([this](uint8_t pin)
@@ -353,17 +354,63 @@ namespace enomik
                     _sysexHandler.sendAddPeerResponse(false);
                 } });
 
-            // Handler for getting peers
-            _sysexHandler.setOnGetPeers([this]()
+            // Handler for getting all peers (one response per peer, then stream end)
+            _sysexHandler.setOnGetAllPeers([this]()
                                         {
                 Serial.println("SysEx: Getting peers list");
-                const uint8_t *peerMacs[MAX_PEERS];
-                size_t peerCount = 0;
-                if (_onGetPeersRequest)
+                if (_onGetPeerRequest)
                 {
-                    peerCount = _onGetPeersRequest(peerMacs, MAX_PEERS);
+                    for (uint8_t index = 0; index < MAX_PEERS; index++)
+                    {
+                        const uint8_t *mac = _onGetPeerRequest(index);
+                        if (!mac)
+                            break;
+                        _sysexHandler.sendPeerResponse(
+                            index, mac, SysExCommand::GET_ALL_PEERS_RESPONSE);
+                    }
                 }
-                _sysexHandler.sendPeersResponse(peerMacs, peerCount); });
+                _sysexHandler.sendStreamEnd(SysExCommand::GET_ALL_PEERS_RESPONSE); });
+
+            // Handler for getting one peer by storage index
+            _sysexHandler.setOnGetPeer([this](uint8_t index)
+                                       {
+                Serial.print("SysEx: Getting peer at index ");
+                Serial.println(index);
+                const uint8_t *mac = _onGetPeerRequest ? _onGetPeerRequest(index) : nullptr;
+                if (mac)
+                {
+                    _sysexHandler.sendPeerResponse(
+                        index, mac, SysExCommand::GET_PEER_RESPONSE);
+                }
+                else
+                {
+                    _sysexHandler.sendErrorResponse(
+                        static_cast<uint8_t>(SysExCommand::GET_PEER),
+                        SysExErrorCode::PEER_NOT_FOUND,
+                        index);
+                } });
+
+            // Handler for full board config (pins + peers, then GET_CONFIG_RESPONSE)
+            _sysexHandler.setOnGetConfig([this]()
+                                         {
+                Serial.println("SysEx: Streaming full board config");
+                for (const auto &cfg : _pinConfigs)
+                {
+                    _sysexHandler.sendPinConfigResponse(
+                        cfg, SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE);
+                }
+                if (_onGetPeerRequest)
+                {
+                    for (uint8_t index = 0; index < MAX_PEERS; index++)
+                    {
+                        const uint8_t *mac = _onGetPeerRequest(index);
+                        if (!mac)
+                            break;
+                        _sysexHandler.sendPeerResponse(
+                            index, mac, SysExCommand::GET_ALL_PEERS_RESPONSE);
+                    }
+                }
+                _sysexHandler.sendSimpleResponse(SysExCommand::GET_CONFIG_RESPONSE); });
 
             // Handler for system reset
             _sysexHandler.setOnReset([this]()

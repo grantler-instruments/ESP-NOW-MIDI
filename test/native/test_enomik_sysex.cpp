@@ -96,9 +96,11 @@ TEST_CASE("response commands are request + 64", "[sysex][protocol]")
         enomik::SysExCommand::DELETE_PIN_CONFIG,
         enomik::SysExCommand::GET_MAC,
         enomik::SysExCommand::ADD_PEER,
-        enomik::SysExCommand::GET_PEERS,
+        enomik::SysExCommand::GET_ALL_PEERS,
         enomik::SysExCommand::RESET,
         enomik::SysExCommand::GET_VERSION,
+        enomik::SysExCommand::GET_PEER,
+        enomik::SysExCommand::GET_CONFIG,
     };
 
     for (const auto request : requests)
@@ -190,38 +192,50 @@ TEST_CASE("add peer response encoding", "[sysex][response]")
 
 TEST_CASE("get peers response encoding", "[sysex][response]")
 {
-    SECTION("empty peer list")
+    SECTION("stream end marker")
     {
-        const uint8_t *const macs[] = {};
-        const auto pkt = enomik::SysExEncoder::encodePeersResponse(macs, 0);
-        requireCommand(pkt, enomik::SysExCommand::GET_PEERS_RESPONSE);
+        const auto pkt = enomik::SysExEncoder::encodeSimpleResponse(
+            enomik::SysExCommand::GET_ALL_PEERS_RESPONSE);
+        requireCommand(pkt, enomik::SysExCommand::GET_ALL_PEERS_RESPONSE);
         REQUIRE(pkt.length == 6);
         REQUIRE(pkt.getPayloadLength() == 0);
     }
 
-    SECTION("single peer")
+    SECTION("single peer entry")
     {
-        const uint8_t *const macs[] = {kSampleMac};
-        const auto pkt = enomik::SysExEncoder::encodePeersResponse(macs, 1);
-        requireCommand(pkt, enomik::SysExCommand::GET_PEERS_RESPONSE);
-        REQUIRE(pkt.length == 18);
+        const auto pkt = enomik::SysExEncoder::encodePeerEntry(
+            0, kSampleMac, enomik::SysExCommand::GET_ALL_PEERS_RESPONSE);
+        requireCommand(pkt, enomik::SysExCommand::GET_ALL_PEERS_RESPONSE);
+        REQUIRE(pkt.length == 19);
+        REQUIRE(pkt.data[5] == 0);
 
+        uint8_t index = 255;
         uint8_t decoded[6] = {};
-        REQUIRE(enomik::SysExDecoder::decodeMAC(pkt.getPayload(), 12, decoded));
+        REQUIRE(enomik::SysExDecoder::decodePeerEntry(
+            pkt.getPayload(), pkt.getPayloadLength(), index, decoded));
+        REQUIRE(index == 0);
         for (int i = 0; i < 6; ++i)
         {
             REQUIRE(decoded[i] == kSampleMac[i]);
         }
     }
 
-    SECTION("multiple peers")
+    SECTION("get peer response uses GET_PEER_RESPONSE cmd")
     {
-        const uint8_t *const macs[] = {kSampleMac, kOtherMac};
-        const auto pkt = enomik::SysExEncoder::encodePeersResponse(macs, 2);
-        requireCommand(pkt, enomik::SysExCommand::GET_PEERS_RESPONSE);
-        REQUIRE(pkt.length == 30);
-        REQUIRE(pkt.getPayloadLength() == 24);
+        const auto pkt = enomik::SysExEncoder::encodePeerEntry(
+            2, kOtherMac, enomik::SysExCommand::GET_PEER_RESPONSE);
+        requireCommand(pkt, enomik::SysExCommand::GET_PEER_RESPONSE);
+        REQUIRE(pkt.data[5] == 2);
     }
+}
+
+TEST_CASE("get config response encoding", "[sysex][response]")
+{
+    const auto pkt = enomik::SysExEncoder::encodeSimpleResponse(
+        enomik::SysExCommand::GET_CONFIG_RESPONSE);
+    requireCommand(pkt, enomik::SysExCommand::GET_CONFIG_RESPONSE);
+    REQUIRE(pkt.length == 6);
+    REQUIRE(pkt.getPayloadLength() == 0);
 }
 
 TEST_CASE("reset response encoding", "[sysex][response]")
@@ -362,22 +376,19 @@ TEST_CASE("decodeMAC extracts MAC from nibbles", "[sysex][decode]")
         }
     }
 
-    SECTION("decodes each peer from GET_PEERS payload")
+    SECTION("round-trip from peer entry")
     {
-        const uint8_t *const macs[] = {kSampleMac, kOtherMac};
-        const auto pkt = enomik::SysExEncoder::encodePeersResponse(macs, 2);
-        const uint8_t *payload = pkt.getPayload();
-        const uint16_t length = pkt.getPayloadLength();
+        const auto pkt = enomik::SysExEncoder::encodePeerEntry(
+            1, kSampleMac, enomik::SysExCommand::GET_PEER_RESPONSE);
 
-        uint8_t first[6] = {};
-        uint8_t second[6] = {};
-        REQUIRE(enomik::SysExDecoder::decodeMAC(payload, 12, first));
-        REQUIRE(enomik::SysExDecoder::decodeMAC(payload + 12, 12, second));
-
+        uint8_t index = 0;
+        uint8_t decoded[6] = {};
+        REQUIRE(enomik::SysExDecoder::decodePeerEntry(
+            pkt.getPayload(), pkt.getPayloadLength(), index, decoded));
+        REQUIRE(index == 1);
         for (int i = 0; i < 6; ++i)
         {
-            REQUIRE(first[i] == kSampleMac[i]);
-            REQUIRE(second[i] == kOtherMac[i]);
+            REQUIRE(decoded[i] == kSampleMac[i]);
         }
     }
 
