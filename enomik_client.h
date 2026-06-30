@@ -255,29 +255,44 @@ namespace enomik
             io.setOnSysExSendRequest([this](midi_sysex_message msg)
                                      { this->sendSysEx(msg.data, msg.length); });
 
-            io.setOnAddPeerRequest([this](uint8_t mac[])
+            io.setOnAddPeerRequest([this](uint8_t mac[]) -> AddPeerResult
                                    {
                                Serial.println("IO requested to add peer:");
                                macPrint(mac);
-                               if (this->espnowMIDI.addPeer(mac))
+
+                               if (!isInitialized)
                                {
-                                   // Store peer in persistent storage
-                                   if (this->peerStorage.add(mac))
-                                   {
-                                       Serial.println("Peer added and stored successfully");
-                                       return true;
-                                   }
-                                   else
-                                   {
-                                       Serial.println("Failed to store peer");
-                                       return false;
-                                   }
+                                   return AddPeerResult::OperationFailed;
                                }
-                               else
+
+                               if (peerStorage.isFull())
+                               {
+                                   Serial.println("Peer table full");
+                                   return AddPeerResult::TableFull;
+                               }
+
+                               if (peerStorage.exists(mac))
+                               {
+                                   Serial.println("Peer already exists");
+                                   return AddPeerResult::AlreadyExists;
+                               }
+
+                               if (!peerStorage.add(mac))
+                               {
+                                   Serial.println("Failed to store peer");
+                                   return AddPeerResult::OperationFailed;
+                               }
+
+                               if (!espnowMIDI.addPeer(mac))
                                {
                                    Serial.println("Failed to add peer to ESP-NOW");
-                                   return false;
-                               } });
+                                   peerStorage.remove(mac);
+                                   return AddPeerResult::OperationFailed;
+                               }
+
+                               Serial.println("Peer added and stored successfully");
+                               return AddPeerResult::Success;
+                           });
 
             io.setOnGetPeerRequest([this](uint8_t index) -> const uint8_t *
                                     { return this->peerStorage.get(index); });

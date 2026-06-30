@@ -56,7 +56,34 @@ namespace enomik
         NOT_READY = 0x05,
         OPERATION_FAILED = 0x06,
         PEER_NOT_FOUND = 0x07,
+        PEER_TABLE_FULL = 0x08,
+        PEER_ALREADY_EXISTS = 0x09,
     };
+
+    enum class AddPeerResult : uint8_t
+    {
+        Success = 0,
+        TableFull,
+        AlreadyExists,
+        OperationFailed,
+        NotReady,
+    };
+
+    inline SysExErrorCode addPeerErrorCode(AddPeerResult result)
+    {
+        switch (result)
+        {
+        case AddPeerResult::TableFull:
+            return SysExErrorCode::PEER_TABLE_FULL;
+        case AddPeerResult::AlreadyExists:
+            return SysExErrorCode::PEER_ALREADY_EXISTS;
+        case AddPeerResult::NotReady:
+            return SysExErrorCode::NOT_READY;
+        case AddPeerResult::OperationFailed:
+        default:
+            return SysExErrorCode::OPERATION_FAILED;
+        }
+    }
 
     static constexpr size_t PEER_ENTRY_PAYLOAD_SIZE = 13; // index + 12 MAC nibbles
 

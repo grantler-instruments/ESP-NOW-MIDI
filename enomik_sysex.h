@@ -18,7 +18,7 @@ namespace enomik
         using PinQueryCallback = std::function<void(uint8_t pin)>;
         using PeerQueryCallback = std::function<void(uint8_t index)>;
         using VoidCallback = std::function<void()>;
-        using MACCallback = std::function<void(const uint8_t mac[6])>;
+        using AddPeerCallback = std::function<AddPeerResult(const uint8_t mac[6])>;
         using SendCallback = std::function<void(const midi_sysex_message &)>;
 
         void setOnSetPinConfig(PinConfigCallback cb) { _onSetPinConfig = cb; }
@@ -27,7 +27,7 @@ namespace enomik
         void setOnClearPinConfigs(VoidCallback cb) { _onClearPinConfigs = cb; }
         void setOnGetAllPinConfigs(VoidCallback cb) { _onGetAllPinConfigs = cb; }
         void setOnGetMAC(VoidCallback cb) { _onGetMAC = cb; }
-        void setOnAddPeer(MACCallback cb) { _onAddPeer = cb; }
+        void setOnAddPeer(AddPeerCallback cb) { _onAddPeer = cb; }
         void setOnGetAllPeers(VoidCallback cb) { _onGetAllPeers = cb; }
         void setOnGetPeer(PeerQueryCallback cb) { _onGetPeer = cb; }
         void setOnGetConfig(VoidCallback cb) { _onGetConfig = cb; }
@@ -182,7 +182,7 @@ namespace enomik
         VoidCallback _onClearPinConfigs;
         VoidCallback _onGetAllPinConfigs;
         VoidCallback _onGetMAC;
-        MACCallback _onAddPeer;
+        AddPeerCallback _onAddPeer;
         VoidCallback _onGetAllPeers;
         PeerQueryCallback _onGetPeer;
         VoidCallback _onGetConfig;
@@ -385,7 +385,17 @@ namespace enomik
                         Serial.print(":");
                 }
                 Serial.println();
-                _onAddPeer(mac);
+                const AddPeerResult result = _onAddPeer(mac);
+                if (result == AddPeerResult::Success)
+                {
+                    sendAddPeerResponse(true);
+                }
+                else
+                {
+                    sendErrorResponse(
+                        static_cast<uint8_t>(SysExCommand::ADD_PEER),
+                        addPeerErrorCode(result));
+                }
             }
             else
             {

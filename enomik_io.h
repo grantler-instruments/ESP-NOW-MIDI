@@ -195,7 +195,7 @@ namespace enomik
             _onMIDISendRequest = callback;
         }
 
-        void setOnAddPeerRequest(std::function<bool(uint8_t mac[])> callback)
+        void setOnAddPeerRequest(std::function<AddPeerResult(uint8_t mac[])> callback)
         {
             _onAddPeerRequest = callback;
         }
@@ -248,7 +248,7 @@ namespace enomik
 
         // External callbacks
         std::function<void(midi_message)> _onMIDISendRequest;
-        std::function<bool(uint8_t mac[])> _onAddPeerRequest;
+        std::function<AddPeerResult(uint8_t mac[])> _onAddPeerRequest;
         std::function<const uint8_t *(uint8_t index)> _onGetPeerRequest;
         std::function<void()> _onResetRequest;
 
@@ -331,7 +331,7 @@ namespace enomik
                 _sysexHandler.sendMACResponse(mac); });
 
             // Handler for adding peer
-            _sysexHandler.setOnAddPeer([this](const uint8_t mac[6])
+            _sysexHandler.setOnAddPeer([this](const uint8_t mac[6]) -> AddPeerResult
                                        {
                 Serial.print("SysEx: Adding peer ");
                 for (int i = 0; i < 6; i++)
@@ -340,19 +340,16 @@ namespace enomik
                     if (i < 5) Serial.print(":");
                 }
                 Serial.println();
-                
-                if (_onAddPeerRequest)
+
+                if (!_onAddPeerRequest)
                 {
-                    // Need to cast away const for the callback
-                    uint8_t macCopy[6];
-                    memcpy(macCopy, mac, 6);
-                    bool success = _onAddPeerRequest(macCopy);
-                    _sysexHandler.sendAddPeerResponse(success);
+                    return AddPeerResult::NotReady;
                 }
-                else
-                {
-                    _sysexHandler.sendAddPeerResponse(false);
-                } });
+
+                uint8_t macCopy[6];
+                memcpy(macCopy, mac, 6);
+                return _onAddPeerRequest(macCopy);
+            });
 
             // Handler for getting all peers (one response per peer, then stream end)
             _sysexHandler.setOnGetAllPeers([this]()

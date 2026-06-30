@@ -60,7 +60,7 @@ When building messages for Web MIDI / `mido`, the inner data is everything **bet
 | `0x04` | GET_ALL_PIN_CONFIGS | (none) | one `0x44` + pin config per stored pin |
 | `0x05` | DELETE_PIN_CONFIG | pin (1 byte) | `0x45` + pin byte, or [error](#errors) |
 | `0x06` | GET_MAC | (none) | `0x46` + [MAC nibbles](#mac-address-encoding) |
-| `0x07` | ADD_PEER | [12 MAC nibbles](#mac-address-encoding) (not 6 raw octets) | `0x47` + success byte (`1` / `0`) |
+| `0x07` | ADD_PEER | [12 MAC nibbles](#mac-address-encoding) (not 6 raw octets) | `0x47` + `1` on success; [errors](#errors) on failure |
 | `0x08` | GET_ALL_PEERS | (none) | one `0x48` + [peer entry](#peer-entry-payload) per peer, then empty `0x48` |
 | `0x09` | RESET | (none) | `0x49` (empty) |
 | `0x0A` | GET_VERSION | (none) | `0x4A` + major + minor |
@@ -184,7 +184,31 @@ Payload: 12 MAC nibbles.
 
 ### ADD_PEER → `0x47`
 
-Payload: one byte — `1` success, `0` failure. Decode errors use [errors](#errors) instead.
+On success only:
+
+```
+F0  7D  MAJOR  MINOR  47  01  F7
+```
+
+Any failure returns **`0x7F`** (never `0x47` + `0`). See [error codes](#error-codes).
+
+| Error | Code | When |
+|---|---|---|
+| `DECODE_FAILED` | `0x03` | Payload is not 12 MAC nibbles |
+| `NOT_READY` | `0x05` | ADD_PEER handler not registered |
+| `OPERATION_FAILED` | `0x06` | ESP-NOW or internal failure |
+| `PEER_TABLE_FULL` | `0x08` | No free peer slots |
+| `PEER_ALREADY_EXISTS` | `0x09` | MAC already stored |
+
+Examples (minor `0x0D` = v0.13):
+
+```
+Success:              F0 7D 00 0D 47 01 F7
+Table full:           F0 7D 00 0D 7F 07 08 F7
+Already exists:       F0 7D 00 0D 7F 07 09 F7
+ESP-NOW failed:       F0 7D 00 0D 7F 07 06 F7
+Bad MAC (6 raw bytes): F0 7D 00 0D 7F 07 03 F7
+```
 
 ### GET_ALL_PEERS → `0x48`
 
@@ -196,7 +220,7 @@ Returns the peer at the requested storage **index**. If the index is out of rang
 
 ### GET_CONFIG → `0x4C`
 
-One-shot full board snapshot for **pins + peers** (v0.14+):
+One-shot full board snapshot for **pins + peers** (v0.13+):
 
 1. Every stored pin config as `0x44` (same 8-byte payload as GET_ALL_PIN_CONFIGS).
 2. Every stored peer as `0x48` (same [peer entry](#peer-entry-payload) as GET_ALL_PEERS).
@@ -235,8 +259,10 @@ F0  7D  MAJOR  MINOR  7F  <failed_request>  <error_code>  [context]  F7
 | `0x03` | DECODE_FAILED | Short/malformed packet or bad payload |
 | `0x04` | PIN_NOT_FOUND | GET/DELETE for unconfigured pin (context = pin) |
 | `0x05` | NOT_READY | Handler not registered on device |
-| `0x06` | OPERATION_FAILED | Reserved for handler-level failures |
+| `0x06` | OPERATION_FAILED | ESP-NOW / internal handler failure |
 | `0x07` | PEER_NOT_FOUND | GET_PEER for invalid index (context = index) |
+| `0x08` | PEER_TABLE_FULL | ADD_PEER when peer table is full |
+| `0x09` | PEER_ALREADY_EXISTS | ADD_PEER for a MAC already stored |
 
 ## Examples
 
@@ -334,7 +360,8 @@ When adding a new command:
 
 | Change | Notes |
 |---|---|
-| v0.14 GET_CONFIG | One request streams `0x44` pins + `0x48` peers + empty `0x4C` done |
+| v0.13 ADD_PEER errors | Failures use `0x7F` with PEER_TABLE_FULL / PEER_ALREADY_EXISTS / OPERATION_FAILED |
+| v0.13 GET_CONFIG | One request streams `0x44` pins + `0x48` peers + empty `0x4C` done |
 | v0.13 peer model | GET_PEER (`0x0B`), GET_ALL_PEERS streams one `0x48` per peer + end marker; PEER_NOT_FOUND |
 | v0.13 stream end | GET_ALL_PIN_CONFIGS and GET_ALL_PEERS terminate with empty response packet |
 | Version header on all packets | `MAJOR` / `MINOR` after manufacturer ID |

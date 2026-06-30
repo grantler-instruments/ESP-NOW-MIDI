@@ -118,9 +118,10 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
 
         uint8_t receivedMac[6] = {};
         bool called = false;
-        handler.setOnAddPeer([&](const uint8_t mac[6]) {
+        handler.setOnAddPeer([&](const uint8_t mac[6]) -> enomik::AddPeerResult {
             memcpy(receivedMac, mac, 6);
             called = true;
+            return enomik::AddPeerResult::Success;
         });
 
         handler.handleSysEx(request.data, request.length);
@@ -130,7 +131,30 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
         {
             REQUIRE(receivedMac[i] == kSampleMac[i]);
         }
-        REQUIRE(sent.empty());
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::ADD_PEER_RESPONSE));
+        REQUIRE(sent[0].data[5] == 1);
+    }
+
+    SECTION("ADD_PEER failure sends specific error")
+    {
+        const auto macPkt = enomik::SysExEncoder::encodeMAC(kSampleMac);
+        const auto request = makeRequestPacket(
+            enomik::SysExCommand::ADD_PEER,
+            macPkt.getPayload(),
+            macPkt.getPayloadLength());
+
+        handler.setOnAddPeer([&](const uint8_t mac[6]) -> enomik::AddPeerResult {
+            (void)mac;
+            return enomik::AddPeerResult::AlreadyExists;
+        });
+
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE));
+        REQUIRE(sent[0].data[5] == static_cast<uint8_t>(enomik::SysExCommand::ADD_PEER));
+        REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::PEER_ALREADY_EXISTS));
     }
 
     SECTION("truncated packet sends DECODE_FAILED error")

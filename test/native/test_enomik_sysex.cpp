@@ -173,20 +173,31 @@ TEST_CASE("get MAC response encoding", "[sysex][response]")
 
 TEST_CASE("add peer response encoding", "[sysex][response]")
 {
-    SECTION("success")
+    const auto pkt = enomik::SysExEncoder::encodeByteResponse(
+        enomik::SysExCommand::ADD_PEER_RESPONSE, 1);
+    requireCommand(pkt, enomik::SysExCommand::ADD_PEER_RESPONSE);
+    REQUIRE(pkt.data[5] == 1);
+    REQUIRE(pkt.length == 7);
+}
+
+TEST_CASE("add peer error encoding", "[sysex][response]")
+{
+    SECTION("peer table full")
     {
-        const auto pkt = enomik::SysExEncoder::encodeByteResponse(
-            enomik::SysExCommand::ADD_PEER_RESPONSE, 1);
-        requireCommand(pkt, enomik::SysExCommand::ADD_PEER_RESPONSE);
-        REQUIRE(pkt.data[5] == 1);
+        const auto pkt = enomik::SysExEncoder::encodeError(
+            static_cast<uint8_t>(enomik::SysExCommand::ADD_PEER),
+            enomik::SysExErrorCode::PEER_TABLE_FULL);
+        REQUIRE(pkt.data[4] == static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE));
+        REQUIRE(pkt.data[5] == static_cast<uint8_t>(enomik::SysExCommand::ADD_PEER));
+        REQUIRE(pkt.data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::PEER_TABLE_FULL));
     }
 
-    SECTION("failure")
+    SECTION("peer already exists")
     {
-        const auto pkt = enomik::SysExEncoder::encodeByteResponse(
-            enomik::SysExCommand::ADD_PEER_RESPONSE, 0);
-        requireCommand(pkt, enomik::SysExCommand::ADD_PEER_RESPONSE);
-        REQUIRE(pkt.data[5] == 0);
+        const auto pkt = enomik::SysExEncoder::encodeError(
+            static_cast<uint8_t>(enomik::SysExCommand::ADD_PEER),
+            enomik::SysExErrorCode::PEER_ALREADY_EXISTS);
+        REQUIRE(pkt.data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::PEER_ALREADY_EXISTS));
     }
 }
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 # Keep these in sync with version.h
 PROTOCOL_MAJOR = 0
-PROTOCOL_MINOR = 14
+PROTOCOL_MINOR = 13
 
 MANUFACTURER_ID = 0x7D
 
@@ -60,6 +60,20 @@ ERR_PIN_NOT_FOUND = 0x04
 ERR_NOT_READY = 0x05
 ERR_OPERATION_FAILED = 0x06
 ERR_PEER_NOT_FOUND = 0x07
+ERR_PEER_TABLE_FULL = 0x08
+ERR_PEER_ALREADY_EXISTS = 0x09
+
+ERROR_NAMES = {
+    ERR_BAD_VERSION: "bad_version",
+    ERR_UNKNOWN_COMMAND: "unknown_command",
+    ERR_DECODE_FAILED: "decode_failed",
+    ERR_PIN_NOT_FOUND: "pin_not_found",
+    ERR_NOT_READY: "not_ready",
+    ERR_OPERATION_FAILED: "operation_failed",
+    ERR_PEER_NOT_FOUND: "peer_not_found",
+    ERR_PEER_TABLE_FULL: "peer_table_full",
+    ERR_PEER_ALREADY_EXISTS: "peer_already_exists",
+}
 
 PIN_CONFIG_RESPONSES = {
     RESP_SET_PIN_CONFIG,
@@ -241,8 +255,8 @@ def parse(data: list[int]) -> dict | None:
             "minor": payload[1] if len(payload) > 1 else None,
         }
 
-    if cmd == RESP_ADD_PEER and len(payload) >= 1:
-        return {"cmd": "add_peer", "success": bool(payload[0])}
+    if cmd == RESP_ADD_PEER and len(payload) >= 1 and payload[0] == 1:
+        return {"cmd": "add_peer_ok"}
 
     if cmd == RESP_RESET:
         return {"cmd": "reset"}
@@ -252,6 +266,7 @@ def parse(data: list[int]) -> dict | None:
             "cmd": "error",
             "failed_request": payload[0],
             "error_code": payload[1],
+            "error": ERROR_NAMES.get(payload[1], f"unknown_0x{payload[1]:02X}"),
         }
         if len(payload) >= 3:
             result["context"] = payload[2]
