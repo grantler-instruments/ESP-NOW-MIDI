@@ -19,9 +19,10 @@
  *     dmx.set(channel, value);  (MIT license)
  *
  * Wiring (Grove DMX512 / SN75176) with this sketch’s DMXSender:
- *   - ESP32 TX1 (GPIO 43 on S2 Mini; GPIO 17 on original ESP32) -> module RX/DI
- *     Remap TX pin: dmxSerial.begin(250000, SERIAL_8N2, -1, txGpioPin)
- *   - GPIO 21 -> DE/RE (driver enable; high = transmit)
+ *   - dmxTxPin (default GPIO 21) -> module RX/DI
+ *     ESP32-S2 can map UART TX to any free GPIO; change dmxTxPin below if needed.
+ *   - dePin (default GPIO 4) -> DE/RE (driver enable; high = transmit)
+ *     Must be a different GPIO than dmxTxPin.
  *   - 3.3V, GND; DMX out from module A/B to fixture.
  */
 #include "enomik_client.h"
@@ -33,7 +34,8 @@ enomik::Client _client;
 
 DMXSender dmx;
 HardwareSerial dmxSerial(1);  // UART1 (ESP32-S2/S3/C3 have no UART2; original ESP32 also works)
-const uint8_t dePin = 21;   // DE/RE for SN75176 (Grove DMX512)
+const uint8_t dmxTxPin = 21;  // UART TX -> RS-485 DI (any free GPIO on ESP32-S2)
+const uint8_t dePin = 4;      // DE/RE for SN75176 (must differ from dmxTxPin)
 const uint16_t numChannels = 512;
 
 struct ChannelState {
@@ -145,10 +147,8 @@ void setup() {
   _client.setHandleAfterTouchChannel(onAfterTouch);
   _client.setHandleAfterTouchPoly(onPolyAfterTouch);
 
-  // 250k baud, 8N2 (DMX512). Start serial before DMX sender.
-  // On lolin_s2_mini UART1 default TX is GPIO 43; remap with dmxSerial.begin(..., rxPin, txPin)
-  // if your RS-485 TX wire is on a different GPIO (e.g. GPIO 17 on original ESP32).
-  dmxSerial.begin(250000, SERIAL_8N2);
+  // 250k baud, 8N2 (DMX512). RX unused (-1); TX on dmxTxPin (any GPIO works on ESP32-S2).
+  dmxSerial.begin(250000, SERIAL_8N2, -1, dmxTxPin);
   dmx.begin(dmxSerial, dePin, numChannels);
 
   // register as a client by sending any message
