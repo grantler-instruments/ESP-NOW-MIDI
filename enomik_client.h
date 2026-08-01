@@ -18,6 +18,12 @@ MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, g_usb_midi, USBMIDI);
 
 namespace enomik
 {
+    /**
+     * @brief High-level MIDI client that bridges local I/O, ESP-NOW, and optional USB MIDI.
+     *
+     * MIDI channels use the user-facing 1–16 convention. Call begin() once
+     * and call loop() regularly from the Arduino loop.
+     */
     class Client
     {
     private:
@@ -178,15 +184,23 @@ namespace enomik
         }
 
     public:
-        static Client *instancePtr;
-        esp_now_midi espnowMIDI;
-        enomik::IO io;
+        static Client *instancePtr; ///< Active client used by static receive callbacks.
+        esp_now_midi espnowMIDI;    ///< Underlying ESP-NOW MIDI transport.
+        enomik::IO io;              ///< Local configurable I/O and SysEx interface.
 
+        /** @brief Constructs the client and makes it the active callback instance. */
         Client() : isInitialized(false)
         {
             instancePtr = this;
         }
 
+        /**
+         * @brief Initializes I/O, ESP-NOW MIDI, optional USB MIDI, and stored peers.
+         *
+         * Restores peers from persistent storage and sends a handshake when
+         * initialization succeeds. If peer storage cannot initialize, returns
+         * early and the client remains unavailable for peer registration.
+         */
         void begin()
         {
             io.begin();
@@ -437,6 +451,11 @@ namespace enomik
             sendHandShake();
         }
 
+        /**
+         * @brief Processes local I/O and optional incoming USB MIDI.
+         *
+         * Call this from the Arduino `loop()` function.
+         */
         void loop()
         {
 #ifdef HAS_USB_MIDI
@@ -445,6 +464,8 @@ namespace enomik
             io.loop();
         }
 
+        /** @brief Sends Note On over ESP-NOW and USB when available.
+         * @return `true` when the ESP-NOW send succeeds. */
         bool sendNoteOn(byte note, byte velocity, byte channel)
         {
             auto err = espnowMIDI.sendNoteOn(note, velocity, channel);
@@ -462,6 +483,8 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends Note Off over ESP-NOW and USB when available.
+         * @return `true` when the ESP-NOW send succeeds. */
         bool sendNoteOff(byte note, byte velocity, byte channel)
         {
             auto err = espnowMIDI.sendNoteOff(note, velocity, channel);
@@ -478,6 +501,8 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends Control Change over ESP-NOW and USB when available.
+         * @return `true` when the ESP-NOW send succeeds. */
         bool sendControlChange(byte control, byte value, byte channel)
         {
             auto err = espnowMIDI.sendControlChange(control, value, channel);
@@ -494,6 +519,8 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends Program Change over ESP-NOW and USB when available.
+         * @return `true` when the ESP-NOW send succeeds. */
         bool sendProgramChange(byte program, byte channel)
         {
             auto err = espnowMIDI.sendProgramChange(program, channel);
@@ -510,6 +537,8 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends channel aftertouch over ESP-NOW and USB when available.
+         * @return `true` when the ESP-NOW send succeeds. */
         bool sendAfterTouch(byte pressure, byte channel)
         {
             auto err = espnowMIDI.sendAfterTouch(pressure, channel);
@@ -526,6 +555,8 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends polyphonic aftertouch over ESP-NOW and USB when available.
+         * @return `true` when the ESP-NOW send succeeds. */
         bool sendPolyAfterTouch(byte note, byte pressure, byte channel)
         {
             auto err = espnowMIDI.sendAfterTouchPoly(note, pressure, channel);
@@ -542,6 +573,11 @@ namespace enomik
             return true;
         }
 
+        /**
+         * @brief Sends signed pitch bend over ESP-NOW and USB when available.
+         * @param value Pitch bend from `-8192` to `8191`; `0` is center.
+         * @return `true` when the ESP-NOW send succeeds.
+         */
         bool sendPitchBend(int value, byte channel) // signed; center = 0
         {
             auto err = espnowMIDI.sendPitchBend(value, channel);
@@ -558,6 +594,7 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends MIDI Start. @return `true` when the ESP-NOW send succeeds. */
         bool sendStart()
         {
             auto err = espnowMIDI.sendStart();
@@ -574,6 +611,7 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends MIDI Stop. @return `true` when the ESP-NOW send succeeds. */
         bool sendStop()
         {
             auto err = espnowMIDI.sendStop();
@@ -590,6 +628,7 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends MIDI Continue. @return `true` when the ESP-NOW send succeeds. */
         bool sendContinue()
         {
             auto err = espnowMIDI.sendContinue();
@@ -606,6 +645,7 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends MIDI Timing Clock. @return `true` when the ESP-NOW send succeeds. */
         bool sendClock()
         {
             auto err = espnowMIDI.sendClock();
@@ -622,6 +662,7 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends Song Position Pointer. @return `true` when the ESP-NOW send succeeds. */
         bool sendSongPosition(uint16_t value)
         {
             auto err = espnowMIDI.sendSongPosition(value);
@@ -638,6 +679,7 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends Song Select. @return `true` when the ESP-NOW send succeeds. */
         bool sendSongSelect(uint8_t value)
         {
             auto err = espnowMIDI.sendSongSelect(value);
@@ -654,6 +696,8 @@ namespace enomik
             return true;
         }
 
+        /** @brief Sends a complete SysEx buffer, including `F0` and `F7`.
+         * @return `true` when the ESP-NOW send succeeds. */
         bool sendSysEx(const uint8_t *data, uint16_t length)
         {
             auto err = espnowMIDI.sendSysex((uint8_t *)data, length);
