@@ -126,7 +126,7 @@ Practical reading:
 
 Pin configuration, peers, MAC, reset, and version query use MIDI SysEx. Full specification:
 
-**[doc/enomik-sysex-protocol.md](doc/enomik-sysex-protocol.md)**
+**[doc/enomik-sysex-protocol.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/doc/enomik-sysex-protocol.md)**
 
 ## Release candidates
 
@@ -139,7 +139,7 @@ cd scripts/wizard
 ./run.sh
 ```
 
-See **[scripts/wizard/README.md](scripts/wizard/README.md)** for phases, hardware pins, and flags.
+See **[scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/README.md)** for phases, hardware pins, and flags.
 
 ## Dependencies
 * dependencies for the library should be automatically installed

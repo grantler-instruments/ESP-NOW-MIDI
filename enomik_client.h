@@ -549,6 +549,7 @@ namespace enomik
         /**
          * @brief Sends signed pitch bend over ESP-NOW and USB when available.
          * @param value Pitch bend from `-8192` to `8191`; `0` is center.
+         * @param channel MIDI channel.
          * @return `true` when the ESP-NOW send succeeds.
          */
         bool sendPitchBend(int value, byte channel) // signed; center = 0

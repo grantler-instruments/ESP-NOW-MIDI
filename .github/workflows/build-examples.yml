@@ -1,4 +1,4 @@
-name: Build ESP32-S2 Mini Sketches
+name: Build and Test
 on:
   push:
     branches:
