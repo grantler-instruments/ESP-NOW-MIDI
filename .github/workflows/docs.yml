@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "mkdocs.yml"
+      - "Doxyfile"
+      - "*.h"
+      - "esp_now_midi.py"
+      - "README.md"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -32,10 +37,13 @@ jobs:
           cache-dependency-path: docs/requirements.txt
 
       - name: Install documentation dependencies
-        run: python -m pip install -r docs/requirements.txt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen unzip
+          python -m pip install -r docs/requirements.txt
 
-      - name: Build site
-        run: mkdocs build --strict --config-file docs/mkdocs.yml
+      - name: Generate and build site
+        run: bash docs/generate.sh
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

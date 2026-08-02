@@ -1,0 +1,44 @@
+/* Render the navigation tabs on the same line as the site name.
+   Requires the navigation.tabs.sticky feature, which places the tab bar
+   inside the sticky header element. */
+@media screen and (min-width: 76.25em) {
+  .md-header .md-tabs {
+    position: absolute;
+    top: 0;
+    /* Align with the centered 61rem header grid, leaving room for the
+       branding on the left and search/repository controls on the right. */
+    left: calc(50% - 19.5rem);
+    right: calc(50% - 16rem);
+    width: auto;
+    background-color: transparent;
+    overflow: visible;
+  }
+
+  .md-header .md-tabs .md-grid {
+    margin: 0;
+    max-width: none;
+  }
+
+  /* Keep the repository link as an icon so both API tabs fit. */
+  .md-header__source {
+    width: 2.4rem;
+  }
+
+  .md-header__source .md-source__repository {
+    display: none;
+  }
+}
+
+/* Give the wide benchmark table more room without widening every page. */
+@media screen and (min-width: 90em) {
+  .md-main__inner:has(#esp-now-midi-results-by-distance) {
+    max-width: 90rem;
+  }
+
+  .md-main__inner:has(#esp-now-midi-results-by-distance)
+    .md-content__inner table:not([class]) {
+    display: table;
+    width: 100%;
+    max-width: none;
+  }
+}

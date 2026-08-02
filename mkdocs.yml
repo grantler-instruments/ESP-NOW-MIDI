@@ -1,0 +1,51 @@
+site_name: ESP-NOW MIDI
+site_description: Arduino library for sending and receiving MIDI messages via ESP-NOW.
+site_url: https://grantler-instruments.github.io/ESP-NOW-MIDI/
+repo_url: https://github.com/grantler-instruments/ESP-NOW-MIDI
+repo_name: grantler-instruments/ESP-NOW-MIDI
+docs_dir: docs
+site_dir: site
+
+nav:
+  - Getting started: getting-started.md
+  - Examples: examples.md
+  - Benchmarks: benchmarks.md
+  - Arduino C++ API reference:
+      - Overview: arduino-api.md
+      - Classes: api/Classes/index.md
+      - Files: api/Files/index.md
+      - Namespaces: api/Namespaces/index.md
+  - CircuitPython API reference: circuitpython-api.md
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+
+extra_css:
+  - extra.css
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - .
+          options:
+            docstring_options:
+              warn_missing_types: false
+            heading_level: 2
+            members_order: source
+            show_root_heading: true
+            show_source: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences

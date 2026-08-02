@@ -5,6 +5,8 @@ test/native/build/
 .vscode
 .DS_Store
 .venv/
+.tools/
 .doxygen/
 docs/.doxygen/
+docs/api/
 site/
