@@ -119,8 +119,8 @@ class Wizard:
 
         # Pair with the dongle for Phase 2 (persisted on the client).
         if self.dongle_mac:
-            resp = self.request_sysex(link, sx.build_add_peer(self.dongle_mac), "add_peer", timeout=2.0)
-            ok = bool(resp and resp["success"])
+            resp = self.request_sysex(link, sx.build_add_peer(self.dongle_mac), "add_peer_ok", timeout=2.0)
+            ok = bool(resp)
             self.record("SysEx ADD_PEER (dongle)", ok, sx.mac_to_string(self.dongle_mac))
         else:
             self.record("SysEx ADD_PEER (dongle)", False, "no dongle MAC provided")

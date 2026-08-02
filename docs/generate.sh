@@ -51,8 +51,19 @@ fi
 
 cd "$ROOT"
 
-echo "==> Running doxygen"
-doxygen Doxyfile
+# Keep docs version in sync with version.h (single source of truth).
+VERSION_MAJOR="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_MAJOR[[:space:]]+([0-9]+).*/\1/p' version.h)"
+VERSION_MINOR="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_MINOR[[:space:]]+([0-9]+).*/\1/p' version.h)"
+VERSION_PATCH="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_PATCH[[:space:]]+([0-9]+).*/\1/p' version.h)"
+VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "error: could not parse version from version.h" >&2
+  exit 1
+fi
+
+echo "==> Running doxygen (PROJECT_NUMBER=$VERSION)"
+# Override PROJECT_NUMBER without editing Doxyfile.
+(cat Doxyfile; printf 'PROJECT_NUMBER = %s\n' "$VERSION") | doxygen -
 
 echo "==> Generating API markdown with doxybook2"
 rm -rf docs/api

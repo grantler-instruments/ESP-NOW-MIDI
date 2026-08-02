@@ -265,78 +265,51 @@ namespace enomik
                                         Serial.println("Sent other MIDI message");
                                 } });
 
-            // TODO: this should be part of the other handler
+            // Forward SysEx responses (including GET_ALL_PEERS) via the handler send path
             io.setOnSysExSendRequest([this](midi_sysex_message msg)
                                      { this->sendSysEx(msg.data, msg.length); });
 
-            io.setOnAddPeerRequest([this](uint8_t mac[])
+            io.setOnAddPeerRequest([this](uint8_t mac[]) -> AddPeerResult
                                    {
                                Serial.println("IO requested to add peer:");
                                macPrint(mac);
-                               if (this->espnowMIDI.addPeer(mac))
+
+                               if (!isInitialized)
                                {
-                                   // Store peer in persistent storage
-                                   if (this->peerStorage.add(mac))
-                                   {
-                                       Serial.println("Peer added and stored successfully");
-                                       return true;
-                                   }
-                                   else
-                                   {
-                                       Serial.println("Failed to store peer");
-                                       return false;
-                                   }
+                                   return AddPeerResult::OperationFailed;
                                }
-                               else
+
+                               if (peerStorage.isFull())
+                               {
+                                   Serial.println("Peer table full");
+                                   return AddPeerResult::TableFull;
+                               }
+
+                               if (peerStorage.exists(mac))
+                               {
+                                   Serial.println("Peer already exists");
+                                   return AddPeerResult::AlreadyExists;
+                               }
+
+                               if (!peerStorage.add(mac))
+                               {
+                                   Serial.println("Failed to store peer");
+                                   return AddPeerResult::OperationFailed;
+                               }
+
+                               if (!espnowMIDI.addPeer(mac))
                                {
                                    Serial.println("Failed to add peer to ESP-NOW");
-                                   return false;
-                               } });
+                                   peerStorage.remove(mac);
+                                   return AddPeerResult::OperationFailed;
+                               }
 
-            io.setOnGetPeersRequest([this]()
-                                    {
-        Serial.println("GET_PEERS request received");
-        
-        // Print peers
-        for (int i = 0; i < this->peerStorage.count(); i++)
-        {
-            const uint8_t *mac = this->peerStorage.get(i);
-            if (mac)
-            {
-                Serial.print("Peer ");
-                Serial.print(i);
-                Serial.print(": ");
-                macPrint(mac);
-                Serial.println();
-            }
-        } 
-        
-        midi_sysex_message msg;
-        msg.data[0] = 0xF0;
-        msg.data[1] = 0x7D; // Manufacturer ID (non-commercial)
-        msg.data[2] = static_cast<uint8_t>(SysExCommand::GET_PEERS_RESPONSE);
-        auto index = 3;
-        
-        for (int i = 0; i < this->peerStorage.count(); i++)
-        {
-            const uint8_t *mac = this->peerStorage.get(i);
-            if (mac)
-            {
-                // Encode MAC address (6 bytes -> 12 bytes in 7-bit format)
-                for (int j = 0; j < 6; j++)
-                {
-                    msg.data[index++] = (mac[j] >> 4) & 0x0F;  // High nibble
-                    msg.data[index++] = mac[j] & 0x0F;         // Low nibble
-                }
-            }
-        }
-        
-        msg.data[index] = 0xF7;
-        msg.length = index + 1;
-        Serial.println("Sending peer list via SysEx");
-        Serial.println("Total peers: " + String(this->peerStorage.count()));
-        
-        this->sendSysEx(msg.data, msg.length); });
+                               Serial.println("Peer added and stored successfully");
+                               return AddPeerResult::Success;
+                           });
+
+            io.setOnGetPeerRequest([this](uint8_t index) -> const uint8_t *
+                                    { return this->peerStorage.get(index); });
 
             io.setOnResetRequest([this]()
                                  {

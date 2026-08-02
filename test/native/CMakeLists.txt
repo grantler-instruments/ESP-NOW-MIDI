@@ -14,10 +14,10 @@ FetchContent_MakeAvailable(Catch2)
 
 set(LIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 
-add_executable(test_midi_packet test_midi_packet.cpp)
-target_include_directories(test_midi_packet PRIVATE "${LIB_ROOT}")
-target_link_libraries(test_midi_packet PRIVATE Catch2::Catch2WithMain)
+add_executable(native_tests test_midi_packet.cpp test_enomik_sysex.cpp test_enomik_sysex_handler.cpp)
+target_include_directories(native_tests PRIVATE "${LIB_ROOT}")
+target_link_libraries(native_tests PRIVATE Catch2::Catch2WithMain)
 
 include(CTest)
 include(Catch)
-catch_discover_tests(test_midi_packet)
+catch_discover_tests(native_tests)

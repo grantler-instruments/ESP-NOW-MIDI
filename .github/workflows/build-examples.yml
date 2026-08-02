@@ -22,6 +22,17 @@ jobs:
       - name: Run native tests
         run: ctest --test-dir test/native/build --output-on-failure
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check SysEx constant sync
+        run: python3 scripts/check_sysex_constants.py
+
+      - name: Run protocol constant tests
+        run: python3 -m unittest discover -s test/protocol -v
+
   circuitpython-test:
     runs-on: ubuntu-latest
     steps:
