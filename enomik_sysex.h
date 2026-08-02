@@ -1,12 +1,20 @@
 #include "./enomik_pinconfig.h"
 #include "./version.h"
 
+/**
+ * @file enomik_sysex.h
+ * @brief SysEx protocol support for configuring Enomik devices.
+ */
+
 namespace enomik
 {
     // Protocol version - uses library version for compatibility
     static constexpr uint8_t PROTOCOL_VERSION_MAJOR = ESP_NOW_MIDI_VERSION_MAJOR;
     static constexpr uint8_t PROTOCOL_VERSION_MINOR = ESP_NOW_MIDI_VERSION_MINOR;
 
+    /**
+     * @brief SysEx protocol command and response codes.
+     */
     enum class SysExCommand : uint8_t
     {
         SET_PIN_CONFIG = 0x01,
@@ -29,6 +37,9 @@ namespace enomik
         GET_VERSION_RESPONSE = 0x4A          // 74
     };
 
+    /**
+     * @brief A SysEx packet in the format `F0 7D major minor command payload F7`.
+     */
     struct SysExPacket
     {
         static constexpr uint8_t START_BYTE = 0xF0;
@@ -84,6 +95,9 @@ namespace enomik
         }
     };
 
+    /**
+     * @brief Encodes SysEx protocol packets and responses.
+     */
     class SysExEncoder
     {
     public:
@@ -187,6 +201,9 @@ namespace enomik
         }
     };
 
+    /**
+     * @brief Decodes SysEx protocol payloads.
+     */
     class SysExDecoder
     {
     public:
@@ -241,6 +258,9 @@ namespace enomik
         }
     };
 
+    /**
+     * @brief Routes SysEx commands to application callbacks and sends responses.
+     */
     class SysExHandler
     {
     public:
