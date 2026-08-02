@@ -7,6 +7,7 @@ on:
       - "docs/**"
       - "mkdocs.yml"
       - "Doxyfile"
+      - "version.h"
       - "*.h"
       - "esp_now_midi.py"
       - "README.md"
