@@ -91,10 +91,10 @@ Use the **signed** API everywhere unless you already have raw wire bytes:
 
 `sendPitchBend()` and receive callbacks match the [FortySevenEffects MIDI library](https://github.com/FortySevenEffects/arduino_midi_library) convention. Pass handler values through unchanged — do not add or subtract 8192.
 
-### enomik 3000 (WIP)
+### enomik 3000
 Drop `enomik::Client` into your firmware and your board turns into a MIDI SysEx–configurable device: routing, pin modes, and basic I/O can be set from a host over SysEx instead of hard-coding every mapping. This library is integrated with the [ESP-NOW MIDI Kit](https://grantler-instruments.github.io/enomik-app/) — the no-code app for creating (wireless) MIDI devices.
 
-### Circuit Python (WIP)
+### Circuit Python
 A circuit python version is in the making as well. Contributions here are very welcome.
 
 ## Benchmarks
@@ -128,6 +128,19 @@ Pin configuration, peers, MAC, reset, and version query use MIDI SysEx. Full spe
 
 **[doc/enomik-sysex-protocol.md](doc/enomik-sysex-protocol.md)**
 
+## Release candidates
+
+Before tagging a release, run the interactive **test wizard** against real hardware. CI covers unit tests and example builds; it does **not** replace this MIDI integration check.
+
+Flash `examples/client_test` (and `examples/dongle` for the wireless phase), then:
+
+```bash
+cd scripts/wizard
+./run.sh
+```
+
+See **[scripts/wizard/README.md](scripts/wizard/README.md)** for phases, hardware pins, and flags.
+
 ## Dependencies
 * dependencies for the library should be automatically installed
 * examples/dongle additionally depends on
@@ -142,7 +155,6 @@ Pin configuration, peers, MAC, reset, and version query use MIDI SysEx. Full spe
 
 ## Contributing
 If you find any bugs feel free to submit an issue on github, also PRs are very welcome.
-
 
 ## License
 This library is licensed under the **GNU Lesser General Public License (LGPL) version 3**.
