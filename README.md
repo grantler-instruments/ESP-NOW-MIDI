@@ -2,6 +2,10 @@
 This is an Arduino library for sending and receiving MIDI messages via the ESP-NOW protocol.
 A typical setup requires two ESP-NOW capable boards, where the board connected to your computer needs to be MIDI-capable 
 
+## Documentation
+
+The full guide is published at [grantler-instruments.github.io/ESP-NOW-MIDI](https://grantler-instruments.github.io/ESP-NOW-MIDI/).
+
 The ESP32-S2 Mini (Lolin S2 Mini) can act as both a receiver and a sender. An S3 should also work as a receiver.
 Any ESP board with Wi-Fi capabilities should work as a sender.
 

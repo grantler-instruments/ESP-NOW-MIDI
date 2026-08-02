@@ -1,6 +1,12 @@
+/**
+ * @file esp_now_midi.h
+ * @brief ESP-NOW transport and MIDI message API.
+ */
 #pragma once
+/** Maximum number of ESP-NOW peers tracked by an instance. */
 #define MAX_PEERS 20
 #ifndef ESP_NOW_MIDI_CHANNEL
+/** Wi-Fi channel used by ESP-NOW MIDI peers. Override before including this header. */
 #define ESP_NOW_MIDI_CHANNEL 6
 #endif
 #include "./version.h"
@@ -8,14 +14,19 @@
 #include <esp_wifi.h>
 #include <WiFi.h>
 #include "./midiHelpers.h"
-#define ESP_NOW_DEBUGGING 0
+#define ESP_NOW_DEBUGGING 0 ///< Enable send-status logging when set to `1`.
 
-// Optimized peer storage with packed MAC address for fast comparison
+/** @brief Stored representation of an ESP-NOW peer. */
 struct PeerInfo
 {
-  uint8_t mac[6];
-  uint64_t packed_mac; // Stored as 48-bit value in 64-bit integer
+  uint8_t mac[6];       ///< Peer Wi-Fi MAC address.
+  uint64_t packed_mac; ///< MAC address packed into the lower 48 bits.
 
+  /**
+   * @brief Packs a six-byte MAC address for fast comparisons.
+   * @param mac MAC address to pack.
+   * @return The packed MAC address.
+   */
   static uint64_t packMac(const uint8_t mac[6])
   {
     uint64_t packed = 0;
@@ -27,11 +38,31 @@ struct PeerInfo
   }
 };
 
+/**
+ * @brief Sends and receives MIDI messages over ESP-NOW.
+ *
+ * Call begin() once before registering peers or exchanging messages. All send
+ * methods transmit to every registered peer. Register receive callbacks with
+ * the `setHandle*` methods.
+ */
 class esp_now_midi
 {
 public:
+  /**
+   * @brief Callback invoked after ESP-NOW sends a packet.
+   * @param info ESP-IDF transmission details.
+   * @param status Delivery result reported by ESP-NOW.
+   */
   typedef void (*DataSentCallback)(const wifi_tx_info_t *info, esp_now_send_status_t status);
 
+  /**
+   * @brief Default ESP-NOW send-status callback.
+   *
+   * When `ESP_NOW_DEBUGGING` is `1`, writes the delivery result to Serial.
+   *
+   * @param info ESP-IDF transmission details.
+   * @param status Delivery result reported by ESP-NOW.
+   */
   static void DefaultOnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
   {
 #if ESP_NOW_DEBUGGING == 1
@@ -40,6 +71,9 @@ public:
 #endif
   }
 
+  /**
+   * @brief Internal adapter that routes ESP-NOW send events to the active instance.
+   */
   static void SendCallbackAdapter(const wifi_tx_info_t *info, esp_now_send_status_t status)
   {
     if (_instance && _instance->userDataSentCallback)
@@ -48,6 +82,9 @@ public:
     }
   }
 
+  /**
+   * @brief Internal adapter that routes ESP-NOW receive events to the active instance.
+   */
   static void OnDataRecvStatic(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
   {
     if (_instance)
@@ -55,6 +92,19 @@ public:
       _instance->OnDataRecv(recv_info->src_addr, incomingData, len);
     }
   }
+  /**
+   * @brief Initializes Wi-Fi, ESP-NOW, and the receive/send callbacks.
+   *
+   * Initialization failures are reported to Serial and cause an early return.
+   * Only one active instance is supported because ESP-NOW callbacks are routed
+   * through a static instance pointer.
+   *
+   * @param reducePowerAtCostOfLatency Enable modem sleep and lower transmit
+   * power to save energy; disabled by default for lower latency.
+   * @param autoPeerDiscovery Add an unknown message sender as a peer when it
+   * first sends data.
+   * @param callback Optional callback invoked after each ESP-NOW send.
+   */
   void begin(bool reducePowerAtCostOfLatency = false, bool autoPeerDiscovery = true, DataSentCallback callback = DefaultOnDataSent)
   {
     _instance = this;
@@ -103,7 +153,12 @@ public:
     esp_now_register_recv_cb(OnDataRecvStatic);
   }
 
-  // Add a new peer
+  /**
+   * @brief Registers an ESP-NOW peer for MIDI transmission.
+   * @param macAddress Six-byte Wi-Fi MAC address of the peer.
+   * @return `true` when the peer was added to ESP-NOW and the local peer list;
+   * `false` when the peer limit is reached or ESP-NOW rejects it.
+   */
   bool addPeer(const uint8_t macAddress[6])
   {
     if (_peersCount >= MAX_PEERS)
@@ -145,6 +200,7 @@ public:
     return true;
   }
 
+  /** @brief Removes every registered peer from ESP-NOW and the local list. */
   void clearPeers()
   {
     Serial.println("Clearing all peers from ESP-NOW...");
@@ -177,11 +233,16 @@ public:
     Serial.println("All peers cleared");
   }
 
+  /**
+   * @brief Gets the number of registered peers.
+   * @return Current peer count.
+   */
   int getPeersCount() const
   {
     return _peersCount;
   }
 
+  /** @brief Prints every registered peer MAC address to Serial. */
   void printPeers() const
   {
     Serial.println("=== Registered ESP-NOW Peers ===");
@@ -201,7 +262,13 @@ public:
     Serial.println("================================");
   }
 
-  // Send to all peers
+  /**
+   * @brief Sends raw data to every registered ESP-NOW peer.
+   * @param data Bytes to transmit.
+   * @param len Number of bytes in @p data.
+   * @return `ESP_OK` when all sends are accepted, `ESP_FAIL` when no peers are
+   * registered, or the last ESP-NOW error encountered.
+   */
   esp_err_t sendToAllPeers(const uint8_t *data, size_t len)
   {
     esp_err_t result = ESP_OK;
@@ -223,6 +290,13 @@ public:
     return result;
   }
 
+  /**
+   * @brief Sends a MIDI Note On message to all peers.
+   * @param note MIDI note number.
+   * @param velocity Note velocity.
+   * @param channel MIDI channel.
+   * @return ESP-NOW send result.
+   */
   inline esp_err_t sendNoteOn(byte note, byte velocity, byte channel)
   {
     midi_message message;
@@ -235,6 +309,13 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends a MIDI Note Off message to all peers.
+   * @param note MIDI note number.
+   * @param velocity Release velocity.
+   * @param channel MIDI channel.
+   * @return ESP-NOW send result.
+   */
   inline esp_err_t sendNoteOff(byte note, byte velocity, byte channel)
   {
     midi_message message;
@@ -247,6 +328,13 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends a MIDI Control Change message to all peers.
+   * @param control Controller number.
+   * @param value Controller value.
+   * @param channel MIDI channel.
+   * @return ESP-NOW send result.
+   */
   inline esp_err_t sendControlChange(byte control, byte value, byte channel)
   {
     midi_message message;
@@ -259,6 +347,12 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends a MIDI Program Change message to all peers.
+   * @param program Program number.
+   * @param channel MIDI channel.
+   * @return ESP-NOW send result.
+   */
   inline esp_err_t sendProgramChange(byte program, byte channel)
   {
     midi_message message;
@@ -271,6 +365,12 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends channel aftertouch to all peers.
+   * @param pressure Channel pressure.
+   * @param channel MIDI channel.
+   * @return ESP-NOW send result.
+   */
   inline esp_err_t sendAfterTouch(byte pressure, byte channel)
   {
     midi_message message;
@@ -283,6 +383,13 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends polyphonic aftertouch for one note to all peers.
+   * @param note MIDI note number.
+   * @param pressure Per-note pressure.
+   * @param channel MIDI channel.
+   * @return ESP-NOW send result.
+   */
   inline esp_err_t sendAfterTouch(byte note, byte pressure, byte channel)
   {
     midi_message message;
@@ -295,11 +402,27 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends polyphonic aftertouch to all peers.
+   * @param note MIDI note number.
+   * @param pressure Per-note pressure.
+   * @param channel MIDI channel.
+   * @return ESP-NOW send result.
+   * @see sendAfterTouch(byte, byte, byte)
+   */
   inline esp_err_t sendAfterTouchPoly(byte note, byte pressure, byte channel)
   {
     return sendAfterTouch(note, pressure, channel);
   }
 
+  /**
+   * @brief Sends a raw 14-bit MIDI pitch-bend value to all peers.
+   * @param value Wire-format pitch bend from `0` to `16383`; `8192` is center.
+   * Values are masked to 14 bits.
+   * @param channel MIDI channel.
+   * @return ESP-NOW send result.
+   * @see sendPitchBend(int16_t, byte)
+   */
   inline esp_err_t sendPitchBendRaw(int value, byte channel)
   {
     // Wire-format 14-bit value: 0..16383, center (no bend) = 8192.
@@ -315,6 +438,16 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends signed MIDI pitch bend to all peers.
+   * @param value Pitch bend from `-8192` to `8191`; `0` is center. Values
+   * outside this range are clamped.
+   * @param channel MIDI channel.
+   * @return ESP-NOW send result.
+   *
+   * This representation matches the FortySevenEffects MIDI library and the
+   * value delivered to setHandlePitchBend().
+   */
   inline esp_err_t sendPitchBend(int16_t value, byte channel)
   {
     // Signed pitch bend: -8192..8191, center (no bend) = 0.
@@ -330,6 +463,8 @@ public:
     return sendPitchBendRaw(raw, channel);
   }
 
+  /** @brief Sends the MIDI Start real-time message to all peers.
+   * @return ESP-NOW send result. */
   inline esp_err_t sendStart()
   {
     midi_message message;
@@ -342,6 +477,8 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /** @brief Sends the MIDI Stop real-time message to all peers.
+   * @return ESP-NOW send result. */
   inline esp_err_t sendStop()
   {
     midi_message message;
@@ -354,6 +491,8 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /** @brief Sends the MIDI Continue real-time message to all peers.
+   * @return ESP-NOW send result. */
   inline esp_err_t sendContinue()
   {
     midi_message message;
@@ -366,6 +505,8 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /** @brief Sends the MIDI Timing Clock real-time message to all peers.
+   * @return ESP-NOW send result. */
   inline esp_err_t sendClock()
   {
     midi_message message;
@@ -378,6 +519,11 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends a MIDI Song Position Pointer message to all peers.
+   * @param value Song position; only its lower 14 bits are sent.
+   * @return ESP-NOW send result.
+   */
   inline esp_err_t sendSongPosition(uint16_t value)
   {
     midi_message message;
@@ -391,6 +537,11 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends a MIDI Song Select message to all peers.
+   * @param value Song number; only its lower 7 bits are sent.
+   * @return ESP-NOW send result.
+   */
   inline esp_err_t sendSongSelect(uint8_t value)
   {
     midi_message message;
@@ -404,6 +555,8 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /** @brief Sends a MIDI Tune Request message to all peers.
+   * @return ESP-NOW send result. */
   inline esp_err_t sendTuneRequest()
   {
     midi_message message;
@@ -416,6 +569,11 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends a MIDI Time Code Quarter Frame message to all peers.
+   * @param value Encoded quarter-frame value; only its lower 7 bits are sent.
+   * @return ESP-NOW send result.
+   */
   inline esp_err_t sendTimeCode(uint8_t value)
   {
     midi_message message;
@@ -429,6 +587,8 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /** @brief Sends a MIDI Active Sensing message to all peers.
+   * @return ESP-NOW send result. */
   inline esp_err_t sendActiveSensing()
   {
     midi_message message;
@@ -440,6 +600,8 @@ public:
     midi_message_packet packet = midi_message_packet::fromMessage(message);
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
+  /** @brief Sends a MIDI System Reset message to all peers.
+   * @return ESP-NOW send result. */
   inline esp_err_t sendSystemReset()
   {
     midi_message message;
@@ -452,6 +614,14 @@ public:
     return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
   }
 
+  /**
+   * @brief Sends a SysEx payload to all peers.
+   * @param data SysEx bytes in the fixed 128-byte message buffer.
+   * @param length Number of payload bytes to copy from @p data.
+   * @return ESP-NOW send result.
+   *
+   * Incoming SysEx messages are not dispatched to a callback by this class.
+   */
   inline esp_err_t sendSysex(uint8_t data[128], uint8_t length)
   {
     midi_sysex_message sysexMessage;
@@ -460,6 +630,16 @@ public:
     return sendToAllPeers((uint8_t *)&sysexMessage, sizeof(sysexMessage));
   }
 
+  /**
+   * @brief Dispatches an incoming ESP-NOW MIDI packet to its registered handler.
+   * @param mac Source MAC address.
+   * @param incomingData Received ESP-NOW payload.
+   * @param len Number of received bytes.
+   *
+   * This is called by the ESP-NOW receive callback. When automatic peer
+   * discovery is enabled, unknown senders are added before dispatch. Prefer
+   * the `setHandle*` methods for application-level MIDI handling.
+   */
   void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
   {
     if (_autoPeerDiscovery && !hasPeer(mac))
@@ -557,87 +737,146 @@ public:
     }
   }
 
+  /**
+   * @brief Registers a Note On receive handler.
+   * @param callback Called with channel, note, and velocity; pass `nullptr` to clear it.
+   */
   void setHandleNoteOn(void (*callback)(byte channel, byte note, byte velocity))
   {
     onNoteOnHandler = callback;
   }
 
+  /**
+   * @brief Registers a Note Off receive handler.
+   * @param callback Called with channel, note, and velocity; pass `nullptr` to clear it.
+   */
   void setHandleNoteOff(void (*callback)(byte channel, byte note, byte velocity))
   {
     onNoteOffHandler = callback;
   }
 
+  /**
+   * @brief Registers a Control Change receive handler.
+   * @param callback Called with channel, controller number, and value; pass `nullptr` to clear it.
+   */
   void setHandleControlChange(void (*callback)(byte channel, byte control, byte value))
   {
     onControlChangeHandler = callback;
   }
 
+  /**
+   * @brief Registers a Program Change receive handler.
+   * @param callback Called with channel and program number; pass `nullptr` to clear it.
+   */
   void setHandleProgramChange(void (*callback)(byte channel, byte program))
   {
     onProgramChangeHandler = callback;
   }
 
-  // Callback value is signed pitch bend: -8192..8191, center = 0.
+  /**
+   * @brief Registers a signed pitch-bend receive handler.
+   * @param callback Called with channel and pitch bend from `-8192` to `8191`;
+   * `0` is center. Pass `nullptr` to clear it.
+   */
   void setHandlePitchBend(void (*callback)(byte channel, int value))
   {
     onPitchBendHandler = callback;
   }
 
+  /**
+   * @brief Registers a channel-aftertouch receive handler.
+   * @param callback Called with channel and pressure; pass `nullptr` to clear it.
+   */
   void setHandleAfterTouchChannel(void (*callback)(byte channel, byte pressure))
   {
     onAfterTouchChannelHandler = callback;
   }
 
+  /**
+   * @brief Registers a polyphonic-aftertouch receive handler.
+   * @param callback Called with channel, note, and pressure; pass `nullptr` to clear it.
+   */
   void setHandleAfterTouchPoly(void (*callback)(byte channel, byte note, byte pressure))
   {
     onAfterTouchPolyHandler = callback;
   }
 
+  /** @brief Registers a MIDI Start receive handler.
+   * @param callback Called when Start is received; pass `nullptr` to clear it. */
   void setHandleStart(void (*callback)())
   {
     onStartHandler = callback;
   }
 
+  /** @brief Registers a MIDI Stop receive handler.
+   * @param callback Called when Stop is received; pass `nullptr` to clear it. */
   void setHandleStop(void (*callback)())
   {
     onStopHandler = callback;
   }
 
+  /** @brief Registers a MIDI Continue receive handler.
+   * @param callback Called when Continue is received; pass `nullptr` to clear it. */
   void setHandleContinue(void (*callback)())
   {
     onContinueHandler = callback;
   }
 
+  /** @brief Registers a MIDI Timing Clock receive handler.
+   * @param callback Called when Timing Clock is received; pass `nullptr` to clear it. */
   void setHandleClock(void (*callback)())
   {
     onClockHandler = callback;
   }
 
+  /**
+   * @brief Registers a Song Position Pointer receive handler.
+   * @param callback Called with the decoded 14-bit song position; pass
+   * `nullptr` to clear it.
+   */
   void setHandleSongPosition(void (*callback)(uint16_t value))
   {
     onSongPositionHandler = callback;
   }
 
+  /**
+   * @brief Registers a Song Select receive handler.
+   * @param callback Called with the song number; pass `nullptr` to clear it.
+   */
   void setHandleSongSelect(void (*callback)(byte value))
   {
     onSongSelectHandler = callback;
   }
 
+  /**
+   * @brief Registers a MIDI Time Code Quarter Frame receive handler.
+   * @param callback Called with the encoded quarter-frame value; pass `nullptr`
+   * to clear it.
+   */
   void setHandleTimeCode(void (*callback)(byte value))
   {
     onTimeCodeHandler = callback;
   }
 
+  /** @brief Registers an Active Sensing receive handler.
+   * @param callback Called when Active Sensing is received; pass `nullptr` to clear it. */
   void setHandleActiveSensing(void (*callback)())
   {
     onActiveSensingHandler = callback;
   }
 
+  /** @brief Registers a System Reset receive handler.
+   * @param callback Called when System Reset is received; pass `nullptr` to clear it. */
   void setHandleSystemReset(void (*callback)())
   {
     onSystemResetHandler = callback;
   }
 
+  /**
+   * @brief Checks whether a MAC address is registered as a peer.
+   * @param mac Six-byte Wi-Fi MAC address to look up.
+   * @return `true` when the peer is registered.
+   */
   bool hasPeer(const uint8_t mac[6]) const
   {
     uint64_t packed = PeerInfo::packMac(mac);

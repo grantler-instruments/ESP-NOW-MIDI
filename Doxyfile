@@ -1,0 +1,29 @@
+PROJECT_NAME           = "ESP-NOW MIDI"
+PROJECT_BRIEF          = "Arduino library for sending and receiving MIDI messages via ESP-NOW."
+PROJECT_NUMBER         = 0.12.3
+OUTPUT_DIRECTORY       = .doxygen
+
+INPUT                  = .
+FILE_PATTERNS          = *.h *.md
+RECURSIVE              = NO
+EXCLUDE_PATTERNS       = .doxygen/* docs/*
+USE_MDFILE_AS_MAINPAGE = README.md
+
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+JAVADOC_AUTOBRIEF      = YES
+MARKDOWN_SUPPORT       = YES
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+
+# Keep output filenames identical on macOS and Linux. Without this, Doxygen
+# defaults to SYSTEM: Linux preserves camelCase (classenomik_1_1Client) while
+# macOS mangles to underscores (classenomik_1_1_client), which breaks handwritten
+# links and CI --strict MkDocs builds.
+CASE_SENSE_NAMES       = NO
+
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = YES
+XML_OUTPUT             = xml

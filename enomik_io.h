@@ -47,6 +47,12 @@ namespace enomik
         bool touched = false;
     };
 
+    /**
+     * @brief Configurable GPIO-to-MIDI bridge with SysEx configuration support.
+     *
+     * Pin mappings are restored from NVS in begin(). Call loop() regularly to
+     * poll configured input pins and emit MIDI through the registered callback.
+     */
     class IO
     {
     public:
@@ -55,6 +61,7 @@ namespace enomik
         static constexpr unsigned long ANALOG_MIN_INTERVAL = 5;
         static constexpr float SMOOTHING_FACTOR = 0.3f;
 
+        /** @brief Restores pin configurations, initializes their hardware, and configures SysEx handlers. */
         void begin()
         {
             analogReadResolution(ADC_RESOLUTION);
@@ -70,6 +77,7 @@ namespace enomik
             setupSysExHandlers();
         }
 
+        /** @brief Polls configured input pins and sends MIDI for relevant changes. */
         void loop()
         {
             unsigned long now = millis();
@@ -86,7 +94,7 @@ namespace enomik
             }
         }
 
-        // MIDI Input Handlers
+        /** @brief Applies a received Note On message to matching output pins. */
         void onNoteOn(byte channel, byte note, byte velocity)
         {
             for (auto &config : _pinConfigs)
@@ -116,6 +124,7 @@ namespace enomik
             }
         }
 
+        /** @brief Applies a received Note Off message to matching output pins. */
         void onNoteOff(byte channel, byte note, byte velocity)
         {
             for (auto &config : _pinConfigs)
@@ -138,6 +147,7 @@ namespace enomik
             }
         }
 
+        /** @brief Applies raw 14-bit pitch bend (`0`–`16383`, center `8192`) to matching output pins. */
         void onPitchBend(byte channel, int bend)
         {
             for (auto &config : _pinConfigs)
@@ -158,6 +168,7 @@ namespace enomik
             }
         }
 
+        /** @brief Applies a received Control Change message to matching output pins. */
         void onControlChange(byte channel, byte control, byte value)
         {
             for (auto &config : _pinConfigs)
@@ -179,41 +190,48 @@ namespace enomik
             }
         }
 
+        /** @brief Receives Program Change; currently reserved for future use. */
         void onProgramChange(byte channel, byte program)
         {
             // Reserved for future use
         }
 
+        /** @brief Passes an incoming SysEx message to the configuration handler. */
         void onSysEx(const uint8_t *data, uint16_t length)
         {
             _sysexHandler.handleSysEx(data, length);
         }
 
-        // External callbacks (set by main application)
+        /** @brief Registers the callback used to send MIDI produced by pin inputs. */
         void setOnMIDISendRequest(std::function<void(midi_message)> callback)
         {
             _onMIDISendRequest = callback;
         }
 
+        /** @brief Registers the SysEx add-peer callback. */
         void setOnAddPeerRequest(std::function<AddPeerResult(uint8_t mac[])> callback)
         {
             _onAddPeerRequest = callback;
         }
 
+        /** @brief Registers the SysEx get-peer-by-index callback. */
         void setOnGetPeerRequest(std::function<const uint8_t *(uint8_t index)> callback)
         {
             _onGetPeerRequest = callback;
         }
 
+        /** @brief Registers the callback invoked after a SysEx reset. */
         void setOnResetRequest(std::function<void()> callback)
         {
             _onResetRequest = callback;
         }
+        /** @brief Registers the callback used for outgoing SysEx responses. */
         void setOnSysExSendRequest(std::function<void(midi_sysex_message)> callback)
         {
             _onSysExSendRequest = callback;
         }
 
+        /** @brief Prints all loaded pin configurations to Serial. */
         void printPinConfigs()
         {
             Serial.println("=== Pin Configurations ===");

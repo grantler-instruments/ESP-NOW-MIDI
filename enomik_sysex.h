@@ -8,8 +8,16 @@
 
 #include <functional>
 
+/**
+ * @file enomik_sysex.h
+ * @brief SysEx protocol support for configuring Enomik devices.
+ */
+
 namespace enomik
 {
+    /**
+     * @brief Routes SysEx commands to application callbacks and sends responses.
+     */
     class SysExHandler
     {
     public:
