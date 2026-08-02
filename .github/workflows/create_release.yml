@@ -20,6 +20,12 @@ jobs:
           - fqbn: "esp32:esp32:lolin_s3_mini"
             name: "lolin_s3_mini"
             build_properties: "USBMode=tinyusb"
+          - fqbn: "esp32:esp32:esp32s2"
+            name: "esp32s2"
+            build_properties: ""
+          - fqbn: "esp32:esp32:esp32s3:USBMode=default"
+            name: "esp32s3"
+            build_properties: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -113,8 +119,10 @@ jobs:
           FOLDER=$(echo "${TAG}" | sed 's/\./-/g')
           git clone https://x-access-token:${PAT}@github.com/grantler-instruments/enomik-app.git enomik-app
           mkdir -p "enomik-app/app/public/firmware/${FOLDER}"
-          for sketch in client dongle print_mac; do
-            cp all-binaries/lolin_s2_mini_${sketch}_*.ino.bin "enomik-app/app/public/firmware/${FOLDER}/"
+          for board in lolin_s2_mini esp32s2 esp32s3; do
+            for sketch in client dongle print_mac; do
+              cp all-binaries/${board}_${sketch}_*.ino.bin "enomik-app/app/public/firmware/${FOLDER}/"
+            done
           done
           python3 << 'PY'
           import json, os

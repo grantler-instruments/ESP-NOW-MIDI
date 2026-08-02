@@ -65,6 +65,10 @@ jobs:
         board:
           - fqbn: "esp32:esp32:lolin_s2_mini"
             name: "lolin_s2_mini"
+          - fqbn: "esp32:esp32:esp32s2"
+            name: "esp32s2"
+          - fqbn: "esp32:esp32:esp32s3:USBMode=default"
+            name: "esp32s3"
     
     steps:
       - name: Checkout repository
@@ -140,5 +144,5 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: esp32s2-binaries-${{ matrix.board.name }}
+          name: esp32-binaries-${{ matrix.board.name }}
           path: binaries/*.bin
