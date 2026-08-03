@@ -101,6 +101,8 @@ TEST_CASE("response commands are request + 64", "[sysex][protocol]")
         enomik::SysExCommand::GET_VERSION,
         enomik::SysExCommand::GET_PEER,
         enomik::SysExCommand::GET_CONFIG,
+        enomik::SysExCommand::SET_MIDI_LOOPBACK,
+        enomik::SysExCommand::GET_MIDI_LOOPBACK,
     };
 
     for (const auto request : requests)
@@ -247,6 +249,38 @@ TEST_CASE("get config response encoding", "[sysex][response]")
     requireCommand(pkt, enomik::SysExCommand::GET_CONFIG_RESPONSE);
     REQUIRE(pkt.length == 6);
     REQUIRE(pkt.getPayloadLength() == 0);
+}
+
+TEST_CASE("midi loopback encode and decode", "[sysex][loopback]")
+{
+    SECTION("encode set response")
+    {
+        const auto pkt = enomik::SysExEncoder::encodeByteResponse(
+            enomik::SysExCommand::SET_MIDI_LOOPBACK_RESPONSE, 1);
+        requireCommand(pkt, enomik::SysExCommand::SET_MIDI_LOOPBACK_RESPONSE);
+        REQUIRE(pkt.length == 7);
+        REQUIRE(pkt.data[5] == 1);
+    }
+
+    SECTION("decode accepts 0 and 1")
+    {
+        bool enabled = true;
+        const uint8_t off[] = {0};
+        const uint8_t on[] = {1};
+        REQUIRE(enomik::SysExDecoder::decodeMidiLoopback(off, 1, enabled));
+        REQUIRE_FALSE(enabled);
+        REQUIRE(enomik::SysExDecoder::decodeMidiLoopback(on, 1, enabled));
+        REQUIRE(enabled);
+    }
+
+    SECTION("decode rejects invalid values")
+    {
+        bool enabled = false;
+        const uint8_t bad[] = {2};
+        const uint8_t empty[] = {};
+        REQUIRE_FALSE(enomik::SysExDecoder::decodeMidiLoopback(bad, 1, enabled));
+        REQUIRE_FALSE(enomik::SysExDecoder::decodeMidiLoopback(empty, 0, enabled));
+    }
 }
 
 TEST_CASE("reset response encoding", "[sysex][response]")

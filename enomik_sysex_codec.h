@@ -27,6 +27,8 @@ namespace enomik
         GET_VERSION = 0x0A,
         GET_PEER = 0x0B,
         GET_CONFIG = 0x0C,
+        SET_MIDI_LOOPBACK = 0x0D,
+        GET_MIDI_LOOPBACK = 0x0E,
 
         // Response codes: always request command + 64 (0x40)
         SET_PIN_CONFIG_RESPONSE = 0x41,
@@ -41,6 +43,8 @@ namespace enomik
         GET_VERSION_RESPONSE = 0x4A,
         GET_PEER_RESPONSE = 0x4B,
         GET_CONFIG_RESPONSE = 0x4C,
+        SET_MIDI_LOOPBACK_RESPONSE = 0x4D,
+        GET_MIDI_LOOPBACK_RESPONSE = 0x4E,
 
         // Global error response (reserved; not request + 64). Request 0x3F is
         // reserved so its success response (0x7F) never collides with errors.
@@ -348,6 +352,15 @@ namespace enomik
             if (length < 1)
                 return false;
             index = payload[0];
+            return true;
+        }
+
+        // Decode MIDI loopback flag: payload must be exactly one byte, 0 or 1
+        static bool decodeMidiLoopback(const uint8_t *payload, uint16_t length, bool &enabled)
+        {
+            if (length != 1 || (payload[0] != 0 && payload[0] != 1))
+                return false;
+            enabled = payload[0] != 0;
             return true;
         }
 

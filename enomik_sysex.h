@@ -25,6 +25,7 @@ namespace enomik
         using PinConfigCallback = std::function<void(const PinConfig &)>;
         using PinQueryCallback = std::function<void(uint8_t pin)>;
         using PeerQueryCallback = std::function<void(uint8_t index)>;
+        using BoolCallback = std::function<void(bool)>;
         using VoidCallback = std::function<void()>;
         using AddPeerCallback = std::function<AddPeerResult(const uint8_t mac[6])>;
         using SendCallback = std::function<void(const midi_sysex_message &)>;
@@ -39,6 +40,8 @@ namespace enomik
         void setOnGetAllPeers(VoidCallback cb) { _onGetAllPeers = cb; }
         void setOnGetPeer(PeerQueryCallback cb) { _onGetPeer = cb; }
         void setOnGetConfig(VoidCallback cb) { _onGetConfig = cb; }
+        void setOnSetMidiLoopback(BoolCallback cb) { _onSetMidiLoopback = cb; }
+        void setOnGetMidiLoopback(VoidCallback cb) { _onGetMidiLoopback = cb; }
         void setOnReset(VoidCallback cb) { _onReset = cb; }
         void setOnGetVersion(VoidCallback cb) { _onGetVersion = cb; }
         void setOnSend(SendCallback cb) { _onSend = cb; }
@@ -183,6 +186,21 @@ namespace enomik
             sendSimpleResponse(responseCmd);
         }
 
+        void sendByteResponse(SysExCommand cmd, uint8_t byte)
+        {
+            if (!_onSend)
+                return;
+
+            SysExPacket pkt = SysExEncoder::encodeByteResponse(cmd, byte);
+            midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
+            _onSend(msg);
+        }
+
+        void sendMidiLoopbackResponse(SysExCommand responseCmd, bool enabled)
+        {
+            sendByteResponse(responseCmd, enabled ? 1 : 0);
+        }
+
     private:
         PinConfigCallback _onSetPinConfig;
         PinQueryCallback _onGetPinConfig;
@@ -194,6 +212,8 @@ namespace enomik
         VoidCallback _onGetAllPeers;
         PeerQueryCallback _onGetPeer;
         VoidCallback _onGetConfig;
+        BoolCallback _onSetMidiLoopback;
+        VoidCallback _onGetMidiLoopback;
         VoidCallback _onReset;
         VoidCallback _onGetVersion;
         SendCallback _onSend;
@@ -247,6 +267,14 @@ namespace enomik
 
             case SysExCommand::GET_CONFIG:
                 handleGetConfig();
+                break;
+
+            case SysExCommand::SET_MIDI_LOOPBACK:
+                handleSetMidiLoopback(payload, payloadLen);
+                break;
+
+            case SysExCommand::GET_MIDI_LOOPBACK:
+                handleGetMidiLoopback();
                 break;
 
             case SysExCommand::RESET:
@@ -458,6 +486,42 @@ namespace enomik
             else
             {
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_CONFIG), SysExErrorCode::NOT_READY);
+            }
+        }
+
+        void handleSetMidiLoopback(const uint8_t *payload, uint16_t length)
+        {
+            if (!_onSetMidiLoopback)
+            {
+                Serial.println("SysEx: No SET_MIDI_LOOPBACK handler");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_MIDI_LOOPBACK), SysExErrorCode::NOT_READY);
+                return;
+            }
+
+            bool enabled;
+            if (SysExDecoder::decodeMidiLoopback(payload, length, enabled))
+            {
+                Serial.print("SysEx: Setting MIDI loopback ");
+                Serial.println(enabled ? "on" : "off");
+                _onSetMidiLoopback(enabled);
+            }
+            else
+            {
+                Serial.println("SysEx: Failed to decode MIDI loopback flag");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_MIDI_LOOPBACK), SysExErrorCode::DECODE_FAILED);
+            }
+        }
+
+        void handleGetMidiLoopback()
+        {
+            if (_onGetMidiLoopback)
+            {
+                Serial.println("SysEx: Getting MIDI loopback");
+                _onGetMidiLoopback();
+            }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_MIDI_LOOPBACK), SysExErrorCode::NOT_READY);
             }
         }
 

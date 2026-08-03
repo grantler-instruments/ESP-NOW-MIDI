@@ -50,6 +50,19 @@ class TestWizardBuilders(unittest.TestCase):
     def test_build_get_config(self):
         self.assertEqual(sx.build_get_config()[3], sx.CMD_GET_CONFIG)
 
+    def test_build_set_midi_loopback(self):
+        self.assertEqual(
+            sx.build_set_midi_loopback(True),
+            sx._header(sx.CMD_SET_MIDI_LOOPBACK) + [1],
+        )
+        self.assertEqual(
+            sx.build_set_midi_loopback(False),
+            sx._header(sx.CMD_SET_MIDI_LOOPBACK) + [0],
+        )
+
+    def test_build_get_midi_loopback(self):
+        self.assertEqual(sx.build_get_midi_loopback()[3], sx.CMD_GET_MIDI_LOOPBACK)
+
     def test_build_add_peer_encodes_mac_nibbles(self):
         data = sx.build_add_peer(SAMPLE_MAC)
         self.assertEqual(data[3], sx.CMD_ADD_PEER)
@@ -81,6 +94,12 @@ class TestWizardParserPeers(unittest.TestCase):
     def test_parse_get_config_ok(self):
         parsed = sx.parse(response(sx.RESP_GET_CONFIG))
         self.assertEqual(parsed, {"cmd": "get_config_ok"})
+
+    def test_parse_midi_loopback_response(self):
+        parsed = sx.parse(response(sx.RESP_GET_MIDI_LOOPBACK, [1]))
+        self.assertEqual(parsed, {"cmd": "midi_loopback", "enabled": True})
+        parsed = sx.parse(response(sx.RESP_SET_MIDI_LOOPBACK, [0]))
+        self.assertEqual(parsed, {"cmd": "midi_loopback", "enabled": False})
 
 
 class TestWizardParserAddPeerAndErrors(unittest.TestCase):

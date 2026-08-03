@@ -52,6 +52,29 @@ namespace enomik
         // --- System Exclusive ---
         std::function<void(uint8_t *data, unsigned int length)> _onSysExHandler;
 
+        // Depth > 0 while dispatching a local loopback. Nested Client::send*
+        // (e.g. client_echo handlers) still go over the wire but must not
+        // re-enter loopback, or send → handler → send recurses forever.
+        int _loopbackDepth = 0;
+
+        struct LoopbackScope
+        {
+            int &_depth;
+            explicit LoopbackScope(int &depth) : _depth(depth) { ++_depth; }
+            ~LoopbackScope() { --_depth; }
+            LoopbackScope(const LoopbackScope &) = delete;
+            LoopbackScope &operator=(const LoopbackScope &) = delete;
+        };
+
+        template <typename Fn>
+        void maybeLoopback(Fn &&dispatch)
+        {
+            if (!io.isMidiLoopback() || _loopbackDepth > 0)
+                return;
+            LoopbackScope scope(_loopbackDepth);
+            dispatch();
+        }
+
         void onSystemExclusive(uint8_t *data, unsigned int length)
         {
             io.onSysEx(data, length);
@@ -449,11 +472,8 @@ namespace enomik
                 USBMIDI.sendNoteOn(note, velocity, channel);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleNoteOnStatic(channel, note, velocity); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends Note Off over ESP-NOW and USB when available.
@@ -467,11 +487,8 @@ namespace enomik
                 USBMIDI.sendNoteOff(note, velocity, channel);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleNoteOffStatic(channel, note, velocity); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends Control Change over ESP-NOW and USB when available.
@@ -485,11 +502,8 @@ namespace enomik
                 USBMIDI.sendControlChange(control, value, channel);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleControlChangeStatic(channel, control, value); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends Program Change over ESP-NOW and USB when available.
@@ -503,11 +517,8 @@ namespace enomik
                 USBMIDI.sendProgramChange(program, channel);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleProgramChangeStatic(channel, program); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends channel aftertouch over ESP-NOW and USB when available.
@@ -521,11 +532,8 @@ namespace enomik
                 USBMIDI.sendAfterTouch(pressure, channel);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleAfterTouchChannelStatic(channel, pressure); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends polyphonic aftertouch over ESP-NOW and USB when available.
@@ -539,11 +547,8 @@ namespace enomik
                 USBMIDI.sendAfterTouch(note, pressure, channel);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleAfterTouchPolyStatic(channel, note, pressure); });
+            return err == ESP_OK;
         }
 
         /**
@@ -561,11 +566,8 @@ namespace enomik
                 USBMIDI.sendPitchBend(value, channel);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handlePitchBendStatic(channel, value); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends MIDI Start. @return `true` when the ESP-NOW send succeeds. */
@@ -578,11 +580,8 @@ namespace enomik
                 USBMIDI.sendStart();
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleStartStatic(); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends MIDI Stop. @return `true` when the ESP-NOW send succeeds. */
@@ -595,11 +594,8 @@ namespace enomik
                 USBMIDI.sendStop();
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleStopStatic(); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends MIDI Continue. @return `true` when the ESP-NOW send succeeds. */
@@ -612,11 +608,8 @@ namespace enomik
                 USBMIDI.sendContinue();
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleContinueStatic(); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends MIDI Timing Clock. @return `true` when the ESP-NOW send succeeds. */
@@ -629,11 +622,8 @@ namespace enomik
                 USBMIDI.sendClock();
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleClockStatic(); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends Song Position Pointer. @return `true` when the ESP-NOW send succeeds. */
@@ -646,11 +636,8 @@ namespace enomik
                 USBMIDI.sendSongPosition(value);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleSongPositionStatic(value); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends Song Select. @return `true` when the ESP-NOW send succeeds. */
@@ -663,11 +650,8 @@ namespace enomik
                 USBMIDI.sendSongSelect(value);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            maybeLoopback([&]() { handleSongSelectStatic(value); });
+            return err == ESP_OK;
         }
 
         /** @brief Sends a complete SysEx buffer, including `F0` and `F7`.

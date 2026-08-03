@@ -18,7 +18,7 @@ from __future__ import annotations
 
 # Keep these in sync with version.h
 PROTOCOL_MAJOR = 0
-PROTOCOL_MINOR = 13
+PROTOCOL_MINOR = 14
 
 MANUFACTURER_ID = 0x7D
 
@@ -35,6 +35,8 @@ CMD_RESET = 0x09
 CMD_GET_VERSION = 0x0A
 CMD_GET_PEER = 0x0B
 CMD_GET_CONFIG = 0x0C
+CMD_SET_MIDI_LOOPBACK = 0x0D
+CMD_GET_MIDI_LOOPBACK = 0x0E
 
 # Response codes (request + 64)
 RESP_SET_PIN_CONFIG = CMD_SET_PIN_CONFIG + 0x40
@@ -49,6 +51,8 @@ RESP_RESET = CMD_RESET + 0x40
 RESP_GET_VERSION = CMD_GET_VERSION + 0x40
 RESP_GET_PEER = CMD_GET_PEER + 0x40
 RESP_GET_CONFIG = CMD_GET_CONFIG + 0x40
+RESP_SET_MIDI_LOOPBACK = CMD_SET_MIDI_LOOPBACK + 0x40
+RESP_GET_MIDI_LOOPBACK = CMD_GET_MIDI_LOOPBACK + 0x40
 
 RESP_ERROR = 0x7F
 
@@ -146,6 +150,14 @@ def build_get_config() -> list[int]:
     return _header(CMD_GET_CONFIG)
 
 
+def build_set_midi_loopback(enabled: bool) -> list[int]:
+    return _header(CMD_SET_MIDI_LOOPBACK) + [1 if enabled else 0]
+
+
+def build_get_midi_loopback() -> list[int]:
+    return _header(CMD_GET_MIDI_LOOPBACK)
+
+
 def build_get_peer(index: int) -> list[int]:
     return _header(CMD_GET_PEER) + [index]
 
@@ -238,6 +250,9 @@ def parse(data: list[int]) -> dict | None:
 
     if cmd == RESP_GET_CONFIG:
         return {"cmd": "get_config_ok"}
+
+    if cmd in (RESP_SET_MIDI_LOOPBACK, RESP_GET_MIDI_LOOPBACK) and len(payload) >= 1:
+        return {"cmd": "midi_loopback", "enabled": bool(payload[0])}
 
     if cmd == RESP_CLEAR_PIN_CONFIGS:
         return {"cmd": "clear_pin_configs"}

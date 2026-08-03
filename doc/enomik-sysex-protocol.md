@@ -44,8 +44,8 @@ When building messages for Web MIDI / `mido`, the inner data is everything **bet
 
 | Kind | Rule | Range (current) |
 |---|---|---|
-| Request | assigned sequentially | `0x01` … `0x0C` |
-| Success response | **request + 64** (`0x40`) | `0x41` … `0x4C` |
+| Request | assigned sequentially | `0x01` … `0x0E` |
+| Success response | **request + 64** (`0x40`) | `0x41` … `0x4E` |
 | Error response | fixed **`0x7F`** | always `0x7F` |
 
 **Reserved:** request `0x3F` must not be used — its success pair would be `0x7F`, which is reserved for errors. Future requests should stay ≤ `0x3E` if the `+ 64` rule is kept.
@@ -65,7 +65,9 @@ When building messages for Web MIDI / `mido`, the inner data is everything **bet
 | `0x09` | RESET | (none) | `0x49` (empty) |
 | `0x0A` | GET_VERSION | (none) | `0x4A` + major + minor |
 | `0x0B` | GET_PEER | index (1 byte) | `0x4B` + peer entry, or [error](#errors) |
-| `0x0C` | GET_CONFIG | (none) | all `0x44` pin configs, then all `0x48` peer entries, then empty `0x4C` |
+| `0x0C` | GET_CONFIG | (none) | all `0x44` pin configs, then all `0x48` peer entries, then one `0x4E` loopback byte, then empty `0x4C` |
+| `0x0D` | SET_MIDI_LOOPBACK | `0`=off or `1`=on | `0x4D` + same byte, or [error](#errors) |
+| `0x0E` | GET_MIDI_LOOPBACK | (none) | `0x4E` + `0`/`1` |
 
 ### Pin config payload
 
@@ -128,7 +130,7 @@ F0  7D  MAJOR  MINOR  48  F7     ← peer stream end
 
 If there are zero entries, the host receives only the stream-end message.
 
-**GET_CONFIG** uses the same `0x44` and `0x48` entry shapes but sends **one** final empty `0x4C` instead of separate pin/peer stream-end markers.
+**GET_CONFIG** uses the same `0x44` and `0x48` entry shapes, then one `0x4E` loopback byte, then **one** final empty `0x4C` instead of separate pin/peer stream-end markers.
 
 ### MAC address encoding
 
@@ -220,13 +222,22 @@ Returns the peer at the requested storage **index**. If the index is out of rang
 
 ### GET_CONFIG → `0x4C`
 
-One-shot full board snapshot for **pins + peers** (v0.13+):
+One-shot full board snapshot for **pins + peers + MIDI loopback** (v0.14+; v0.13 was pins + peers only):
 
 1. Every stored pin config as `0x44` (same 8-byte payload as GET_ALL_PIN_CONFIGS).
 2. Every stored peer as `0x48` (same [peer entry](#peer-entry-payload) as GET_ALL_PEERS).
-3. Empty `0x4C` — **done** (no separate empty `0x44` / `0x48` in this stream).
+3. One `0x4E` + loopback byte (same payload as [GET_MIDI_LOOPBACK](#get_midi_loopback--0x4e)).
+4. Empty `0x4C` — **done** (no separate empty `0x44` / `0x48` in this stream).
 
-Order is always **pins first, then peers**. Empty board → only `0x4C`.
+Order is always **pins, then peers, then loopback**. Empty board on v0.14+ → `0x4E` (usually `0`) then empty `0x4C`. Older firmware omits the `0x4E` and ends on `0x4C` only. Hosts should ignore unknown mid-stream response cmds until `0x4C`.
+
+### SET_MIDI_LOOPBACK → `0x4D`
+
+Payload: one byte, `0` (off) or `1` (on). Other values → [DECODE_FAILED](#error-codes). Success echoes the same byte in `0x4D`. When enabled, `enomik::Client` locally re-dispatches each outgoing channel/realtime MIDI message to receive handlers (soft thru); SysEx is not looped. Nested sends from those handlers (e.g. echo sketches) are not looped again, so `send → handler → send` cannot recurse.
+
+### GET_MIDI_LOOPBACK → `0x4E`
+
+Payload: one byte, `0` or `1`.
 
 ### RESET → `0x49`
 
@@ -360,6 +371,7 @@ When adding a new command:
 
 | Change | Notes |
 |---|---|
+| v0.14 MIDI loopback | `SET_MIDI_LOOPBACK` (`0x0D`) / `GET_MIDI_LOOPBACK` (`0x0E`); `GET_CONFIG` also streams one `0x4E` before empty `0x4C` |
 | v0.13 ADD_PEER errors | Failures use `0x7F` with PEER_TABLE_FULL / PEER_ALREADY_EXISTS / OPERATION_FAILED |
 | v0.13 GET_CONFIG | One request streams `0x44` pins + `0x48` peers + empty `0x4C` done |
 | v0.13 peer model | GET_PEER (`0x0B`), GET_ALL_PEERS streams one `0x48` per peer + end marker; PEER_NOT_FOUND |

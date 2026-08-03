@@ -66,6 +66,7 @@ namespace enomik
         {
             analogReadResolution(ADC_RESOLUTION);
             _pinConfigs = loadPinConfigsFromPrefs();
+            _midiLoopback = loadMidiLoopbackFromPrefs();
             _pinStates.clear();
 
             for (const auto &config : _pinConfigs)
@@ -75,6 +76,16 @@ namespace enomik
             }
 
             setupSysExHandlers();
+        }
+
+        /** @brief Returns whether outgoing Client MIDI is locally looped back to receive handlers. */
+        bool isMidiLoopback() const { return _midiLoopback; }
+
+        /** @brief Enables or disables MIDI loopback and persists the setting. */
+        void setMidiLoopback(bool enabled)
+        {
+            _midiLoopback = enabled;
+            saveMidiLoopbackToPrefs(_midiLoopback);
         }
 
         /** @brief Polls configured input pins and sends MIDI for relevant changes. */
@@ -263,6 +274,7 @@ namespace enomik
         std::vector<PinState> _pinStates;
         SysExHandler _sysexHandler;
         Preferences _preferences;
+        bool _midiLoopback = false;
 
         // External callbacks
         std::function<void(midi_message)> _onMIDISendRequest;
@@ -405,7 +417,7 @@ namespace enomik
                         index);
                 } });
 
-            // Handler for full board config (pins + peers, then GET_CONFIG_RESPONSE)
+            // Handler for full board config (pins + peers + loopback, then GET_CONFIG_RESPONSE)
             _sysexHandler.setOnGetConfig([this]()
                                          {
                 Serial.println("SysEx: Streaming full board config");
@@ -425,7 +437,23 @@ namespace enomik
                             index, mac, SysExCommand::GET_ALL_PEERS_RESPONSE);
                     }
                 }
+                _sysexHandler.sendMidiLoopbackResponse(
+                    SysExCommand::GET_MIDI_LOOPBACK_RESPONSE, _midiLoopback);
                 _sysexHandler.sendSimpleResponse(SysExCommand::GET_CONFIG_RESPONSE); });
+
+            _sysexHandler.setOnSetMidiLoopback([this](bool enabled)
+                                               {
+                Serial.print("SysEx: Setting MIDI loopback ");
+                Serial.println(enabled ? "on" : "off");
+                setMidiLoopback(enabled);
+                _sysexHandler.sendMidiLoopbackResponse(
+                    SysExCommand::SET_MIDI_LOOPBACK_RESPONSE, _midiLoopback); });
+
+            _sysexHandler.setOnGetMidiLoopback([this]()
+                                               {
+                Serial.println("SysEx: Getting MIDI loopback");
+                _sysexHandler.sendMidiLoopbackResponse(
+                    SysExCommand::GET_MIDI_LOOPBACK_RESPONSE, _midiLoopback); });
 
             // Handler for system reset
             _sysexHandler.setOnReset([this]()
@@ -435,9 +463,13 @@ namespace enomik
                 // Clear in-memory configurations
                 _pinConfigs.clear();
                 _pinStates.clear();
+                _midiLoopback = false;
 
                 // Clear stored preferences
                 _preferences.begin("pinconfigs", false);
+                _preferences.clear();
+                _preferences.end();
+                _preferences.begin("enomik", false);
                 _preferences.clear();
                 _preferences.end();
 
@@ -722,6 +754,21 @@ namespace enomik
 
             _preferences.putUInt("count", configs.size());
             _preferences.end();
+        }
+
+        void saveMidiLoopbackToPrefs(bool enabled)
+        {
+            _preferences.begin("enomik", false);
+            _preferences.putUChar("midi_lb", enabled ? 1 : 0);
+            _preferences.end();
+        }
+
+        bool loadMidiLoopbackFromPrefs()
+        {
+            _preferences.begin("enomik", true);
+            const uint8_t value = _preferences.getUChar("midi_lb", 0);
+            _preferences.end();
+            return value != 0;
         }
 
         std::vector<PinConfig> loadPinConfigsFromPrefs()
