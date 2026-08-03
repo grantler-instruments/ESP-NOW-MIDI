@@ -63,6 +63,19 @@ class TestWizardBuilders(unittest.TestCase):
     def test_build_get_midi_loopback(self):
         self.assertEqual(sx.build_get_midi_loopback()[3], sx.CMD_GET_MIDI_LOOPBACK)
 
+    def test_build_set_power_save(self):
+        self.assertEqual(
+            sx.build_set_power_save(True),
+            sx._header(sx.CMD_SET_POWER_SAVE) + [1],
+        )
+        self.assertEqual(
+            sx.build_set_power_save(False),
+            sx._header(sx.CMD_SET_POWER_SAVE) + [0],
+        )
+
+    def test_build_get_power_save(self):
+        self.assertEqual(sx.build_get_power_save()[3], sx.CMD_GET_POWER_SAVE)
+
     def test_build_add_peer_encodes_mac_nibbles(self):
         data = sx.build_add_peer(SAMPLE_MAC)
         self.assertEqual(data[3], sx.CMD_ADD_PEER)
@@ -100,6 +113,12 @@ class TestWizardParserPeers(unittest.TestCase):
         self.assertEqual(parsed, {"cmd": "midi_loopback", "enabled": True})
         parsed = sx.parse(response(sx.RESP_SET_MIDI_LOOPBACK, [0]))
         self.assertEqual(parsed, {"cmd": "midi_loopback", "enabled": False})
+
+    def test_parse_power_save_response(self):
+        parsed = sx.parse(response(sx.RESP_GET_POWER_SAVE, [1]))
+        self.assertEqual(parsed, {"cmd": "power_save", "enabled": True})
+        parsed = sx.parse(response(sx.RESP_SET_POWER_SAVE, [0]))
+        self.assertEqual(parsed, {"cmd": "power_save", "enabled": False})
 
 
 class TestWizardParserAddPeerAndErrors(unittest.TestCase):

@@ -227,6 +227,8 @@ namespace enomik
         void begin()
         {
             io.begin();
+            io.setOnPowerSaveChanged([this](bool enabled)
+                                     { this->espnowMIDI.setReducePowerAtCostOfLatency(enabled); });
             io.setOnMIDISendRequest([this](midi_message msg)
                                     {
                                 //send ESP-NOW MIDI
@@ -364,8 +366,8 @@ namespace enomik
             Serial.println("USB MIDI initialized");
 #endif
 
-            // Initialize ESP-NOW MIDI
-            espnowMIDI.begin();
+            // Initialize ESP-NOW MIDI (apply persisted power-save preference)
+            espnowMIDI.begin(io.isPowerSave());
 
             // --- Set handlers for ESP-NOW ---
             espnowMIDI.setHandleNoteOn(handleNoteOnStatic);

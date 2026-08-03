@@ -24,6 +24,8 @@ directory contains sketches for common ESP-NOW MIDI configurations.
 - **`client_audio_m16_i2s`**: MIDI-controlled synthesizer using M16 and I2S.
 - **`client_audio_audiotools_i2s`**: MIDI-controlled sine-wave synth using
   arduino-audio-tools and I2S.
+- **`client_audio_pd`**: MIDI-controlled Pure Data sine synth using ESPdLib
+  and I2S (`[notein]` / `Pd.noteOn`).
 
 Check each sketch's source for board requirements and optional library
 dependencies.

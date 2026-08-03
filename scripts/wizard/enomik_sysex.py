@@ -37,6 +37,8 @@ CMD_GET_PEER = 0x0B
 CMD_GET_CONFIG = 0x0C
 CMD_SET_MIDI_LOOPBACK = 0x0D
 CMD_GET_MIDI_LOOPBACK = 0x0E
+CMD_SET_POWER_SAVE = 0x0F
+CMD_GET_POWER_SAVE = 0x10
 
 # Response codes (request + 64)
 RESP_SET_PIN_CONFIG = CMD_SET_PIN_CONFIG + 0x40
@@ -53,6 +55,8 @@ RESP_GET_PEER = CMD_GET_PEER + 0x40
 RESP_GET_CONFIG = CMD_GET_CONFIG + 0x40
 RESP_SET_MIDI_LOOPBACK = CMD_SET_MIDI_LOOPBACK + 0x40
 RESP_GET_MIDI_LOOPBACK = CMD_GET_MIDI_LOOPBACK + 0x40
+RESP_SET_POWER_SAVE = CMD_SET_POWER_SAVE + 0x40
+RESP_GET_POWER_SAVE = CMD_GET_POWER_SAVE + 0x40
 
 RESP_ERROR = 0x7F
 
@@ -158,6 +162,14 @@ def build_get_midi_loopback() -> list[int]:
     return _header(CMD_GET_MIDI_LOOPBACK)
 
 
+def build_set_power_save(enabled: bool) -> list[int]:
+    return _header(CMD_SET_POWER_SAVE) + [1 if enabled else 0]
+
+
+def build_get_power_save() -> list[int]:
+    return _header(CMD_GET_POWER_SAVE)
+
+
 def build_get_peer(index: int) -> list[int]:
     return _header(CMD_GET_PEER) + [index]
 
@@ -253,6 +265,9 @@ def parse(data: list[int]) -> dict | None:
 
     if cmd in (RESP_SET_MIDI_LOOPBACK, RESP_GET_MIDI_LOOPBACK) and len(payload) >= 1:
         return {"cmd": "midi_loopback", "enabled": bool(payload[0])}
+
+    if cmd in (RESP_SET_POWER_SAVE, RESP_GET_POWER_SAVE) and len(payload) >= 1:
+        return {"cmd": "power_save", "enabled": bool(payload[0])}
 
     if cmd == RESP_CLEAR_PIN_CONFIGS:
         return {"cmd": "clear_pin_configs"}

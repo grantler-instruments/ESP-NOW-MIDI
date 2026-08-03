@@ -103,6 +103,8 @@ TEST_CASE("response commands are request + 64", "[sysex][protocol]")
         enomik::SysExCommand::GET_CONFIG,
         enomik::SysExCommand::SET_MIDI_LOOPBACK,
         enomik::SysExCommand::GET_MIDI_LOOPBACK,
+        enomik::SysExCommand::SET_POWER_SAVE,
+        enomik::SysExCommand::GET_POWER_SAVE,
     };
 
     for (const auto request : requests)
@@ -251,9 +253,9 @@ TEST_CASE("get config response encoding", "[sysex][response]")
     REQUIRE(pkt.getPayloadLength() == 0);
 }
 
-TEST_CASE("midi loopback encode and decode", "[sysex][loopback]")
+TEST_CASE("bool flag encode and decode", "[sysex][flags]")
 {
-    SECTION("encode set response")
+    SECTION("encode loopback set response")
     {
         const auto pkt = enomik::SysExEncoder::encodeByteResponse(
             enomik::SysExCommand::SET_MIDI_LOOPBACK_RESPONSE, 1);
@@ -262,14 +264,22 @@ TEST_CASE("midi loopback encode and decode", "[sysex][loopback]")
         REQUIRE(pkt.data[5] == 1);
     }
 
+    SECTION("encode power save get response")
+    {
+        const auto pkt = enomik::SysExEncoder::encodeByteResponse(
+            enomik::SysExCommand::GET_POWER_SAVE_RESPONSE, 0);
+        requireCommand(pkt, enomik::SysExCommand::GET_POWER_SAVE_RESPONSE);
+        REQUIRE(pkt.data[5] == 0);
+    }
+
     SECTION("decode accepts 0 and 1")
     {
         bool enabled = true;
         const uint8_t off[] = {0};
         const uint8_t on[] = {1};
-        REQUIRE(enomik::SysExDecoder::decodeMidiLoopback(off, 1, enabled));
+        REQUIRE(enomik::SysExDecoder::decodeBoolFlag(off, 1, enabled));
         REQUIRE_FALSE(enabled);
-        REQUIRE(enomik::SysExDecoder::decodeMidiLoopback(on, 1, enabled));
+        REQUIRE(enomik::SysExDecoder::decodePowerSave(on, 1, enabled));
         REQUIRE(enabled);
     }
 
@@ -279,7 +289,7 @@ TEST_CASE("midi loopback encode and decode", "[sysex][loopback]")
         const uint8_t bad[] = {2};
         const uint8_t empty[] = {};
         REQUIRE_FALSE(enomik::SysExDecoder::decodeMidiLoopback(bad, 1, enabled));
-        REQUIRE_FALSE(enomik::SysExDecoder::decodeMidiLoopback(empty, 0, enabled));
+        REQUIRE_FALSE(enomik::SysExDecoder::decodePowerSave(empty, 0, enabled));
     }
 }
 

@@ -42,6 +42,8 @@ namespace enomik
         void setOnGetConfig(VoidCallback cb) { _onGetConfig = cb; }
         void setOnSetMidiLoopback(BoolCallback cb) { _onSetMidiLoopback = cb; }
         void setOnGetMidiLoopback(VoidCallback cb) { _onGetMidiLoopback = cb; }
+        void setOnSetPowerSave(BoolCallback cb) { _onSetPowerSave = cb; }
+        void setOnGetPowerSave(VoidCallback cb) { _onGetPowerSave = cb; }
         void setOnReset(VoidCallback cb) { _onReset = cb; }
         void setOnGetVersion(VoidCallback cb) { _onGetVersion = cb; }
         void setOnSend(SendCallback cb) { _onSend = cb; }
@@ -201,6 +203,11 @@ namespace enomik
             sendByteResponse(responseCmd, enabled ? 1 : 0);
         }
 
+        void sendPowerSaveResponse(SysExCommand responseCmd, bool enabled)
+        {
+            sendByteResponse(responseCmd, enabled ? 1 : 0);
+        }
+
     private:
         PinConfigCallback _onSetPinConfig;
         PinQueryCallback _onGetPinConfig;
@@ -214,6 +221,8 @@ namespace enomik
         VoidCallback _onGetConfig;
         BoolCallback _onSetMidiLoopback;
         VoidCallback _onGetMidiLoopback;
+        BoolCallback _onSetPowerSave;
+        VoidCallback _onGetPowerSave;
         VoidCallback _onReset;
         VoidCallback _onGetVersion;
         SendCallback _onSend;
@@ -275,6 +284,14 @@ namespace enomik
 
             case SysExCommand::GET_MIDI_LOOPBACK:
                 handleGetMidiLoopback();
+                break;
+
+            case SysExCommand::SET_POWER_SAVE:
+                handleSetPowerSave(payload, payloadLen);
+                break;
+
+            case SysExCommand::GET_POWER_SAVE:
+                handleGetPowerSave();
                 break;
 
             case SysExCommand::RESET:
@@ -522,6 +539,42 @@ namespace enomik
             else
             {
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_MIDI_LOOPBACK), SysExErrorCode::NOT_READY);
+            }
+        }
+
+        void handleSetPowerSave(const uint8_t *payload, uint16_t length)
+        {
+            if (!_onSetPowerSave)
+            {
+                Serial.println("SysEx: No SET_POWER_SAVE handler");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_POWER_SAVE), SysExErrorCode::NOT_READY);
+                return;
+            }
+
+            bool enabled;
+            if (SysExDecoder::decodePowerSave(payload, length, enabled))
+            {
+                Serial.print("SysEx: Setting power save ");
+                Serial.println(enabled ? "on" : "off");
+                _onSetPowerSave(enabled);
+            }
+            else
+            {
+                Serial.println("SysEx: Failed to decode power save flag");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_POWER_SAVE), SysExErrorCode::DECODE_FAILED);
+            }
+        }
+
+        void handleGetPowerSave()
+        {
+            if (_onGetPowerSave)
+            {
+                Serial.println("SysEx: Getting power save");
+                _onGetPowerSave();
+            }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_POWER_SAVE), SysExErrorCode::NOT_READY);
             }
         }
 

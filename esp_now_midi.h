@@ -134,8 +134,27 @@ public:
 
     // Set channel and power
     esp_wifi_set_channel(ESP_NOW_MIDI_CHANNEL, WIFI_SECOND_CHAN_NONE);
+    setReducePowerAtCostOfLatency(reducePowerAtCostOfLatency);
 
-    if (reducePowerAtCostOfLatency)
+    _peersCount = 0;
+
+    // Register callbacks
+    esp_now_register_send_cb(SendCallbackAdapter);
+    esp_now_register_recv_cb(OnDataRecvStatic);
+  }
+
+  /**
+   * @brief Enables or disables power saving at the cost of latency.
+   *
+   * When enabled, modem sleep is on and transmit power is lowered. Can be
+   * called after begin() to toggle at runtime.
+   *
+   * @param enabled `true` to prefer power saving; `false` for lower latency.
+   */
+  void setReducePowerAtCostOfLatency(bool enabled)
+  {
+    _reducePowerAtCostOfLatency = enabled;
+    if (enabled)
     {
       esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
       esp_wifi_set_max_tx_power(44);
@@ -145,12 +164,15 @@ public:
       esp_wifi_set_ps(WIFI_PS_NONE);
       esp_wifi_set_max_tx_power(84);
     }
+  }
 
-    _peersCount = 0;
-
-    // Register callbacks
-    esp_now_register_send_cb(SendCallbackAdapter);
-    esp_now_register_recv_cb(OnDataRecvStatic);
+  /**
+   * @brief Returns the last requested power-saving state.
+   * @return `true` when power saving is enabled.
+   */
+  bool getReducePowerAtCostOfLatency() const
+  {
+    return _reducePowerAtCostOfLatency;
   }
 
   /**
@@ -894,6 +916,7 @@ private:
   static esp_now_midi *_instance; // Static pointer to hold the instance
   DataSentCallback userDataSentCallback = nullptr;
   bool _autoPeerDiscovery = true;
+  bool _reducePowerAtCostOfLatency = false;
 
   // MIDI Handlers
   void (*onNoteOnHandler)(byte channel, byte note, byte velocity) = nullptr;
