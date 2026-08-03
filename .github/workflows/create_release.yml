@@ -118,17 +118,106 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           FOLDER=$(echo "${TAG}" | sed 's/\./-/g')
+          export FOLDER
           git clone https://x-access-token:${PAT}@github.com/grantler-instruments/enomik-app.git enomik-app
-          mkdir -p "enomik-app/app/public/firmware/${FOLDER}"
-          for board in lolin_s2_mini esp32s2 esp32s3; do
-            for sketch in client dongle print_mac; do
-              cp all-binaries/${board}_${sketch}_*.ino.bin "enomik-app/app/public/firmware/${FOLDER}/"
-            done
-          done
           python3 << 'PY'
-          import json, os
+          import glob
+          import json
+          import os
+          import shutil
 
+          folder = os.environ["FOLDER"]
           root = "enomik-app/app/public/firmware"
+          dest = os.path.join(root, folder)
+          os.makedirs(dest, exist_ok=True)
+
+          all_boards = [
+              {
+                  "id": "lolin_s2_mini",
+                  "label": "LOLIN S2 Mini",
+                  "requiresManualBootloader": True,
+                  "resetMode": "no_reset",
+                  "hardResetAfterFlash": False,
+              },
+              {
+                  "id": "esp32s2",
+                  "label": "ESP32-S2",
+                  "requiresManualBootloader": True,
+                  "resetMode": "no_reset",
+                  "hardResetAfterFlash": False,
+              },
+              {
+                  "id": "esp32s3",
+                  "label": "ESP32-S3",
+                  "requiresManualBootloader": False,
+                  "resetMode": "usb_reset",
+                  "hardResetAfterFlash": True,
+              },
+          ]
+          all_roles = [
+              {
+                  "label": "Dongle",
+                  "sketch": "dongle",
+                  "description": "interface to MIDI host",
+              },
+              {
+                  "label": "Client",
+                  "sketch": "client",
+                  "description": "board to connect sensors and actuators",
+              },
+              {
+                  "label": "Print MAC",
+                  "sketch": "print_mac",
+                  "description": "prints the MAC address to serial (use this if you are not using a dongle with display)",
+              },
+          ]
+
+          available = set()
+          for board in all_boards:
+              for role in all_roles:
+                  pattern = f"all-binaries/{board['id']}_{role['sketch']}_*.ino.bin"
+                  matches = sorted(glob.glob(pattern))
+                  if not matches:
+                      print(f"skip missing: {board['id']} / {role['sketch']}")
+                      continue
+                  for src in matches:
+                      shutil.copy2(src, dest)
+                      print(f"copied: {os.path.basename(src)}")
+                  available.add((board["id"], role["sketch"]))
+
+          if not available:
+              raise SystemExit("no firmware binaries found for enomik deploy")
+
+          # Keep a complete board×role matrix so the app never offers a
+          # board/role combo without a matching binary.
+          boards_keep = {board_id for board_id, _ in available}
+          roles_keep = {sketch for _, sketch in available}
+          changed = True
+          while changed:
+              changed = False
+              for board_id in list(boards_keep):
+                  if not all((board_id, sketch) in available for sketch in roles_keep):
+                      boards_keep.remove(board_id)
+                      changed = True
+              for sketch in list(roles_keep):
+                  if not all((board_id, sketch) in available for board_id in boards_keep):
+                      roles_keep.remove(sketch)
+                      changed = True
+
+          if not boards_keep or not roles_keep:
+              raise SystemExit(
+                  "no complete board/role matrix for enomik deploy; "
+                  f"available pairs={sorted(available)}"
+              )
+
+          boards = [board for board in all_boards if board["id"] in boards_keep]
+          roles = [role for role in all_roles if role["sketch"] in roles_keep]
+          manifest = {"boards": boards, "roles": roles}
+          with open(os.path.join(dest, "manifest.json"), "w", encoding="utf-8") as f:
+              json.dump(manifest, f, indent="\t")
+              f.write("\n")
+          print(f"manifest boards={[b['id'] for b in boards]} roles={[r['sketch'] for r in roles]}")
+
           dirs = [
               d
               for d in os.listdir(root)
@@ -142,8 +231,7 @@ jobs:
                   return (-1, name)
 
           dirs.sort(key=sort_key, reverse=True)
-          path = os.path.join(root, "versions.json")
-          with open(path, "w", encoding="utf-8") as f:
+          with open(os.path.join(root, "versions.json"), "w", encoding="utf-8") as f:
               json.dump({"versions": dirs}, f, indent=2)
               f.write("\n")
           PY
