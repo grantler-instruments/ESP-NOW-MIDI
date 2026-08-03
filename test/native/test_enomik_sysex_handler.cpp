@@ -269,12 +269,16 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
         REQUIRE(sent[0].data[7] == 3);
     }
 
-    SECTION("GET_CONFIG streams pins, peers, then completion")
+    SECTION("GET_CONFIG streams pins, peers, loopback, power save, then completion")
     {
         handler.setOnGetConfig([&]() {
             PinConfig cfg(3, 0x02);
             handler.sendPinConfigResponse(cfg, enomik::SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE);
             handler.sendPeerResponse(0, kSampleMac, enomik::SysExCommand::GET_ALL_PEERS_RESPONSE);
+            handler.sendMidiLoopbackResponse(
+                enomik::SysExCommand::GET_MIDI_LOOPBACK_RESPONSE, true);
+            handler.sendPowerSaveResponse(
+                enomik::SysExCommand::GET_POWER_SAVE_RESPONSE, false);
             handler.sendSimpleResponse(enomik::SysExCommand::GET_CONFIG_RESPONSE);
         });
 
@@ -282,10 +286,128 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
             enomik::SysExCommand::GET_CONFIG);
         handler.handleSysEx(request.data, request.length);
 
-        REQUIRE(sent.size() == 3);
+        REQUIRE(sent.size() == 5);
         REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE));
         REQUIRE(sent[1].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_ALL_PEERS_RESPONSE));
-        REQUIRE(sent[2].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_CONFIG_RESPONSE));
-        REQUIRE(sent[2].length == 6);
+        REQUIRE(sent[2].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_MIDI_LOOPBACK_RESPONSE));
+        REQUIRE(sent[2].data[5] == 1);
+        REQUIRE(sent[3].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_POWER_SAVE_RESPONSE));
+        REQUIRE(sent[3].data[5] == 0);
+        REQUIRE(sent[4].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_CONFIG_RESPONSE));
+        REQUIRE(sent[4].length == 6);
+    }
+
+    SECTION("SET_MIDI_LOOPBACK invokes callback and can echo response")
+    {
+        bool seen = false;
+        bool enabledValue = false;
+        handler.setOnSetMidiLoopback([&](bool enabled) {
+            seen = true;
+            enabledValue = enabled;
+            handler.sendMidiLoopbackResponse(
+                enomik::SysExCommand::SET_MIDI_LOOPBACK_RESPONSE, enabled);
+        });
+
+        const auto request = enomik::SysExEncoder::encodeByteResponse(
+            enomik::SysExCommand::SET_MIDI_LOOPBACK, 1);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(seen);
+        REQUIRE(enabledValue);
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::SET_MIDI_LOOPBACK_RESPONSE));
+        REQUIRE(sent[0].data[5] == 1);
+    }
+
+    SECTION("SET_MIDI_LOOPBACK rejects invalid payload")
+    {
+        handler.setOnSetMidiLoopback([&](bool) {
+            FAIL("callback should not run for invalid payload");
+        });
+
+        const auto request = enomik::SysExEncoder::encodeByteResponse(
+            enomik::SysExCommand::SET_MIDI_LOOPBACK, 2);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE));
+        REQUIRE(sent[0].data[5] == static_cast<uint8_t>(enomik::SysExCommand::SET_MIDI_LOOPBACK));
+        REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::DECODE_FAILED));
+    }
+
+    SECTION("GET_MIDI_LOOPBACK invokes callback")
+    {
+        bool seen = false;
+        handler.setOnGetMidiLoopback([&]() {
+            seen = true;
+            handler.sendMidiLoopbackResponse(
+                enomik::SysExCommand::GET_MIDI_LOOPBACK_RESPONSE, false);
+        });
+
+        const auto request = enomik::SysExEncoder::encodeSimpleResponse(
+            enomik::SysExCommand::GET_MIDI_LOOPBACK);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(seen);
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_MIDI_LOOPBACK_RESPONSE));
+        REQUIRE(sent[0].data[5] == 0);
+    }
+
+    SECTION("SET_POWER_SAVE invokes callback and can echo response")
+    {
+        bool seen = false;
+        bool enabledValue = false;
+        handler.setOnSetPowerSave([&](bool enabled) {
+            seen = true;
+            enabledValue = enabled;
+            handler.sendPowerSaveResponse(
+                enomik::SysExCommand::SET_POWER_SAVE_RESPONSE, enabled);
+        });
+
+        const auto request = enomik::SysExEncoder::encodeByteResponse(
+            enomik::SysExCommand::SET_POWER_SAVE, 1);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(seen);
+        REQUIRE(enabledValue);
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::SET_POWER_SAVE_RESPONSE));
+        REQUIRE(sent[0].data[5] == 1);
+    }
+
+    SECTION("SET_POWER_SAVE rejects invalid payload")
+    {
+        handler.setOnSetPowerSave([&](bool) {
+            FAIL("callback should not run for invalid payload");
+        });
+
+        const auto request = enomik::SysExEncoder::encodeByteResponse(
+            enomik::SysExCommand::SET_POWER_SAVE, 2);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE));
+        REQUIRE(sent[0].data[5] == static_cast<uint8_t>(enomik::SysExCommand::SET_POWER_SAVE));
+        REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::DECODE_FAILED));
+    }
+
+    SECTION("GET_POWER_SAVE invokes callback")
+    {
+        bool seen = false;
+        handler.setOnGetPowerSave([&]() {
+            seen = true;
+            handler.sendPowerSaveResponse(
+                enomik::SysExCommand::GET_POWER_SAVE_RESPONSE, true);
+        });
+
+        const auto request = enomik::SysExEncoder::encodeSimpleResponse(
+            enomik::SysExCommand::GET_POWER_SAVE);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(seen);
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_POWER_SAVE_RESPONSE));
+        REQUIRE(sent[0].data[5] == 1);
     }
 }

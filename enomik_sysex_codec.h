@@ -27,6 +27,10 @@ namespace enomik
         GET_VERSION = 0x0A,
         GET_PEER = 0x0B,
         GET_CONFIG = 0x0C,
+        SET_MIDI_LOOPBACK = 0x0D,
+        GET_MIDI_LOOPBACK = 0x0E,
+        SET_POWER_SAVE = 0x0F,
+        GET_POWER_SAVE = 0x10,
 
         // Response codes: always request command + 64 (0x40)
         SET_PIN_CONFIG_RESPONSE = 0x41,
@@ -41,6 +45,10 @@ namespace enomik
         GET_VERSION_RESPONSE = 0x4A,
         GET_PEER_RESPONSE = 0x4B,
         GET_CONFIG_RESPONSE = 0x4C,
+        SET_MIDI_LOOPBACK_RESPONSE = 0x4D,
+        GET_MIDI_LOOPBACK_RESPONSE = 0x4E,
+        SET_POWER_SAVE_RESPONSE = 0x4F,
+        GET_POWER_SAVE_RESPONSE = 0x50,
 
         // Global error response (reserved; not request + 64). Request 0x3F is
         // reserved so its success response (0x7F) never collides with errors.
@@ -349,6 +357,25 @@ namespace enomik
                 return false;
             index = payload[0];
             return true;
+        }
+
+        // Decode a boolean flag: payload must be exactly one byte, 0 or 1
+        static bool decodeBoolFlag(const uint8_t *payload, uint16_t length, bool &enabled)
+        {
+            if (length != 1 || (payload[0] != 0 && payload[0] != 1))
+                return false;
+            enabled = payload[0] != 0;
+            return true;
+        }
+
+        static bool decodeMidiLoopback(const uint8_t *payload, uint16_t length, bool &enabled)
+        {
+            return decodeBoolFlag(payload, length, enabled);
+        }
+
+        static bool decodePowerSave(const uint8_t *payload, uint16_t length, bool &enabled)
+        {
+            return decodeBoolFlag(payload, length, enabled);
         }
 
         static bool decodePin(const uint8_t *payload, uint16_t length, uint8_t &pin)
