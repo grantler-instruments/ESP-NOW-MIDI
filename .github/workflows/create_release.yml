@@ -23,7 +23,7 @@ jobs:
           - fqbn: "esp32:esp32:esp32s2"
             name: "esp32s2"
             build_properties: ""
-          - fqbn: "esp32:esp32:esp32s3:USBMode=default"
+          - fqbn: "esp32:esp32:esp32s3:USBMode=tinyusb"
             name: "esp32s3"
             build_properties: ""
     steps:

@@ -67,7 +67,7 @@ jobs:
             name: "lolin_s2_mini"
           - fqbn: "esp32:esp32:esp32s2"
             name: "esp32s2"
-          - fqbn: "esp32:esp32:esp32s3:USBMode=default"
+          - fqbn: "esp32:esp32:esp32s3:USBMode=tinyusb"
             name: "esp32s3"
     
     steps:
