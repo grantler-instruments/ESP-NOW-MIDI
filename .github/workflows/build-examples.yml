@@ -67,7 +67,8 @@ jobs:
             name: "lolin_s2_mini"
           - fqbn: "esp32:esp32:esp32s2"
             name: "esp32s2"
-          - fqbn: "esp32:esp32:esp32s3:USBMode=tinyusb"
+          # USBMode=default = USB-OTG (TinyUSB); CDCOnBoot=cdc matches lolin_s2_mini
+          - fqbn: "esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=cdc"
             name: "esp32s3"
     
     steps:
