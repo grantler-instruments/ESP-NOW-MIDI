@@ -1,8 +1,19 @@
-.arduino-build/
-test/native/build/
-scripts/wizard/.venv/
+__pycache__/
 
-.pio
+# Local build output (Arduino IDE 2.x, CMake, etc.)
+build/
+
+# PlatformIO
+.pio/
+
+# Arduino CLI / IDE
+.arduino-build/
+
 .vscode
 .DS_Store
-__pycache__
+.venv/
+.tools/
+.doxygen/
+docs/.doxygen/
+docs/api/
+site/

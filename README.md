@@ -2,6 +2,10 @@
 This is an Arduino library for sending and receiving MIDI messages via the ESP-NOW protocol.
 A typical setup requires two ESP-NOW capable boards, where the board connected to your computer needs to be MIDI-capable 
 
+## Documentation
+
+The full guide is published at [grantler-instruments.github.io/ESP-NOW-MIDI](https://grantler-instruments.github.io/ESP-NOW-MIDI/).
+
 The ESP32-S2 Mini (Lolin S2 Mini) can act as both a receiver and a sender. An S3 should also work as a receiver.
 Any ESP board with Wi-Fi capabilities should work as a sender.
 
@@ -87,10 +91,10 @@ Use the **signed** API everywhere unless you already have raw wire bytes:
 
 `sendPitchBend()` and receive callbacks match the [FortySevenEffects MIDI library](https://github.com/FortySevenEffects/arduino_midi_library) convention. Pass handler values through unchanged — do not add or subtract 8192.
 
-### enomik 3000 (WIP)
+### enomik 3000
 Drop `enomik::Client` into your firmware and your board turns into a MIDI SysEx–configurable device: routing, pin modes, and basic I/O can be set from a host over SysEx instead of hard-coding every mapping. This library is integrated with the [ESP-NOW MIDI Kit](https://grantler-instruments.github.io/enomik-app/) — the no-code app for creating (wireless) MIDI devices.
 
-### Circuit Python (WIP)
+### Circuit Python
 A circuit python version is in the making as well. Contributions here are very welcome.
 
 ## Benchmarks
@@ -118,29 +122,24 @@ Practical reading:
 * For jitter/stability, compare `mad`, `iqr`, and `sigma_*`.
 
 
-## sysex interface
-### set pin config
-1. start: 0xF0
-1. manufacturer id: 0x7D
-1. command id: 0x01 (set pin config), 0x09 (reset)
-1. pin: any valid pin number
-1. pin_mode: 0x00 (INPUT), 0x01 (OUTPUT), 0x02 (INPUT_PULLUP), 0x03(ANALOG_INPUT), 0x04(ANALOG_OUTPUT)
-1. midi channel: 1-16
-1. midi type: midi status byte divided by 2, e.g. CC (0xB0, 176) => (0x58, 88)
-1. controller or note: e.g. 3C,60
-1. midi min: 0
-1. midi max: 1
-1. end: 0xF7
+## SysEx configuration protocol
 
-* e.g. configure pin 3 to read digital values and send out CC: `0xF0, 0x7D, 0x01, 0x03, 0x02, 0x58, 0xF7`
+Pin configuration, peers, MAC, reset, and version query use MIDI SysEx. Full specification:
 
-### reset
-1. start: 0xF0
-1. manufacturer id: 0x7D
-1. command id:  0x09 (reset)
-1. end: 0xF7
+**[doc/enomik-sysex-protocol.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/doc/enomik-sysex-protocol.md)**
 
-* e.g. reset and clear pin configs: `0xF0, 0x7D, 0x09, 0xF7`
+## Release candidates
+
+Before tagging a release, run the interactive **test wizard** against real hardware. CI covers unit tests and example builds; it does **not** replace this MIDI integration check.
+
+Flash `examples/client_test` (and `examples/dongle` for the wireless phase), then:
+
+```bash
+cd scripts/wizard
+./run.sh
+```
+
+See **[scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/README.md)** for phases, hardware pins, and flags.
 
 ## PlatformIO
 
@@ -208,7 +207,6 @@ Shared board settings live in `platformio/common.ini`. Example-specific dependen
 
 ## Contributing
 If you find any bugs feel free to submit an issue on github, also PRs are very welcome.
-
 
 ## License
 This library is licensed under the **GNU Lesser General Public License (LGPL) version 3**.

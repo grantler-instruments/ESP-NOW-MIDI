@@ -1,4 +1,4 @@
-name: Build ESP32-S2 Mini Sketches
+name: Build and Test
 on:
   push:
     branches:
@@ -21,6 +21,17 @@ jobs:
 
       - name: Run native tests
         run: ctest --test-dir test/native/build --output-on-failure
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check SysEx constant sync
+        run: python3 scripts/check_sysex_constants.py
+
+      - name: Run protocol constant tests
+        run: python3 -m unittest discover -s test/protocol -v
 
   circuitpython-test:
     runs-on: ubuntu-latest
@@ -54,6 +65,11 @@ jobs:
         board:
           - fqbn: "esp32:esp32:lolin_s2_mini"
             name: "lolin_s2_mini"
+          - fqbn: "esp32:esp32:esp32s2"
+            name: "esp32s2"
+          # USBMode=default = USB-OTG (TinyUSB); CDCOnBoot=cdc matches lolin_s2_mini
+          - fqbn: "esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=cdc"
+            name: "esp32s3"
     
     steps:
       - name: Checkout repository
@@ -88,6 +104,7 @@ jobs:
           arduino-cli lib install "AceButton"
           arduino-cli lib install "ESP32Servo"
           arduino-cli lib install "MPU9250_WE"
+          arduino-cli lib install "Adafruit NeoPixel"
           git clone https://github.com/pschatzmann/arduino-audio-tools.git $HOME/Arduino/libraries/AudioTools
           git clone https://github.com/algomusic/M16.git $HOME/Arduino/libraries/M16
           
@@ -128,5 +145,5 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: esp32s2-binaries-${{ matrix.board.name }}
+          name: esp32-binaries-${{ matrix.board.name }}
           path: binaries/*.bin
