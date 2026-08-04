@@ -56,7 +56,7 @@ class esp_now_midi
 public:
   /**
    * @brief Callback invoked after ESP-NOW sends a packet.
-   * @param info ESP-IDF transmission details.
+   * @param info ESP-IDF transmission details (`wifi_tx_info_t`; IDF ≥ 5.5).
    * @param status Delivery result reported by ESP-NOW.
    */
   typedef void (*DataSentCallback)(const wifi_tx_info_t *info, esp_now_send_status_t status);

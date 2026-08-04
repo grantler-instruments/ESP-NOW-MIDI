@@ -63,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        idf_ver: ["v5.3.3", "v5.4.1"]
+        idf_ver: ["v5.5.5", "v6.0.1"]
         target: [esp32, esp32s3]
     steps:
       - name: Checkout repository

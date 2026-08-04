@@ -7,4 +7,4 @@ repository: https://github.com/grantler-instruments/ESP-NOW-MIDI.git
 license: LGPL-3.0-or-later
 dependencies:
   idf:
-    version: ">=5.0"
+    version: ">=5.5"

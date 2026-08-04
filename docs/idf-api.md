@@ -1,6 +1,7 @@
 # C++ ESP-IDF API overview
 
 Use the **core** transport from a pure ESP-IDF project (no Arduino core).
+Requires **ESP-IDF ≥ 5.5** (send callback uses `wifi_tx_info_t`).
 Higher-level Enomik helpers (`enomik::Client`, `enomik::Dongle`, and related
 I/O) are Arduino-oriented today and are not part of this surface yet; they are
 planned to be ported to ESP-IDF as well.
