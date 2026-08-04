@@ -221,10 +221,11 @@ namespace enomik
          * @brief Initializes I/O, ESP-NOW MIDI, optional USB MIDI, and stored peers.
          *
          * Restores peers from persistent storage and sends a handshake when
-         * initialization succeeds. If peer storage cannot initialize, returns
-         * early and the client remains unavailable for peer registration.
+         * initialization succeeds. If peer storage or ESP-NOW cannot initialize,
+         * returns `false` and the client remains unavailable for peer registration.
+         * @return `true` when the client is ready.
          */
-        void begin()
+        bool begin()
         {
             io.begin();
             io.setOnPowerSaveChanged([this](bool enabled)
@@ -367,7 +368,11 @@ namespace enomik
 #endif
 
             // Initialize ESP-NOW MIDI (apply persisted power-save preference)
-            espnowMIDI.begin(io.isPowerSave());
+            if (!espnowMIDI.begin(io.isPowerSave()))
+            {
+                Serial.println("Failed to initialize ESP-NOW MIDI");
+                return false;
+            }
 
             // --- Set handlers for ESP-NOW ---
             espnowMIDI.setHandleNoteOn(handleNoteOnStatic);
@@ -405,7 +410,7 @@ namespace enomik
             if (!peerStorage.begin())
             {
                 Serial.println("Failed to initialize peer storage");
-                return;
+                return false;
             }
 
             Serial.println("Restoring peers from storage...");
@@ -447,6 +452,7 @@ namespace enomik
 
             isInitialized = true;
             sendHandShake();
+            return true;
         }
 
         /**

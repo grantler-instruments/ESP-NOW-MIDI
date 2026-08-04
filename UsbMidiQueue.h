@@ -7,9 +7,15 @@
 #define USB_MIDI_QUEUE_SIZE 64
 #endif
 
+/**
+ * @brief ISR-safe ring buffer for MIDI messages destined for USB MIDI OUT.
+ *
+ * Clock messages can be coalesced via enqueueClock() so a burst of clocks
+ * does not flood the queue.
+ */
 class UsbMidiQueue {
 public:
-  void enqueue(const midi_message& msg) {
+  void enqueue(const midi_message &msg) {
     portENTER_CRITICAL(&_mux);
     const uint16_t next = (_head + 1) % USB_MIDI_QUEUE_SIZE;
     if (next != _tail) {
@@ -35,8 +41,8 @@ public:
   uint16_t pendingCount() {
     portENTER_CRITICAL(&_mux);
     uint16_t count = (_head >= _tail)
-      ? (_head - _tail)
-      : (USB_MIDI_QUEUE_SIZE - _tail + _head);
+                         ? (_head - _tail)
+                         : (USB_MIDI_QUEUE_SIZE - _tail + _head);
     if (_pendingClock) {
       ++count;
     }
@@ -44,7 +50,7 @@ public:
     return count;
   }
 
-  bool peek(midi_message& msg) {
+  bool peek(midi_message &msg) {
     portENTER_CRITICAL(&_mux);
     if (_tail != _head) {
       msg = _items[_tail];

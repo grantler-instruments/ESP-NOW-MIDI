@@ -5,7 +5,7 @@ Namespace pages are generated from Doxygen comments in the library headers.
 
 ## Entry points
 
-There are two main ways to use the library:
+There are three main ways to use the library:
 
 - [`esp_now_midi`](api/Classes/classesp__now__midi.md): low-level ESP-NOW MIDI
   transport. Initialize it, add peers, send MIDI messages, and register receive
@@ -13,10 +13,14 @@ There are two main ways to use the library:
 - [`enomik::Client`](api/Classes/classenomik_1_1_client.md): higher-level client
   that wraps ESP-NOW MIDI setup, peer storage, and a MIDI SysEx configuration
   interface for pin mapping and board setup.
+- `enomik::Dongle`: USB MIDI ↔ ESP-NOW bridge for a host-connected board
+  (ESP32-S2/S3). Call `begin()` / `loop()`. Optional status UI via
+  `enomik::Dongle::Display` and `setDisplay()`. Optional
+  `setToHostFilter` / `setFromHostFilter` to drop or remap bridged messages.
 
 For most application sketches that should integrate with the Enomik tools, start
-with `enomik::Client`. Use plain `esp_now_midi` when you want direct control of
-send and receive.
+with `enomik::Client`. Use `enomik::Dongle` for the USB host bridge. Use plain
+`esp_now_midi` when you want direct control of send and receive.
 
 ## Supporting APIs
 

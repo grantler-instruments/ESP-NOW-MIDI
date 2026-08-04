@@ -22,16 +22,14 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
 ## Features
 * **enomik::Client I/O** Add `enomik::Client` to your sketch and it becomes a MIDI SysEx–configurable client: map pins to MIDI without extra wiring logic, e.g. digital input 3 → MIDI CC
 * **enomik::Client MIDI wrapper** Helper that takes care of the ESP-NOW setup, provides a common interface for USB and ESP-NOW MIDI
+* **enomik::Dongle** USB MIDI ↔ ESP-NOW bridge for a host-connected board (ESP32-S2/S3). Optional status display via `Dongle::Display` + `setDisplay()`
 * **examples**
   * **print_mac**: periodically prints the mac address to the serial monitor
-  * **dongle**: this is your esp now midi interface to your computer or any other usb midi host. it converts esp now message to midi messages, requires a midi capable board, e.g. esp32 s2 mini.
-  the config.h you can disable the display - in case you are not using one
-  if you wanna put them into a case, you can probably find 3d models online, here is one for an esp32 s2 mini: https://www.thingiverse.com/thing:5427531
+  * **dongle**: thin sketch around `enomik::Dongle` — your ESP-NOW MIDI interface to a computer or other USB MIDI host (requires a MIDI-capable board, e.g. ESP32-S2 Mini). Set `HAS_DISPLAY` in `config.h` for the example OLED, or register your own `Dongle::Display` subclass. Case idea for S2 Mini: https://www.thingiverse.com/thing:5427531
   * **plain_echo**: same as client_echo, but without the enomik helpers
   * **client**: fully configurable client that works with enomik boards and the enomik webapp
   * **client_echo**: simply echos the incoming MIDI messages
   * **client_hello_midi**: simple demo firmware that periodically sends midi messages via esp now
-  * **client_dac_i2s (wip)** - synth that can be controlled via dongle, e.g. send midi notes from a DAW to the dongle midi device - ** this is currently broken **
   * **client_waveshare-esp32-s3-relay-6ch** - simple relay controller that listens to note on/off messages, e.g. control solenoids 
   * **client_buttons** - reads button press/release and sends note on/off accordingly
   * **client_dmx** - control your dmx fixtures wirelessly
@@ -62,10 +60,10 @@ You usually run **two roles**: a **dongle** (USB MIDI + ESP-NOW on one board, e.
 
 ### 1. Set up the dongle
 
-1. Flash the **dongle** example onto your USB-capable board.
+1. Flash the **dongle** example onto your USB-capable board (`enomik::Dongle` with `begin()` / `loop()`).
 2. Note the dongle’s Wi-Fi STA MAC: run **print_mac** on that board (serial), or read it from the dongle display if you use one.
 
-If the dongle has an OLED, set `HAS_DISPLAY` to `1` in `examples/dongle/config.h`.
+If the dongle has an OLED, set `HAS_DISPLAY` to `1` in `examples/dongle/config.h`. Custom UI: subclass `enomik::Dongle::Display` and call `setDisplay()` before `begin()`.
 
 ### 2. Connect a remote board
 
@@ -94,8 +92,8 @@ Use the **signed** API everywhere unless you already have raw wire bytes:
 ### enomik 3000
 Drop `enomik::Client` into your firmware and your board turns into a MIDI SysEx–configurable device: routing, pin modes, and basic I/O can be set from a host over SysEx instead of hard-coding every mapping. This library is integrated with the [ESP-NOW MIDI Kit](https://grantler-instruments.github.io/enomik-app/) — the no-code app for creating (wireless) MIDI devices.
 
-### Circuit Python
-A circuit python version is in the making as well. Contributions here are very welcome.
+### CircuitPython
+A CircuitPython port lives in `esp_now_midi.py` (same packet format as the C++ library). It is pretty much untested — contributions and real-hardware feedback are very welcome.
 
 ## Benchmarks
 This repository includes benchmark data and their analysis (see `benchmarks/` and `scripts/`).
@@ -146,7 +144,6 @@ See **[scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW
 * examples/dongle additionally depends on
   * Adafruit GFX Library
   * Adafruit SSD1306
-* examples/client_dac_i2s depends on mozzi
 * examples/client_dmx uses Grove DMX512 (SN75176) with a built-in minimal sender (no extra library). Optional: use **luksal/ESP32-DMX** or **pierrejay/esp32-EZDMX** instead (see comment in the sketch). 
 * examples/client_servo depends on **ESP32Servo**
 * examples/client_audio_m16_i2s depends on [M16](https://github.com/algomusic/M16)
