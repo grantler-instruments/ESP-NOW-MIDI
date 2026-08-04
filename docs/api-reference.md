@@ -9,4 +9,5 @@ your build:
 | [C++ ESP-IDF](idf-api.md) | Core transport today | Same headers as Arduino for the core; Wi-Fi / logging backends switch via `#ifdef`. Enomik layers are planned for IDF as well. |
 | [CircuitPython](circuitpython-api.md) | `esp_now_midi.py` | Same on-air packet format as the C++ core |
 
-Guides that apply across targets: [Logging](logging.md), [Wi-Fi and ESP-IDF](wifi.md).
+Shared guide: [Logging](logging.md). Wi-Fi / `manageWifi` for the C++ core is
+documented under [C++ ESP-IDF](idf-api.md#wi-fi) (same `begin()` API on Arduino).

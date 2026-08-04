@@ -1,5 +1,5 @@
 #pragma once
-#include "./midiHelpers.h"
+#include "./esp_now_midi_helpers.h"
 
 /**
  * @file enomik_pinconfig.h

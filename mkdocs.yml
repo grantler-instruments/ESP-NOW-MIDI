@@ -12,7 +12,6 @@ nav:
   - Examples: examples.md
   - Guides:
       - Logging: logging.md
-      - Wi-Fi and ESP-IDF: wifi.md
       - Benchmarks: benchmarks.md
   - API reference:
       - Overview: api-reference.md
@@ -21,9 +20,7 @@ nav:
           - Classes: api/Classes/index.md
           - Files: api/Files/index.md
           - Namespaces: api/Namespaces/index.md
-      - C++ ESP-IDF:
-          - Overview: idf-api.md
-          - Wi-Fi: wifi.md
+      - C++ ESP-IDF: idf-api.md
       - CircuitPython: circuitpython-api.md
 
 theme:

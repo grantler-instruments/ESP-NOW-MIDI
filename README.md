@@ -63,7 +63,7 @@ Default is `0` (debug logs compiled out). On pure ESP-IDF, messages go through `
 
 ## Wi-Fi / ESP-IDF
 
-`esp_now_midi::begin(...)` brings up Wi-Fi STA by default (`manageWifi = true`) using an Arduino or ESP-IDF backend. Pass `manageWifi = false` if your app already owns Wi-Fi. The repo also ships as an ESP-IDF component (`CMakeLists.txt`). Details: [Wi-Fi and ESP-IDF](https://grantler-instruments.github.io/ESP-NOW-MIDI/wifi/).
+`esp_now_midi::begin(...)` brings up Wi-Fi STA by default (`manageWifi = true`) using an Arduino or ESP-IDF backend. Pass `manageWifi = false` if your app already owns Wi-Fi. The repo also ships as an ESP-IDF component (`CMakeLists.txt`). Install + Wi-Fi: [C++ ESP-IDF](https://grantler-instruments.github.io/ESP-NOW-MIDI/idf-api/).
 
 ## Breaking changes (this library is under active development => please make sure you are using the latest version)
 * This repo uses Semantic Versioning, although strict adherence will only come into effect at version 1.0.0.

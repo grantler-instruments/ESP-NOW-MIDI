@@ -9,7 +9,6 @@ transport), and CircuitPython.
 - [Getting started](getting-started.md)
 - [Examples](examples.md)
 - [Logging](logging.md)
-- [Wi-Fi and ESP-IDF](wifi.md)
 - [Benchmarks](benchmarks.md)
 
 ## API reference

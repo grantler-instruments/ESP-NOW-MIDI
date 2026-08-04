@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include "midiHelpers.h"
+#include "esp_now_midi_helpers.h"
 
 #ifndef USB_MIDI_QUEUE_SIZE
 #define USB_MIDI_QUEUE_SIZE 64

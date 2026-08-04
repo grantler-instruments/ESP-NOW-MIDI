@@ -57,6 +57,26 @@ jobs:
       - name: Run CircuitPython unit tests
         run: python3 -m unittest discover -s test/circuitpython -v
 
+  idf-build:
+    name: IDF ${{ matrix.idf_ver }} / ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        idf_ver: ["v5.3.3", "v5.4.1"]
+        target: [esp32, esp32s3]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build test/idf
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ matrix.idf_ver }}
+          target: ${{ matrix.target }}
+          path: test/idf
+          command: build
+
   build:
     runs-on: ubuntu-latest
     

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "midiHelpers.h"
+#include "esp_now_midi_helpers.h"
 
 /**
  * @brief One entry in the dongle display message history ring buffer.

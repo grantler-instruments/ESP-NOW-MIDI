@@ -1,0 +1,2 @@
+# Defaults for the compile smoke test. Override with `idf.py set-target`.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
