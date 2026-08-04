@@ -288,7 +288,7 @@ namespace enomik
                                         sendSongSelect(msg.firstByte);
                                         break;      
                                     default:
-                                        Serial.println("Sent other MIDI message");
+                                        EspNowMidiLog::d("Sent other MIDI message");
                                 } });
 
             // Forward SysEx responses (including GET_ALL_PEERS) via the handler send path
@@ -297,7 +297,7 @@ namespace enomik
 
             io.setOnAddPeerRequest([this](uint8_t mac[]) -> AddPeerResult
                                    {
-                               Serial.println("IO requested to add peer:");
+                               EspNowMidiLog::i("IO requested to add peer:");
                                macPrint(mac);
 
                                if (!isInitialized)
@@ -307,30 +307,30 @@ namespace enomik
 
                                if (peerStorage.isFull())
                                {
-                                   Serial.println("Peer table full");
+                                   EspNowMidiLog::w("Peer table full");
                                    return AddPeerResult::TableFull;
                                }
 
                                if (peerStorage.exists(mac))
                                {
-                                   Serial.println("Peer already exists");
+                                   EspNowMidiLog::w("Peer already exists");
                                    return AddPeerResult::AlreadyExists;
                                }
 
                                if (!peerStorage.add(mac))
                                {
-                                   Serial.println("Failed to store peer");
+                                   EspNowMidiLog::e("Failed to store peer");
                                    return AddPeerResult::OperationFailed;
                                }
 
                                if (!espnowMIDI.addPeer(mac))
                                {
-                                   Serial.println("Failed to add peer to ESP-NOW");
+                                   EspNowMidiLog::e("Failed to add peer to ESP-NOW");
                                    peerStorage.remove(mac);
                                    return AddPeerResult::OperationFailed;
                                }
 
-                               Serial.println("Peer added and stored successfully");
+                               EspNowMidiLog::i("Peer added and stored successfully");
                                return AddPeerResult::Success;
                            });
 
@@ -364,13 +364,13 @@ namespace enomik
                 TinyUSBDevice.attach();
             }
 
-            Serial.println("USB MIDI initialized");
+            EspNowMidiLog::i("USB MIDI initialized");
 #endif
 
             // Initialize ESP-NOW MIDI (apply persisted power-save preference)
             if (!espnowMIDI.begin(io.isPowerSave()))
             {
-                Serial.println("Failed to initialize ESP-NOW MIDI");
+                EspNowMidiLog::e("Failed to initialize ESP-NOW MIDI");
                 return false;
             }
 
@@ -409,11 +409,11 @@ namespace enomik
             // Initialize peer storage (handles EEPROM internally)
             if (!peerStorage.begin())
             {
-                Serial.println("Failed to initialize peer storage");
+                EspNowMidiLog::e("Failed to initialize peer storage");
                 return false;
             }
 
-            Serial.println("Restoring peers from storage...");
+            EspNowMidiLog::i("Restoring peers from storage...");
             int restoredCount = 0;
             int skippedCount = 0;
 
@@ -428,26 +428,23 @@ namespace enomik
                     {
                         if (espnowMIDI.addPeer(mac))
                         {
-                            Serial.print("Restored peer: ");
-                            Serial.println(macToString(mac));
+                            EspNowMidiLog::i("Restored peer: %s", macToString(mac).c_str());
                             restoredCount++;
                         }
                         else
                         {
-                            Serial.print("Failed to restore peer: ");
-                            Serial.println(macToString(mac));
+                            EspNowMidiLog::e("Failed to restore peer: %s", macToString(mac).c_str());
                         }
                     }
                     else
                     {
-                        Serial.print("Peer already exists, skipping: ");
-                        Serial.println(macToString(mac));
+                        EspNowMidiLog::i("Peer already exists, skipping: %s", macToString(mac).c_str());
                         skippedCount++;
                     }
                 }
             }
 
-            Serial.printf("Peer restoration complete: %d restored, %d skipped\n",
+            EspNowMidiLog::i("Peer restoration complete: %d restored, %d skipped",
                           restoredCount, skippedCount);
 
             isInitialized = true;
@@ -757,7 +754,7 @@ namespace enomik
         {
             if (!isInitialized)
             {
-                Serial.println("Client not initialized. Cannot send handshake.");
+                EspNowMidiLog::e("Client not initialized. Cannot send handshake.");
                 return;
             }
             // TODO: refactor to use sysex instead of control change
@@ -778,8 +775,7 @@ namespace enomik
                     }
                     else
                     {
-                        Serial.print("Failed to send handshake to: ");
-                        Serial.println(macToString(mac));
+                        EspNowMidiLog::e("Failed to send handshake to: %s", macToString(mac).c_str());
                     }
                 }
             }
@@ -790,7 +786,7 @@ namespace enomik
         {
             if (!isInitialized)
             {
-                Serial.println("Client not initialized. Call begin() first.");
+                EspNowMidiLog::e("Client not initialized. Call begin() first.");
                 return false;
             }
 
@@ -803,7 +799,7 @@ namespace enomik
             // Then add to ESP-NOW
             if (!espnowMIDI.addPeer(mac))
             {
-                Serial.println("Failed to add peer to ESP-NOW");
+                EspNowMidiLog::e("Failed to add peer to ESP-NOW");
                 // Rollback storage change
                 peerStorage.remove(mac);
                 return false;

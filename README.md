@@ -47,6 +47,20 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
   * **client_audio_audiotools_i2s** - MIDI-controlled sine wave synth using [arduino-audio-tools](https://github.com/pschatzmann/arduino-audio-tools), streaming audio over I2S. Receives Note On/Off and adjusts frequency and amplitude accordingly
   * **din_midi_bridge** - bidirectional DIN MIDI ↔ ESP-NOW bridge: forwards incoming serial MIDI (5-pin DIN) over ESP-NOW, and plays back received ESP-NOW MIDI to a DIN MIDI OUT port
 
+## Logging
+
+Library internals use `EspNowMidiLog` (`e` / `w` / `i` / `d`) instead of raw `Serial` calls. There is no runtime log-level API yet.
+
+* **Error / warn / info** (`e`, `w`, `i`) always emit on Arduino (to `Serial`).
+* **Debug** (`d`) is compile-time gated. Define before including library headers:
+
+```cpp
+#define ESP_NOW_DEBUGGING 1
+#include <esp_now_midi.h>
+```
+
+Default is `0` (debug logs compiled out). On pure ESP-IDF, messages go through `ESP_LOG*` with tag `esp_now_midi`. Details: [Logging](https://grantler-instruments.github.io/ESP-NOW-MIDI/logging/) (or [`docs/logging.md`](docs/logging.md)).
+
 ## Breaking changes (this library is under active development => please make sure you are using the latest version)
 * This repo uses Semantic Versioning, although strict adherence will only come into effect at version 1.0.0.
 * Starting with version 0.10.0 the esp_now_midi setup was renamed to begin, power saving has been disabled in flavor for lower latencies (can be enabled by setting begin(reducePowerAtCostOfLatency=true)

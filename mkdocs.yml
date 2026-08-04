@@ -9,6 +9,7 @@ site_dir: site
 nav:
   - Getting started: getting-started.md
   - Examples: examples.md
+  - Logging: logging.md
   - Benchmarks: benchmarks.md
   - Arduino C++ API reference:
       - Overview: arduino-api.md

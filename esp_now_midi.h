@@ -14,7 +14,7 @@
 #include <esp_wifi.h>
 #include <WiFi.h>
 #include "./midiHelpers.h"
-#define ESP_NOW_DEBUGGING 0 ///< Enable send-status logging when set to `1`.
+#include "./esp_now_midi_log.h"
 
 /** @brief Stored representation of an ESP-NOW peer. */
 struct PeerInfo
@@ -58,17 +58,16 @@ public:
   /**
    * @brief Default ESP-NOW send-status callback.
    *
-   * When `ESP_NOW_DEBUGGING` is `1`, writes the delivery result to Serial.
+   * When `ESP_NOW_DEBUGGING` is `1`, logs the delivery result.
    *
    * @param info ESP-IDF transmission details.
    * @param status Delivery result reported by ESP-NOW.
    */
   static void DefaultOnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
   {
-#if ESP_NOW_DEBUGGING == 1
-    Serial.print("\r\nLast Packet Send Status:\t");
-    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-#endif
+    (void)info;
+    EspNowMidiLog::d("Last Packet Send Status: %s",
+                     status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
   }
 
   /**
@@ -95,7 +94,7 @@ public:
   /**
    * @brief Initializes Wi-Fi, ESP-NOW, and the receive/send callbacks.
    *
-   * Initialization failures are reported to Serial and return `false`.
+   * Initialization failures are logged and return `false`.
    * Only one active instance is supported because ESP-NOW callbacks are routed
    * through a static instance pointer.
    *
@@ -125,11 +124,11 @@ public:
 
     if (init_result == ESP_ERR_ESPNOW_EXIST)
     {
-      Serial.println("[ESP-NOW] Already initialized");
+      EspNowMidiLog::i("Already initialized");
     }
     else if (init_result != ESP_OK)
     {
-      Serial.printf("[ESP-NOW] Init failed with error: %d\n", init_result);
+      EspNowMidiLog::e("Init failed with error: %d", init_result);
       return false;
     }
 
@@ -187,19 +186,11 @@ public:
   {
     if (_peersCount >= MAX_PEERS)
     {
-      Serial.println("Maximum number of peers reached");
+      EspNowMidiLog::w("Maximum number of peers reached");
       return false;
     }
 
-    // Debug print
-    Serial.print("Adding peer: ");
-    for (int i = 0; i < 6; i++)
-    {
-      Serial.print(macAddress[i], HEX);
-      if (i < 5)
-        Serial.print(":");
-    }
-    Serial.println();
+    EspNowMidiLog::mac("Adding peer: ", macAddress);
 
     // Create the peer info structure
     esp_now_peer_info_t peerInfo;
@@ -211,7 +202,7 @@ public:
     // Add the peer to ESP-NOW
     if (esp_now_add_peer(&peerInfo) != ESP_OK)
     {
-      Serial.println("Failed to add peer");
+      EspNowMidiLog::e("Failed to add peer");
       return false;
     }
 
@@ -219,15 +210,14 @@ public:
     memcpy(_peers[_peersCount].mac, macAddress, 6);
     _peers[_peersCount].packed_mac = PeerInfo::packMac(macAddress);
     _peersCount++;
-    Serial.print("Peer added successfully. Total peers: ");
-    Serial.println(_peersCount);
+    EspNowMidiLog::i("Peer added successfully. Total peers: %d", _peersCount);
     return true;
   }
 
   /** @brief Removes every registered peer from ESP-NOW and the local list. */
   void clearPeers()
   {
-    Serial.println("Clearing all peers from ESP-NOW...");
+    EspNowMidiLog::i("Clearing all peers from ESP-NOW...");
 
     // Remove all peers from ESP-NOW
     for (int i = 0; i < _peersCount; i++)
@@ -235,18 +225,11 @@ public:
       esp_err_t result = esp_now_del_peer(_peers[i].mac);
       if (result == ESP_OK)
       {
-        Serial.print("Removed peer: ");
-        for (int j = 0; j < 6; j++)
-        {
-          Serial.print(_peers[i].mac[j], HEX);
-          if (j < 5)
-            Serial.print(":");
-        }
-        Serial.println();
+        EspNowMidiLog::mac("Removed peer: ", _peers[i].mac);
       }
       else
       {
-        Serial.printf("Failed to remove peer, error: %d\n", result);
+        EspNowMidiLog::e("Failed to remove peer, error: %d", result);
       }
     }
 
@@ -254,7 +237,7 @@ public:
     memset(_peers, 0, sizeof(_peers));
     _peersCount = 0;
 
-    Serial.println("All peers cleared");
+    EspNowMidiLog::i("All peers cleared");
   }
 
   /**
@@ -266,24 +249,17 @@ public:
     return _peersCount;
   }
 
-  /** @brief Prints every registered peer MAC address to Serial. */
+  /** @brief Logs every registered peer MAC address. */
   void printPeers() const
   {
-    Serial.println("=== Registered ESP-NOW Peers ===");
+    EspNowMidiLog::i("=== Registered ESP-NOW Peers ===");
     for (int i = 0; i < _peersCount; i++)
     {
-      Serial.print("Peer ");
-      Serial.print(i);
-      Serial.print(": ");
-      for (int j = 0; j < 6; j++)
-      {
-        Serial.print(_peers[i].mac[j], HEX);
-        if (j < 5)
-          Serial.print(":");
-      }
-      Serial.println();
+      char macBuf[EspNowMidiLog::MAC_STR_LEN];
+      EspNowMidiLog::formatMac(macBuf, sizeof(macBuf), _peers[i].mac);
+      EspNowMidiLog::i("Peer %d: %s", i, macBuf);
     }
-    Serial.println("================================");
+    EspNowMidiLog::i("================================");
   }
 
   /**
@@ -299,7 +275,6 @@ public:
 
     if (_peersCount == 0)
     {
-      // Serial.println("No peers registered!");
       return ESP_FAIL;
     }
 
