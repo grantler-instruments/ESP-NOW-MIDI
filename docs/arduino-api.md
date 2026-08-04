@@ -1,7 +1,8 @@
-# Arduino C++ API overview
+# C++ Arduino API overview
 
-This section documents the Arduino / C++ public API. The Class, File, and
-Namespace pages are generated from Doxygen comments in the library headers.
+This section documents the Arduino / C++ public API (Arduino-ESP32). The Class,
+File, and Namespace pages are generated from Doxygen comments in the library
+headers. For pure ESP-IDF, see [C++ ESP-IDF](idf-api.md).
 
 ## Entry points
 
@@ -29,6 +30,8 @@ with `enomik::Client`. Use `enomik::Dongle` for the USB host bridge. Use plain
 - [`EspNowMidiLog`](logging.md) (`esp_now_midi_log.h`): internal printf-style
   logger (`e` / `w` / `i` / `d`) with Arduino `Serial` and ESP-IDF `ESP_LOG*`
   backends. Debug is gated by `ESP_NOW_DEBUGGING`; see [Logging](logging.md).
+- Wi-Fi bring-up (`esp_now_midi_wifi.h`) and `begin(..., manageWifi)`: see
+  [Wi-Fi and ESP-IDF](wifi.md).
 - [`enomik::IO`](api/Classes/classenomik_1_1_i_o.md): pin and MIDI mapping
   helpers used by the Enomik client.
 - [`enomik::PeerStorage`](api/Classes/classenomik_1_1_peer_storage.md):

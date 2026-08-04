@@ -10,11 +10,16 @@
 #define ESP_NOW_MIDI_CHANNEL 6
 #endif
 #include "./version.h"
+#include <cstdint>
 #include <esp_now.h>
 #include <esp_wifi.h>
-#include <WiFi.h>
 #include "./midiHelpers.h"
 #include "./esp_now_midi_log.h"
+#include "./esp_now_midi_wifi.h"
+
+#ifndef ARDUINO
+using byte = uint8_t;
+#endif
 
 /** @brief Stored representation of an ESP-NOW peer. */
 struct PeerInfo
@@ -92,7 +97,7 @@ public:
     }
   }
   /**
-   * @brief Initializes Wi-Fi, ESP-NOW, and the receive/send callbacks.
+   * @brief Initializes ESP-NOW (and optionally Wi-Fi STA) plus send/recv callbacks.
    *
    * Initialization failures are logged and return `false`.
    * Only one active instance is supported because ESP-NOW callbacks are routed
@@ -103,20 +108,26 @@ public:
    * @param autoPeerDiscovery Add an unknown message sender as a peer when it
    * first sends data.
    * @param callback Optional callback invoked after each ESP-NOW send.
+   * @param manageWifi When `true` (default), bring up Wi-Fi STA via the
+   * Arduino or ESP-IDF backend. When `false`, the application must already
+   * have started Wi-Fi; this call only configures ESP-NOW, channel, and power.
+   * Peers must share the same radio channel.
    * @return `true` when ESP-NOW is ready (including already-initialized).
    */
-  bool begin(bool reducePowerAtCostOfLatency = false, bool autoPeerDiscovery = true, DataSentCallback callback = DefaultOnDataSent)
+  bool begin(bool reducePowerAtCostOfLatency = false, bool autoPeerDiscovery = true,
+             DataSentCallback callback = DefaultOnDataSent, bool manageWifi = true)
   {
     _instance = this;
     _autoPeerDiscovery = autoPeerDiscovery;
     userDataSentCallback = callback; // This needs to be INSIDE the function
 
-    // Initialize WiFi if needed
-    if (WiFi.getMode() != WIFI_MODE_STA)
+    if (manageWifi)
     {
-      WiFi.mode(WIFI_STA);
-      WiFi.disconnect();
-      delay(100);
+      if (!esp_now_midi_wifi::ensureWifiSta())
+      {
+        EspNowMidiLog::e("Wi-Fi STA bring-up failed");
+        return false;
+      }
     }
 
     // Try to initialize ESP-NOW (gracefully handle if already initialized)
