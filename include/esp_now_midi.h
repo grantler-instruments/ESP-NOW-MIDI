@@ -11,6 +11,7 @@
 #endif
 #include "./version.h"
 #include <cstdint>
+#include <cstring>
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include "./esp_now_midi_helpers.h"
