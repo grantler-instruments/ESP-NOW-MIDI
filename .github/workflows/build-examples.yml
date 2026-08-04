@@ -75,7 +75,7 @@ jobs:
           esp_idf_version: ${{ matrix.idf_ver }}
           target: ${{ matrix.target }}
           path: test/idf
-          command: build
+          # Default is "idf.py build"; do not pass bare "build" (runs as a shell command).
 
   build:
     runs-on: ubuntu-latest
