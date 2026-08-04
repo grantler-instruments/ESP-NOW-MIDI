@@ -71,7 +71,7 @@ In the project’s root `idf_component.yml` or `main/idf_component.yml`:
 dependencies:
   esp_now_midi:
     git: https://github.com/grantler-instruments/ESP-NOW-MIDI.git
-    # version: "v0.15.0"   # optional tag / commit
+    # version: "v0.16.0"   # optional tag / commit
 ```
 
 Run `idf.py reconfigure` (or `idf.py build`). The manager clones into
