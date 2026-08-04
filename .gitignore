@@ -2,6 +2,11 @@ __pycache__/
 
 # Local build output (Arduino IDE 2.x, CMake, etc.)
 build/
+test/idf/build/
+test/idf/sdkconfig
+test/idf/sdkconfig.old
+test/idf/dependencies.lock
+test/idf/managed_components/
 
 # PlatformIO
 .pio/

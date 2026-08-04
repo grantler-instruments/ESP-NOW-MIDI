@@ -8,6 +8,7 @@ uint8_t peerMacAddress[6] = { 0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62 };
 esp_now_midi ESP_NOW_MIDI;
 
 void customOnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
+  (void)info;
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failure");
 }
 

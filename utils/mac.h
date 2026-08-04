@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include "esp_mac.h"
+#include "../esp_now_midi_log.h"
 
 
 #define MAC_ADDRESS_SIZE 6
@@ -27,7 +28,7 @@ inline bool macFromString(const String& macStr, uint8_t mac[MAC_ADDRESS_SIZE]) {
     trimmed.toUpperCase();
 
     if (trimmed.length() != 17) {
-        Serial.println("MacHelpers: Invalid MAC length. Expected XX:XX:XX:XX:XX:XX");
+        EspNowMidiLog::w("MacHelpers: Invalid MAC length. Expected XX:XX:XX:XX:XX:XX");
         return false;
     }
 
@@ -47,8 +48,7 @@ inline bool macFromString(const String& macStr, uint8_t mac[MAC_ADDRESS_SIZE]) {
         };
 
         if (!isHex(char1) || !isHex(char2)) {
-            Serial.print("MacHelpers: Invalid hex at position ");
-            Serial.println(pos);
+            EspNowMidiLog::w("MacHelpers: Invalid hex at position %d", pos);
             return false;
         }
 
@@ -58,8 +58,7 @@ inline bool macFromString(const String& macStr, uint8_t mac[MAC_ADDRESS_SIZE]) {
 
         // Check for colon separator (except after last byte)
         if (i < MAC_ADDRESS_SIZE - 1 && trimmed.charAt(pos + 2) != ':') {
-            Serial.print("MacHelpers: Missing colon after byte ");
-            Serial.println(i);
+            EspNowMidiLog::w("MacHelpers: Missing colon after byte %d", i);
             return false;
         }
     }
@@ -93,19 +92,14 @@ inline bool macIsBroadcast(const uint8_t mac[MAC_ADDRESS_SIZE]) {
     return true;
 }
 
-// Print MAC address to Serial
+// Log MAC address (no prefix)
 inline void macPrint(const uint8_t mac[MAC_ADDRESS_SIZE]) {
-    for (int i = 0; i < MAC_ADDRESS_SIZE; i++) {
-        if (mac[i] < 16) Serial.print("0");
-        Serial.print(mac[i], HEX);
-        if (i < MAC_ADDRESS_SIZE - 1) Serial.print(":");
-    }
+    EspNowMidiLog::mac("", mac);
 }
 
-// Print MAC address to Serial with newline
+// Log MAC address (alias of macPrint)
 inline void macPrintln(const uint8_t mac[MAC_ADDRESS_SIZE]) {
-    macPrint(mac);
-    Serial.println();
+    EspNowMidiLog::mac("", mac);
 }
 
 } // namespace enomik

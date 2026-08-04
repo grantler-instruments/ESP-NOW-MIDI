@@ -139,7 +139,7 @@ namespace enomik
             {
                 if (!_display->begin())
                 {
-                    Serial.println("Display init failed");
+                    EspNowMidiLog::e("Display init failed");
                     _display = nullptr;
                 }
             }
@@ -176,12 +176,12 @@ namespace enomik
         bool begin()
         {
 #ifndef HAS_USB_MIDI
-            Serial.println("enomik::Dongle requires a USB-capable chip (ESP32-S2/S3)");
+            EspNowMidiLog::e("enomik::Dongle requires a USB-capable chip (ESP32-S2/S3)");
             return false;
 #else
-            Serial.println("=== ESP-NOW MIDI DONGLE ===");
-            Serial.printf("ESP-IDF Version: %s\n", esp_get_idf_version());
-            Serial.printf("Channel: %d\n", ESP_NOW_MIDI_CHANNEL);
+            EspNowMidiLog::i("=== ESP-NOW MIDI DONGLE ===");
+            EspNowMidiLog::i("ESP-IDF Version: %s", esp_get_idf_version());
+            EspNowMidiLog::i("Channel: %d", ESP_NOW_MIDI_CHANNEL);
 
             TinyUSBDevice.setManufacturerDescriptor(_manufacturer);
             TinyUSBDevice.setProductDescriptor(_product);
@@ -197,7 +197,7 @@ namespace enomik
 
             if (!espnowMIDI.begin())
             {
-                Serial.println("Failed to initialize ESP-NOW MIDI");
+                EspNowMidiLog::e("Failed to initialize ESP-NOW MIDI");
                 return false;
             }
 
@@ -206,8 +206,7 @@ namespace enomik
 #endif
 
             readMacAddress();
-            Serial.print("Mac: ");
-            Serial.println(macToString(_baseMac));
+            EspNowMidiLog::i("Mac: %s", macToString(_baseMac).c_str());
 
             espnowMIDI.setHandleNoteOn(handleNoteOnStatic);
             espnowMIDI.setHandleNoteOff(handleNoteOffStatic);
@@ -223,20 +222,19 @@ namespace enomik
             espnowMIDI.setHandleSongPosition(handleSongPositionStatic);
             espnowMIDI.setHandleSongSelect(handleSongSelectStatic);
 
-            Serial.print("Registered peers: ");
-            Serial.println(espnowMIDI.getPeersCount());
+            EspNowMidiLog::i("Registered peers: %d", espnowMIDI.getPeersCount());
 
             if (_display)
             {
                 if (!_display->begin())
                 {
-                    Serial.println("Display init failed");
+                    EspNowMidiLog::e("Display init failed");
                     _display = nullptr;
                 }
             }
 
             _isInitialized = true;
-            Serial.println("Setup complete - ready!");
+            EspNowMidiLog::i("Setup complete - ready!");
             return true;
 #endif
         }
@@ -259,14 +257,14 @@ namespace enomik
 
             if (_usbMidiInitialized && !TinyUSBDevice.mounted())
             {
-                Serial.println("USB disconnected");
+                EspNowMidiLog::i("USB disconnected");
                 _usbMidiInitialized = false;
                 _usbMidiQueue.clear();
             }
 
             if (!_usbMidiInitialized && TinyUSBDevice.mounted())
             {
-                Serial.println("USB mounted - initializing MIDI");
+                EspNowMidiLog::i("USB mounted - initializing MIDI");
 
                 DONGLE_USBMIDI.begin(MIDI_CHANNEL_OMNI);
                 DONGLE_USBMIDI.turnThruOff();
@@ -286,7 +284,7 @@ namespace enomik
                 DONGLE_USBMIDI.setHandleSongSelect(onSongSelectStatic);
 
                 _usbMidiInitialized = true;
-                Serial.println("USB MIDI ready!");
+                EspNowMidiLog::i("USB MIDI ready!");
             }
 
             if (_usbMidiInitialized)
@@ -649,7 +647,7 @@ namespace enomik
             esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, _baseMac);
             if (ret != ESP_OK)
             {
-                Serial.println("Failed to read MAC address");
+                EspNowMidiLog::e("Failed to read MAC address");
             }
         }
 
@@ -780,7 +778,7 @@ namespace enomik
 
             lastStatus = status;
             lastLogMs = now;
-            Serial.printf("USB status=%c mounted=%d suspended=%d ready=%d queue=%u\n",
+            EspNowMidiLog::d("USB status=%c mounted=%d suspended=%d ready=%d queue=%u",
                           status,
                           TinyUSBDevice.mounted(),
                           TinyUSBDevice.suspended(),

@@ -1,7 +1,8 @@
-# Arduino C++ API overview
+# C++ Arduino API overview
 
-This section documents the Arduino / C++ public API. The Class, File, and
-Namespace pages are generated from Doxygen comments in the library headers.
+This section documents the Arduino / C++ public API (Arduino-ESP32). The Class,
+File, and Namespace pages are generated from Doxygen comments in the library
+headers. For pure ESP-IDF, see [C++ ESP-IDF](idf-api.md).
 
 ## Entry points
 
@@ -48,10 +49,15 @@ Wire layout: `[0x00][tick16 LE ×100µs][midi 1–3 bytes]`.
 
 ## Supporting APIs
 
-- [`midiHelpers.h`](api/Files/midi_helpers_8h.md): MIDI message types, constants,
-  and helpers such as pitch-bend conversion.
+- [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h.md): MIDI message
+  types, constants, and helpers such as pitch-bend conversion.
 - `midiTimedPacket.h` / `MidiJitterBuffer.h`: timed wire format and per-peer
   playout ring used by `esp_now_midi`.
+- [`EspNowMidiLog`](logging.md) (`esp_now_midi_log.h`): internal printf-style
+  logger (`e` / `w` / `i` / `d`) with Arduino `Serial` and ESP-IDF `ESP_LOG*`
+  backends. Debug is gated by `ESP_NOW_DEBUGGING`; see [Logging](logging.md).
+- Wi-Fi bring-up (`esp_now_midi_wifi.h`) and `begin(..., manageWifi)`: see
+  [C++ ESP-IDF → Wi-Fi](idf-api.md#wi-fi) (same API on Arduino).
 - [`enomik::IO`](api/Classes/classenomik_1_1_i_o.md): pin and MIDI mapping
   helpers used by the Enomik client.
 - [`enomik::PeerStorage`](api/Classes/classenomik_1_1_peer_storage.md):

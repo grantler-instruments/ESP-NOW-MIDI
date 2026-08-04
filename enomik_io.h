@@ -263,31 +263,19 @@ namespace enomik
             _onSysExSendRequest = callback;
         }
 
-        /** @brief Prints all loaded pin configurations to Serial. */
+        /** @brief Logs all loaded pin configurations. */
         void printPinConfigs()
         {
-            Serial.println("=== Pin Configurations ===");
+            EspNowMidiLog::i("=== Pin Configurations ===");
             for (size_t i = 0; i < _pinConfigs.size(); i++)
             {
                 const auto &cfg = _pinConfigs[i];
-                Serial.print("Pin: ");
-                Serial.print(cfg.pin);
-                Serial.print(" | Mode: ");
-                Serial.print(cfg.mode);
-                Serial.print(" | MIDI Channel: ");
-                Serial.print(cfg.midi_channel);
-                Serial.print(" | MIDI Type: ");
-                Serial.print(static_cast<uint8_t>(cfg.midi_type));
-                Serial.print(" | CC: ");
-                Serial.print(cfg.midi_cc);
-                Serial.print(" | Note: ");
-                Serial.print(cfg.midi_note);
-                Serial.print(" | Min MIDI: ");
-                Serial.print(cfg.min_midi_value);
-                Serial.print(" | Max MIDI: ");
-                Serial.println(cfg.max_midi_value);
+                EspNowMidiLog::i(
+                    "Pin: %u | Mode: %u | MIDI Channel: %u | MIDI Type: %u | CC: %u | Note: %u | Min MIDI: %u | Max MIDI: %u",
+                    cfg.pin, cfg.mode, cfg.midi_channel, static_cast<uint8_t>(cfg.midi_type),
+                    cfg.midi_cc, cfg.midi_note, cfg.min_midi_value, cfg.max_midi_value);
             }
-            Serial.println("==========================");
+            EspNowMidiLog::i("==========================");
         }
 
     private:
@@ -310,15 +298,14 @@ namespace enomik
             // Handler for setting pin configuration
             _sysexHandler.setOnSetPinConfig([this](const PinConfig &cfg)
                                             {
-                Serial.println("SysEx: Setting pin config");
+                EspNowMidiLog::d("SysEx: Setting pin config");
                 upsertPinConfig(cfg);
                 _sysexHandler.sendPinConfigResponse(cfg, SysExCommand::SET_PIN_CONFIG_RESPONSE); });
 
             // Handler for getting single pin configuration
             _sysexHandler.setOnGetPinConfig([this](uint8_t pin)
                                             {
-                Serial.print("SysEx: Getting config for pin ");
-                Serial.println(pin);
+                EspNowMidiLog::d("SysEx: Getting config for pin %u", pin);
                 for (const auto &cfg : _pinConfigs)
                 {
                     if (cfg.pin == pin)
@@ -327,7 +314,7 @@ namespace enomik
                         return;
                     }
                 }
-                Serial.println("SysEx: Pin config not found");
+                EspNowMidiLog::w("SysEx: Pin config not found");
                 _sysexHandler.sendErrorResponse(
                     static_cast<uint8_t>(SysExCommand::GET_PIN_CONFIG),
                     SysExErrorCode::PIN_NOT_FOUND,
@@ -336,7 +323,7 @@ namespace enomik
             // Handler for getting all pin configurations
             _sysexHandler.setOnGetAllPinConfigs([this]()
                                                 {
-                Serial.println("SysEx: Getting all pin configs");
+                EspNowMidiLog::d("SysEx: Getting all pin configs");
                 for (const auto &cfg : _pinConfigs)
                 {
                     _sysexHandler.sendPinConfigResponse(cfg, SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE);
@@ -346,8 +333,7 @@ namespace enomik
             // Handler for deleting pin configuration
             _sysexHandler.setOnDeletePinConfig([this](uint8_t pin)
                                                {
-                Serial.print("SysEx: Deleting config for pin ");
-                Serial.println(pin);
+                EspNowMidiLog::d("SysEx: Deleting config for pin %u", pin);
                 
                 for (size_t i = 0; i < _pinConfigs.size(); i++)
                 {
@@ -360,7 +346,7 @@ namespace enomik
                         return;
                     }
                 }
-                Serial.println("SysEx: Pin config not found for delete");
+                EspNowMidiLog::w("SysEx: Pin config not found for delete");
                 _sysexHandler.sendErrorResponse(
                     static_cast<uint8_t>(SysExCommand::DELETE_PIN_CONFIG),
                     SysExErrorCode::PIN_NOT_FOUND,
@@ -369,7 +355,7 @@ namespace enomik
             // Handler for clearing all pin configurations
             _sysexHandler.setOnClearPinConfigs([this]()
                                                {
-                Serial.println("SysEx: Clearing all pin configs");
+                EspNowMidiLog::d("SysEx: Clearing all pin configs");
                 _pinConfigs.clear();
                 _pinStates.clear();
                 savePinConfigsToPrefs(_pinConfigs);
@@ -378,7 +364,7 @@ namespace enomik
             // Handler for getting MAC address
             _sysexHandler.setOnGetMAC([this]()
                                       {
-                Serial.println("SysEx: Getting MAC address");
+                EspNowMidiLog::d("SysEx: Getting MAC address");
                 uint8_t mac[6];
                 esp_read_mac(mac, ESP_MAC_WIFI_STA);
                 _sysexHandler.sendMACResponse(mac); });
@@ -386,13 +372,7 @@ namespace enomik
             // Handler for adding peer
             _sysexHandler.setOnAddPeer([this](const uint8_t mac[6]) -> AddPeerResult
                                        {
-                Serial.print("SysEx: Adding peer ");
-                for (int i = 0; i < 6; i++)
-                {
-                    Serial.print(mac[i], HEX);
-                    if (i < 5) Serial.print(":");
-                }
-                Serial.println();
+                EspNowMidiLog::mac("SysEx: Adding peer ", mac);
 
                 if (!_onAddPeerRequest)
                 {
@@ -407,7 +387,7 @@ namespace enomik
             // Handler for getting all peers (one response per peer, then stream end)
             _sysexHandler.setOnGetAllPeers([this]()
                                         {
-                Serial.println("SysEx: Getting peers list");
+                EspNowMidiLog::d("SysEx: Getting peers list");
                 if (_onGetPeerRequest)
                 {
                     for (uint8_t index = 0; index < MAX_PEERS; index++)
@@ -424,8 +404,7 @@ namespace enomik
             // Handler for getting one peer by storage index
             _sysexHandler.setOnGetPeer([this](uint8_t index)
                                        {
-                Serial.print("SysEx: Getting peer at index ");
-                Serial.println(index);
+                EspNowMidiLog::d("SysEx: Getting peer at index %u", index);
                 const uint8_t *mac = _onGetPeerRequest ? _onGetPeerRequest(index) : nullptr;
                 if (mac)
                 {
@@ -443,7 +422,7 @@ namespace enomik
             // Handler for full board config (pins + peers + flags, then GET_CONFIG_RESPONSE)
             _sysexHandler.setOnGetConfig([this]()
                                          {
-                Serial.println("SysEx: Streaming full board config");
+                EspNowMidiLog::d("SysEx: Streaming full board config");
                 for (const auto &cfg : _pinConfigs)
                 {
                     _sysexHandler.sendPinConfigResponse(
@@ -468,36 +447,34 @@ namespace enomik
 
             _sysexHandler.setOnSetMidiLoopback([this](bool enabled)
                                                {
-                Serial.print("SysEx: Setting MIDI loopback ");
-                Serial.println(enabled ? "on" : "off");
+                EspNowMidiLog::d("SysEx: Setting MIDI loopback %s", enabled ? "on" : "off");
                 setMidiLoopback(enabled);
                 _sysexHandler.sendMidiLoopbackResponse(
                     SysExCommand::SET_MIDI_LOOPBACK_RESPONSE, _midiLoopback); });
 
             _sysexHandler.setOnGetMidiLoopback([this]()
                                                {
-                Serial.println("SysEx: Getting MIDI loopback");
+                EspNowMidiLog::d("SysEx: Getting MIDI loopback");
                 _sysexHandler.sendMidiLoopbackResponse(
                     SysExCommand::GET_MIDI_LOOPBACK_RESPONSE, _midiLoopback); });
 
             _sysexHandler.setOnSetPowerSave([this](bool enabled)
                                             {
-                Serial.print("SysEx: Setting power save ");
-                Serial.println(enabled ? "on" : "off");
+                EspNowMidiLog::d("SysEx: Setting power save %s", enabled ? "on" : "off");
                 setPowerSave(enabled);
                 _sysexHandler.sendPowerSaveResponse(
                     SysExCommand::SET_POWER_SAVE_RESPONSE, _powerSave); });
 
             _sysexHandler.setOnGetPowerSave([this]()
                                             {
-                Serial.println("SysEx: Getting power save");
+                EspNowMidiLog::d("SysEx: Getting power save");
                 _sysexHandler.sendPowerSaveResponse(
                     SysExCommand::GET_POWER_SAVE_RESPONSE, _powerSave); });
 
             // Handler for system reset
             _sysexHandler.setOnReset([this]()
                                      {
-                Serial.println("SysEx: Performing system reset");
+                EspNowMidiLog::i("SysEx: Performing system reset");
                 
                 // Clear in-memory configurations
                 _pinConfigs.clear();
@@ -524,12 +501,12 @@ namespace enomik
                 }
 
                 _sysexHandler.sendSimpleResponse(SysExCommand::RESET_RESPONSE);
-                Serial.println("System reset complete"); });
+                EspNowMidiLog::i("System reset complete"); });
 
             // Handler for getting protocol version
             _sysexHandler.setOnGetVersion([this]()
                                           {
-                Serial.println("SysEx: Getting version");
+                EspNowMidiLog::d("SysEx: Getting version");
                 _sysexHandler.sendVersionResponse(); });
 
             // Handler for sending SysEx messages back out
@@ -748,17 +725,15 @@ namespace enomik
 
         void upsertPinConfig(const PinConfig &config)
         {
-            Serial.println("=== UPSERT START ===");
-            Serial.print("Upserting pin: ");
-            Serial.println(config.pin);
+            EspNowMidiLog::d("=== UPSERT START ===");
+            EspNowMidiLog::d("Upserting pin: %u", config.pin);
 
             // Remove existing config for this pin
             for (size_t i = 0; i < _pinConfigs.size(); i++)
             {
                 if (_pinConfigs[i].pin == config.pin)
                 {
-                    Serial.print("Removing existing config at index: ");
-                    Serial.println(i);
+                    EspNowMidiLog::d("Removing existing config at index: %u", (unsigned)i);
                     _pinConfigs.erase(_pinConfigs.begin() + i);
                     _pinStates.erase(_pinStates.begin() + i);
                     break;
@@ -766,16 +741,14 @@ namespace enomik
             }
 
             // Add new config
-            Serial.print("Adding new config for pin: ");
-            Serial.println(config.pin);
+            EspNowMidiLog::d("Adding new config for pin: %u", config.pin);
             _pinConfigs.push_back(config);
             _pinStates.push_back(PinState());
             initializePinHardware(config);
 
-            Serial.print("Config count after: ");
-            Serial.println(_pinConfigs.size());
+            EspNowMidiLog::d("Config count after: %u", (unsigned)_pinConfigs.size());
             savePinConfigsToPrefs(_pinConfigs);
-            Serial.println("=== UPSERT END ===");
+            EspNowMidiLog::d("=== UPSERT END ===");
         }
 
         void savePinConfigsToPrefs(const std::vector<PinConfig> &configs)
