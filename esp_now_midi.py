@@ -6,9 +6,9 @@ Based on the C++ esp_now_midi library - packet format compatible
 
 import espnow
 
-# Keep in sync with version.h
-VERSION_MAJOR = 0
-VERSION_MINOR = 15
+# Keep in sync with version.h (timed/jitter buffer not ported to CP yet)
+VERSION_MAJOR = 1
+VERSION_MINOR = 0
 VERSION_PATCH = 0
 VERSION = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
 

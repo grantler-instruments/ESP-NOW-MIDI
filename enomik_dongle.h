@@ -18,6 +18,11 @@
 #define DONGLE_UPDATE_DISPLAY_INTERVAL_MS 64
 #endif
 
+/** Default: enable timed TX + RX jitter buffer on the dongle (`1` on, `0` off). */
+#ifndef DONGLE_REDUCE_JITTER_AT_COST_OF_LATENCY
+#define DONGLE_REDUCE_JITTER_AT_COST_OF_LATENCY 1
+#endif
+
 #ifdef HAS_USB_MIDI
 #include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
@@ -196,6 +201,10 @@ namespace enomik
                 return false;
             }
 
+#if DONGLE_REDUCE_JITTER_AT_COST_OF_LATENCY
+            espnowMIDI.setReduceJitterAtCostOfLatency(true);
+#endif
+
             readMacAddress();
             Serial.print("Mac: ");
             Serial.println(macToString(_baseMac));
@@ -239,6 +248,7 @@ namespace enomik
          */
         void loop()
         {
+            espnowMIDI.update();
 #ifdef HAS_USB_MIDI
             if (!_isInitialized)
             {
@@ -288,6 +298,33 @@ namespace enomik
             logUsbState(now);
             updateDisplay(now);
 #endif
+        }
+
+        /**
+         * @brief Enables opt-in jitter reduction on the ESP-NOW link (see
+         * `esp_now_midi::setReduceJitterAtCostOfLatency`).
+         */
+        void setReduceJitterAtCostOfLatency(bool enabled)
+        {
+            espnowMIDI.setReduceJitterAtCostOfLatency(enabled);
+        }
+
+        /** @brief Returns whether jitter reduction is enabled. */
+        bool getReduceJitterAtCostOfLatency() const
+        {
+            return espnowMIDI.getReduceJitterAtCostOfLatency();
+        }
+
+        /** @brief Sets the RX playout cushion `T` in milliseconds. */
+        void setJitterBufferMs(uint16_t ms)
+        {
+            espnowMIDI.setJitterBufferMs(ms);
+        }
+
+        /** @brief Returns the RX playout cushion `T` in milliseconds. */
+        uint16_t getJitterBufferMs() const
+        {
+            return espnowMIDI.getJitterBufferMs();
         }
 
         /** @return USB status char: D disconnected, S suspended, Q queued, C connected. */

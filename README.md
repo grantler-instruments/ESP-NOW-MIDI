@@ -49,6 +49,7 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
 
 ## Breaking changes (this library is under active development => please make sure you are using the latest version)
 * This repo uses Semantic Versioning, although strict adherence will only come into effect at version 1.0.0.
+* Starting with version 0.16.0, optional jitter reduction uses timed ESP-NOW frames (`0x00` + `uint16` tick ×100µs + MIDI). Default remains raw ASAP. Older peers that treat `len > 3` as SysEx will drop timed packets — only enable `setReduceJitterAtCostOfLatency(true)` when both ends understand the format. CircuitPython timed/buffer support is not in this release yet.
 * Starting with version 0.10.0 the esp_now_midi setup was renamed to begin, power saving has been disabled in flavor for lower latencies (can be enabled by setting begin(reducePowerAtCostOfLatency=true)
 * Starting with version 0.9.0, packages are sent as 3 byte messages (channel+status combined, as the MIDI specs), older version have used 4 bytes
 * Starting with version 0.6, this library requires ESP32 board version greater or equal than 3.3.0 
