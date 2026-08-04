@@ -95,7 +95,7 @@ public:
   /**
    * @brief Initializes Wi-Fi, ESP-NOW, and the receive/send callbacks.
    *
-   * Initialization failures are reported to Serial and cause an early return.
+   * Initialization failures are reported to Serial and return `false`.
    * Only one active instance is supported because ESP-NOW callbacks are routed
    * through a static instance pointer.
    *
@@ -104,8 +104,9 @@ public:
    * @param autoPeerDiscovery Add an unknown message sender as a peer when it
    * first sends data.
    * @param callback Optional callback invoked after each ESP-NOW send.
+   * @return `true` when ESP-NOW is ready (including already-initialized).
    */
-  void begin(bool reducePowerAtCostOfLatency = false, bool autoPeerDiscovery = true, DataSentCallback callback = DefaultOnDataSent)
+  bool begin(bool reducePowerAtCostOfLatency = false, bool autoPeerDiscovery = true, DataSentCallback callback = DefaultOnDataSent)
   {
     _instance = this;
     _autoPeerDiscovery = autoPeerDiscovery;
@@ -129,7 +130,7 @@ public:
     else if (init_result != ESP_OK)
     {
       Serial.printf("[ESP-NOW] Init failed with error: %d\n", init_result);
-      return;
+      return false;
     }
 
     // Set channel and power
@@ -141,6 +142,7 @@ public:
     // Register callbacks
     esp_now_register_send_cb(SendCallbackAdapter);
     esp_now_register_recv_cb(OnDataRecvStatic);
+    return true;
   }
 
   /**

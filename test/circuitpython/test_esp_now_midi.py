@@ -96,7 +96,7 @@ class TestMidiPackets(unittest.TestCase):
 class TestLibraryApi(unittest.TestCase):
     def test_begin_initializes_espnow(self):
         midi = ESPNowMidi()
-        midi.begin()
+        self.assertTrue(midi.begin())
 
         self.assertIsNotNone(midi.e)
         midi.e.active.assert_called_once_with(True)
