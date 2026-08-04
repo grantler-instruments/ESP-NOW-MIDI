@@ -8,6 +8,7 @@
 #include "version.h"
 #include <WiFi.h>
 #include <esp_system.h>
+#include <functional>
 
 #ifndef DONGLE_MAX_HISTORY
 #define DONGLE_MAX_HISTORY 5
@@ -75,6 +76,16 @@ namespace enomik
         static Dongle *instancePtr; ///< Active dongle used by static receive callbacks.
         esp_now_midi espnowMIDI;    ///< Underlying ESP-NOW MIDI transport.
 
+        /**
+         * @brief Bridge filter callback.
+         *
+         * Receives a mutable `midi_message` (`status`, `channel` 1–16, `firstByte`,
+         * `secondByte`). Return `true` to forward (after any in-place edits), or
+         * `false` to drop. Keep the body non-blocking (no `delay`, avoid heavy Serial).
+         * Does not apply to `send*` inject APIs.
+         */
+        using BridgeFilter = std::function<bool(midi_message &)>;
+
         /** @brief Constructs the dongle and makes it the active callback instance. */
         Dongle()
             : _isInitialized(false),
@@ -90,6 +101,24 @@ namespace enomik
             memset(_baseMac, 0, sizeof(_baseMac));
             memset(_messageHistory, 0, sizeof(_messageHistory));
             instancePtr = this;
+        }
+
+        /**
+         * @brief Filter messages from ESP-NOW peers toward the USB host (computer).
+         * Pass nullptr to clear. Unset = transparent bridge.
+         */
+        void setToHostFilter(BridgeFilter filter)
+        {
+            _toHostFilter = filter;
+        }
+
+        /**
+         * @brief Filter messages from the USB host (computer) toward ESP-NOW peers.
+         * Pass nullptr to clear. Unset = transparent bridge.
+         */
+        void setFromHostFilter(BridgeFilter filter)
+        {
+            _fromHostFilter = filter;
         }
 
         /**
@@ -475,6 +504,8 @@ namespace enomik
         const char *_manufacturer;
         const char *_product;
         String _version;
+        BridgeFilter _toHostFilter;
+        BridgeFilter _fromHostFilter;
 
         void addToHistory(const midi_message &msg, bool outgoing)
         {
@@ -493,9 +524,87 @@ namespace enomik
             _usbMidiQueue.enqueue(msg);
         }
 
-        void queueFromEspNow(const midi_message &msg, bool addHistory = true)
+        /** ESP-NOW → USB host. Runs toHost filter, then queues (clock coalesced). */
+        void bridgeToHost(midi_message &msg, bool addHistory = true)
         {
+            if (_toHostFilter && !_toHostFilter(msg))
+            {
+                return;
+            }
+            if (msg.status == MIDI_TIME_CLOCK)
+            {
+                _usbMidiQueue.enqueueClock();
+                return;
+            }
             queueToUsb(msg, addHistory);
+        }
+
+        /** USB host → ESP-NOW. Runs fromHost filter, then history + send. */
+        void bridgeFromHost(midi_message &msg, bool addHistory = true)
+        {
+            if (_fromHostFilter && !_fromHostFilter(msg))
+            {
+                return;
+            }
+            if (addHistory)
+            {
+                addToHistory(msg, true);
+            }
+            dispatchToEspNow(msg);
+        }
+
+        void dispatchToEspNow(const midi_message &msg)
+        {
+            switch (msg.status)
+            {
+            case MIDI_NOTE_ON:
+                espnowMIDI.sendNoteOn(msg.firstByte, msg.secondByte, msg.channel);
+                break;
+            case MIDI_NOTE_OFF:
+                espnowMIDI.sendNoteOff(msg.firstByte, msg.secondByte, msg.channel);
+                break;
+            case MIDI_CONTROL_CHANGE:
+                espnowMIDI.sendControlChange(msg.firstByte, msg.secondByte, msg.channel);
+                break;
+            case MIDI_PROGRAM_CHANGE:
+                espnowMIDI.sendProgramChange(msg.firstByte, msg.channel);
+                break;
+            case MIDI_AFTERTOUCH:
+                espnowMIDI.sendAfterTouch(msg.firstByte, msg.channel);
+                break;
+            case MIDI_POLY_AFTERTOUCH:
+                espnowMIDI.sendAfterTouchPoly(msg.firstByte, msg.secondByte, msg.channel);
+                break;
+            case MIDI_PITCH_BEND:
+            {
+                const int value = ((msg.secondByte << 7) | msg.firstByte) - 8192;
+                espnowMIDI.sendPitchBend(value, msg.channel);
+                break;
+            }
+            case MIDI_START:
+                espnowMIDI.sendStart();
+                break;
+            case MIDI_STOP:
+                espnowMIDI.sendStop();
+                break;
+            case MIDI_CONTINUE:
+                espnowMIDI.sendContinue();
+                break;
+            case MIDI_TIME_CLOCK:
+                espnowMIDI.sendClock();
+                break;
+            case MIDI_SONG_POS_POINTER:
+            {
+                const uint16_t pos = (msg.secondByte << 7) | msg.firstByte;
+                espnowMIDI.sendSongPosition(pos);
+                break;
+            }
+            case MIDI_SONG_SELECT:
+                espnowMIDI.sendSongSelect(msg.firstByte);
+                break;
+            default:
+                break;
+            }
         }
 
         void readMacAddress()
@@ -660,7 +769,7 @@ namespace enomik
                 _messageIndex);
         }
 
-        // --- ESP-NOW → USB ---
+        // --- ESP-NOW → USB host ---
 
         static void handleNoteOnStatic(byte channel, byte note, byte velocity)
         {
@@ -671,7 +780,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = note;
             msg.secondByte = velocity;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handleNoteOffStatic(byte channel, byte note, byte velocity)
@@ -683,7 +792,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = note;
             msg.secondByte = velocity;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handleControlChangeStatic(byte channel, byte control, byte value)
@@ -695,7 +804,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = control;
             msg.secondByte = value;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handleProgramChangeStatic(byte channel, byte program)
@@ -707,7 +816,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = program;
             msg.secondByte = 0;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handleAfterTouchChannelStatic(byte channel, byte pressure)
@@ -719,7 +828,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = pressure;
             msg.secondByte = 0;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handleAfterTouchPolyStatic(byte channel, byte note, byte pressure)
@@ -731,7 +840,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = note;
             msg.secondByte = pressure;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handlePitchBendStatic(byte channel, int value)
@@ -744,7 +853,7 @@ namespace enomik
             const int unsignedValue = value + 8192;
             msg.firstByte = unsignedValue & 0x7F;
             msg.secondByte = (unsignedValue >> 7) & 0x7F;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handleStartStatic()
@@ -756,7 +865,7 @@ namespace enomik
             msg.channel = 0;
             msg.firstByte = 0;
             msg.secondByte = 0;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handleStopStatic()
@@ -768,7 +877,7 @@ namespace enomik
             msg.channel = 0;
             msg.firstByte = 0;
             msg.secondByte = 0;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handleContinueStatic()
@@ -780,14 +889,19 @@ namespace enomik
             msg.channel = 0;
             msg.firstByte = 0;
             msg.secondByte = 0;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
         static void handleClockStatic()
         {
             if (!instancePtr)
                 return;
-            instancePtr->_usbMidiQueue.enqueueClock();
+            midi_message msg;
+            msg.status = MIDI_TIME_CLOCK;
+            msg.channel = 0;
+            msg.firstByte = 0;
+            msg.secondByte = 0;
+            instancePtr->bridgeToHost(msg, false);
         }
 
         static void handleSongPositionStatic(uint16_t value)
@@ -799,7 +913,7 @@ namespace enomik
             msg.channel = 0;
             msg.firstByte = value & 0x7F;
             msg.secondByte = (value >> 7) & 0x7F;
-            instancePtr->queueFromEspNow(msg, false);
+            instancePtr->bridgeToHost(msg, false);
         }
 
         static void handleSongSelectStatic(byte value)
@@ -811,10 +925,10 @@ namespace enomik
             msg.channel = 0;
             msg.firstByte = value;
             msg.secondByte = 0;
-            instancePtr->queueFromEspNow(msg);
+            instancePtr->bridgeToHost(msg);
         }
 
-        // --- USB → ESP-NOW ---
+        // --- USB host → ESP-NOW ---
 
         static void onNoteOnStatic(byte channel, byte pitch, byte velocity)
         {
@@ -825,8 +939,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = pitch;
             msg.secondByte = velocity;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendNoteOn(pitch, velocity, channel);
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onNoteOffStatic(byte channel, byte pitch, byte velocity)
@@ -838,8 +951,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = pitch;
             msg.secondByte = velocity;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendNoteOff(pitch, velocity, channel);
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onControlChangeStatic(byte channel, byte controller, byte value)
@@ -851,8 +963,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = controller;
             msg.secondByte = value;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendControlChange(controller, value, channel);
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onProgramChangeStatic(byte channel, byte program)
@@ -864,8 +975,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = program;
             msg.secondByte = 0;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendProgramChange(program, channel);
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onAfterTouchStatic(byte channel, byte pressure)
@@ -877,8 +987,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = pressure;
             msg.secondByte = 0;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendAfterTouch(pressure, channel);
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onPolyAfterTouchStatic(byte channel, byte note, byte pressure)
@@ -890,8 +999,7 @@ namespace enomik
             msg.channel = channel;
             msg.firstByte = note;
             msg.secondByte = pressure;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendAfterTouchPoly(note, pressure, channel);
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onPitchBendStatic(byte channel, int value)
@@ -904,8 +1012,7 @@ namespace enomik
             const int raw = value + 8192;
             msg.firstByte = raw & 0x7F;
             msg.secondByte = (raw >> 7) & 0x7F;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendPitchBend(value, channel);
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onStartStatic()
@@ -917,8 +1024,7 @@ namespace enomik
             msg.channel = 0;
             msg.firstByte = 0;
             msg.secondByte = 0;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendStart();
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onStopStatic()
@@ -930,8 +1036,7 @@ namespace enomik
             msg.channel = 0;
             msg.firstByte = 0;
             msg.secondByte = 0;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendStop();
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onContinueStatic()
@@ -943,22 +1048,31 @@ namespace enomik
             msg.channel = 0;
             msg.firstByte = 0;
             msg.secondByte = 0;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendContinue();
+            instancePtr->bridgeFromHost(msg);
         }
 
         static void onClockStatic()
         {
             if (!instancePtr)
                 return;
-            instancePtr->espnowMIDI.sendClock();
+            midi_message msg;
+            msg.status = MIDI_TIME_CLOCK;
+            msg.channel = 0;
+            msg.firstByte = 0;
+            msg.secondByte = 0;
+            instancePtr->bridgeFromHost(msg, false);
         }
 
         static void onSongPositionStatic(unsigned int value)
         {
             if (!instancePtr)
                 return;
-            instancePtr->espnowMIDI.sendSongPosition(value);
+            midi_message msg;
+            msg.status = MIDI_SONG_POS_POINTER;
+            msg.channel = 0;
+            msg.firstByte = value & 0x7F;
+            msg.secondByte = (value >> 7) & 0x7F;
+            instancePtr->bridgeFromHost(msg, false);
         }
 
         static void onSongSelectStatic(byte value)
@@ -970,8 +1084,7 @@ namespace enomik
             msg.channel = 0;
             msg.firstByte = value;
             msg.secondByte = 0;
-            instancePtr->addToHistory(msg, true);
-            instancePtr->espnowMIDI.sendSongSelect(value);
+            instancePtr->bridgeFromHost(msg);
         }
     };
 

@@ -15,7 +15,8 @@ There are three main ways to use the library:
   interface for pin mapping and board setup.
 - `enomik::Dongle`: USB MIDI ↔ ESP-NOW bridge for a host-connected board
   (ESP32-S2/S3). Call `begin()` / `loop()`. Optional status UI via
-  `enomik::Dongle::Display` and `setDisplay()`.
+  `enomik::Dongle::Display` and `setDisplay()`. Optional
+  `setToHostFilter` / `setFromHostFilter` to drop or remap bridged messages.
 
 For most application sketches that should integrate with the Enomik tools, start
 with `enomik::Client`. Use `enomik::Dongle` for the USB host bridge. Use plain
