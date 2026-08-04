@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include "EEPROM.h"
+#include "esp_now_midi_log.h"
 
 #define MAC_ADDRESS_SIZE 6
 #define MAX_PEERS 20
@@ -37,16 +38,14 @@ public:
         }
         
         if (!EEPROM.begin(eepromSize)) {
-            Serial.println("PeerStorage: Failed to initialize EEPROM");
+            EspNowMidiLog::e("PeerStorage: Failed to initialize EEPROM");
             return false;
         }
         
         load();
         initialized = true;
         
-        Serial.print("PeerStorage: Loaded ");
-        Serial.print(peerCount);
-        Serial.println(" peers");
+        EspNowMidiLog::i("PeerStorage: Loaded %d peers", peerCount);
         
         return true;
     }
@@ -54,17 +53,17 @@ public:
     // Peer management
     bool add(const uint8_t mac[MAC_ADDRESS_SIZE]) {
         if (!initialized) {
-            Serial.println("PeerStorage: Not initialized");
+            EspNowMidiLog::e("PeerStorage: Not initialized");
             return false;
         }
         
         if (isFull()) {
-            Serial.println("PeerStorage: Maximum peers reached");
+            EspNowMidiLog::w("PeerStorage: Maximum peers reached");
             return false;
         }
         
         if (exists(mac)) {
-            Serial.println("PeerStorage: Peer already exists");
+            EspNowMidiLog::w("PeerStorage: Peer already exists");
             return false;
         }
         
@@ -72,11 +71,9 @@ public:
         peerCount++;
         save();
         
-        Serial.print("PeerStorage: Added peer ");
-        printMac(mac);
-        Serial.print(" (Total: ");
-        Serial.print(peerCount);
-        Serial.println(")");
+        char macBuf[EspNowMidiLog::MAC_STR_LEN];
+        EspNowMidiLog::formatMac(macBuf, sizeof(macBuf), mac);
+        EspNowMidiLog::i("PeerStorage: Added peer %s (Total: %d)", macBuf, peerCount);
         
         return true;
     }
@@ -84,7 +81,7 @@ public:
     bool remove(const uint8_t mac[MAC_ADDRESS_SIZE]) {
         int index = findIndex(mac);
         if (index < 0) {
-            Serial.println("PeerStorage: Peer not found");
+            EspNowMidiLog::w("PeerStorage: Peer not found");
             return false;
         }
         
@@ -93,13 +90,11 @@ public:
     
     bool remove(int index) {
         if (index < 0 || index >= peerCount) {
-            Serial.println("PeerStorage: Invalid index");
+            EspNowMidiLog::w("PeerStorage: Invalid index");
             return false;
         }
         
-        Serial.print("PeerStorage: Removing peer ");
-        printMac(peers[index].mac);
-        Serial.println();
+        EspNowMidiLog::mac("PeerStorage: Removing peer ", peers[index].mac);
         
         // Shift remaining peers down
         for (int i = index; i < peerCount - 1; i++) {
@@ -117,7 +112,7 @@ public:
         peerCount = 0;
         memset(peers, 0, sizeof(peers));
         save();
-        Serial.println("PeerStorage: All peers cleared");
+        EspNowMidiLog::i("PeerStorage: All peers cleared");
     }
     
     // Query methods
@@ -142,20 +137,16 @@ public:
     
     // Debug
     void printAll() const {
-        Serial.print("PeerStorage: Stored peers (");
-        Serial.print(peerCount);
-        Serial.println("):");
+        EspNowMidiLog::i("PeerStorage: Stored peers (%d):", peerCount);
         
         for (int i = 0; i < peerCount; i++) {
-            Serial.print("  [");
-            Serial.print(i);
-            Serial.print("]: ");
-            printMac(peers[i].mac);
-            Serial.println();
+            char macBuf[EspNowMidiLog::MAC_STR_LEN];
+            EspNowMidiLog::formatMac(macBuf, sizeof(macBuf), peers[i].mac);
+            EspNowMidiLog::i("  [%d]: %s", i, macBuf);
         }
         
         if (isEmpty()) {
-            Serial.println("  No peers stored");
+            EspNowMidiLog::i("  No peers stored");
         }
     }
 
@@ -179,7 +170,7 @@ private:
         
         if (storage.validFlag != VALID_FLAG) {
             // First time use - initialize
-            Serial.println("PeerStorage: Initializing fresh storage");
+            EspNowMidiLog::i("PeerStorage: Initializing fresh storage");
             peerCount = 0;
             memset(peers, 0, sizeof(peers));
             save();
@@ -187,7 +178,7 @@ private:
             // Load existing peers
             peerCount = storage.peerCount;
             if (peerCount > MAX_PEERS) {
-                Serial.println("PeerStorage: Corrupt data, resetting");
+                EspNowMidiLog::w("PeerStorage: Corrupt data, resetting");
                 peerCount = 0;
                 save();
             } else {
@@ -213,14 +204,6 @@ private:
             }
         }
         return -1;
-    }
-    
-    static void printMac(const uint8_t mac[MAC_ADDRESS_SIZE]) {
-        for (int i = 0; i < MAC_ADDRESS_SIZE; i++) {
-            if (mac[i] < 16) Serial.print("0");
-            Serial.print(mac[i], HEX);
-            if (i < MAC_ADDRESS_SIZE - 1) Serial.print(":");
-        }
     }
 };
 

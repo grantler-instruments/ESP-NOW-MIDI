@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./enomik_sysex_codec.h"
+#include "./esp_now_midi_log.h"
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -54,7 +55,7 @@ namespace enomik
             // Validate minimum length
             if (length < SysExPacket::MIN_PACKET_SIZE)
             {
-                Serial.println("SysEx: Invalid packet length");
+                EspNowMidiLog::w("SysEx: Invalid packet length");
                 sendErrorResponse(0, SysExErrorCode::DECODE_FAILED);
                 return;
             }
@@ -66,7 +67,7 @@ namespace enomik
 
             if (!packet.isValid())
             {
-                Serial.println("SysEx: Invalid packet format");
+                EspNowMidiLog::w("SysEx: Invalid packet format");
                 sendErrorResponse(0, SysExErrorCode::DECODE_FAILED);
                 return;
             }
@@ -74,14 +75,8 @@ namespace enomik
             // Check version compatibility
             if (!packet.isVersionCompatible())
             {
-                Serial.print("SysEx: Incompatible protocol version ");
-                Serial.print(packet.getMajorVersion());
-                Serial.print(".");
-                Serial.print(packet.getMinorVersion());
-                Serial.print(" (expected ");
-                Serial.print(PROTOCOL_VERSION_MAJOR);
-                Serial.print(".x)");
-                Serial.println();
+                EspNowMidiLog::w("SysEx: Incompatible protocol version %u.%u (expected %u.x)",
+                               packet.getMajorVersion(), packet.getMinorVersion(), PROTOCOL_VERSION_MAJOR);
                 sendErrorResponse(static_cast<uint8_t>(packet.getCommand()), SysExErrorCode::BAD_VERSION);
                 return;
             }
@@ -233,8 +228,7 @@ namespace enomik
             const uint8_t *payload = packet.getPayload();
             uint16_t payloadLen = packet.getPayloadLength();
 
-            Serial.print("SysEx: Handling command 0x");
-            Serial.println(static_cast<uint8_t>(cmd), HEX);
+            EspNowMidiLog::d("SysEx: Handling command 0x%02X", static_cast<uint8_t>(cmd));
 
             switch (cmd)
             {
@@ -303,8 +297,7 @@ namespace enomik
                 break;
 
             default:
-                Serial.print("SysEx: Unknown command: 0x");
-                Serial.println(static_cast<uint8_t>(cmd), HEX);
+                EspNowMidiLog::w("SysEx: Unknown command: 0x%02X", static_cast<uint8_t>(cmd));
                 sendErrorResponse(static_cast<uint8_t>(cmd), SysExErrorCode::UNKNOWN_COMMAND);
                 break;
             }
@@ -314,7 +307,7 @@ namespace enomik
         {
             if (!_onSetPinConfig)
             {
-                Serial.println("SysEx: No SET_PIN_CONFIG handler");
+                EspNowMidiLog::w("SysEx: No SET_PIN_CONFIG handler");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_PIN_CONFIG), SysExErrorCode::NOT_READY);
                 return;
             }
@@ -322,13 +315,12 @@ namespace enomik
             PinConfig cfg(0, 0);
             if (SysExDecoder::decodePinConfig(payload, length, cfg))
             {
-                Serial.print("SysEx: Setting config for pin ");
-                Serial.println(cfg.pin);
+                EspNowMidiLog::d("SysEx: Setting config for pin %u", cfg.pin);
                 _onSetPinConfig(cfg);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode pin config");
+                EspNowMidiLog::w("SysEx: Failed to decode pin config");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_PIN_CONFIG), SysExErrorCode::DECODE_FAILED);
             }
         }
@@ -337,7 +329,7 @@ namespace enomik
         {
             if (!_onGetPinConfig)
             {
-                Serial.println("SysEx: No GET_PIN_CONFIG handler");
+                EspNowMidiLog::w("SysEx: No GET_PIN_CONFIG handler");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PIN_CONFIG), SysExErrorCode::NOT_READY);
                 return;
             }
@@ -345,13 +337,12 @@ namespace enomik
             uint8_t pin;
             if (SysExDecoder::decodePin(payload, length, pin))
             {
-                Serial.print("SysEx: Getting config for pin ");
-                Serial.println(pin);
+                EspNowMidiLog::d("SysEx: Getting config for pin %u", pin);
                 _onGetPinConfig(pin);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode pin number");
+                EspNowMidiLog::w("SysEx: Failed to decode pin number");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PIN_CONFIG), SysExErrorCode::DECODE_FAILED);
             }
         }
@@ -360,7 +351,7 @@ namespace enomik
         {
             if (!_onDeletePinConfig)
             {
-                Serial.println("SysEx: No DELETE_PIN_CONFIG handler");
+                EspNowMidiLog::w("SysEx: No DELETE_PIN_CONFIG handler");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::DELETE_PIN_CONFIG), SysExErrorCode::NOT_READY);
                 return;
             }
@@ -368,13 +359,12 @@ namespace enomik
             uint8_t pin;
             if (SysExDecoder::decodePin(payload, length, pin))
             {
-                Serial.print("SysEx: Deleting config for pin ");
-                Serial.println(pin);
+                EspNowMidiLog::d("SysEx: Deleting config for pin %u", pin);
                 _onDeletePinConfig(pin);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode pin number");
+                EspNowMidiLog::w("SysEx: Failed to decode pin number");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::DELETE_PIN_CONFIG), SysExErrorCode::DECODE_FAILED);
             }
         }
@@ -383,7 +373,7 @@ namespace enomik
         {
             if (_onClearPinConfigs)
             {
-                Serial.println("SysEx: Clearing all pin configs");
+                EspNowMidiLog::d("SysEx: Clearing all pin configs");
                 _onClearPinConfigs();
             }
             else
@@ -396,7 +386,7 @@ namespace enomik
         {
             if (_onGetAllPinConfigs)
             {
-                Serial.println("SysEx: Getting all pin configs");
+                EspNowMidiLog::d("SysEx: Getting all pin configs");
                 _onGetAllPinConfigs();
             }
             else
@@ -409,7 +399,7 @@ namespace enomik
         {
             if (_onGetMAC)
             {
-                Serial.println("SysEx: Getting MAC address");
+                EspNowMidiLog::d("SysEx: Getting MAC address");
                 _onGetMAC();
             }
             else
@@ -422,7 +412,7 @@ namespace enomik
         {
             if (!_onAddPeer)
             {
-                Serial.println("SysEx: No ADD_PEER handler");
+                EspNowMidiLog::w("SysEx: No ADD_PEER handler");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::ADD_PEER), SysExErrorCode::NOT_READY);
                 return;
             }
@@ -430,14 +420,7 @@ namespace enomik
             uint8_t mac[6];
             if (SysExDecoder::decodeMAC(payload, length, mac))
             {
-                Serial.print("SysEx: Adding peer: ");
-                for (int i = 0; i < 6; i++)
-                {
-                    Serial.print(mac[i], HEX);
-                    if (i < 5)
-                        Serial.print(":");
-                }
-                Serial.println();
+                EspNowMidiLog::mac("SysEx: Adding peer: ", mac);
                 const AddPeerResult result = _onAddPeer(mac);
                 if (result == AddPeerResult::Success)
                 {
@@ -452,7 +435,7 @@ namespace enomik
             }
             else
             {
-                Serial.println("SysEx: Failed to decode MAC address");
+                EspNowMidiLog::w("SysEx: Failed to decode MAC address");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::ADD_PEER), SysExErrorCode::DECODE_FAILED);
             }
         }
@@ -461,7 +444,7 @@ namespace enomik
         {
             if (_onGetAllPeers)
             {
-                Serial.println("SysEx: Getting all peers");
+                EspNowMidiLog::d("SysEx: Getting all peers");
                 _onGetAllPeers();
             }
             else
@@ -474,7 +457,7 @@ namespace enomik
         {
             if (!_onGetPeer)
             {
-                Serial.println("SysEx: No GET_PEER handler");
+                EspNowMidiLog::w("SysEx: No GET_PEER handler");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PEER), SysExErrorCode::NOT_READY);
                 return;
             }
@@ -482,13 +465,12 @@ namespace enomik
             uint8_t index;
             if (SysExDecoder::decodeIndex(payload, length, index))
             {
-                Serial.print("SysEx: Getting peer at index ");
-                Serial.println(index);
+                EspNowMidiLog::d("SysEx: Getting peer at index %u", index);
                 _onGetPeer(index);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode peer index");
+                EspNowMidiLog::w("SysEx: Failed to decode peer index");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_PEER), SysExErrorCode::DECODE_FAILED);
             }
         }
@@ -497,7 +479,7 @@ namespace enomik
         {
             if (_onGetConfig)
             {
-                Serial.println("SysEx: Getting full board config");
+                EspNowMidiLog::d("SysEx: Getting full board config");
                 _onGetConfig();
             }
             else
@@ -510,7 +492,7 @@ namespace enomik
         {
             if (!_onSetMidiLoopback)
             {
-                Serial.println("SysEx: No SET_MIDI_LOOPBACK handler");
+                EspNowMidiLog::w("SysEx: No SET_MIDI_LOOPBACK handler");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_MIDI_LOOPBACK), SysExErrorCode::NOT_READY);
                 return;
             }
@@ -518,13 +500,12 @@ namespace enomik
             bool enabled;
             if (SysExDecoder::decodeMidiLoopback(payload, length, enabled))
             {
-                Serial.print("SysEx: Setting MIDI loopback ");
-                Serial.println(enabled ? "on" : "off");
+                EspNowMidiLog::d("SysEx: Setting MIDI loopback %s", enabled ? "on" : "off");
                 _onSetMidiLoopback(enabled);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode MIDI loopback flag");
+                EspNowMidiLog::w("SysEx: Failed to decode MIDI loopback flag");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_MIDI_LOOPBACK), SysExErrorCode::DECODE_FAILED);
             }
         }
@@ -533,7 +514,7 @@ namespace enomik
         {
             if (_onGetMidiLoopback)
             {
-                Serial.println("SysEx: Getting MIDI loopback");
+                EspNowMidiLog::d("SysEx: Getting MIDI loopback");
                 _onGetMidiLoopback();
             }
             else
@@ -546,7 +527,7 @@ namespace enomik
         {
             if (!_onSetPowerSave)
             {
-                Serial.println("SysEx: No SET_POWER_SAVE handler");
+                EspNowMidiLog::w("SysEx: No SET_POWER_SAVE handler");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_POWER_SAVE), SysExErrorCode::NOT_READY);
                 return;
             }
@@ -554,13 +535,12 @@ namespace enomik
             bool enabled;
             if (SysExDecoder::decodePowerSave(payload, length, enabled))
             {
-                Serial.print("SysEx: Setting power save ");
-                Serial.println(enabled ? "on" : "off");
+                EspNowMidiLog::d("SysEx: Setting power save %s", enabled ? "on" : "off");
                 _onSetPowerSave(enabled);
             }
             else
             {
-                Serial.println("SysEx: Failed to decode power save flag");
+                EspNowMidiLog::w("SysEx: Failed to decode power save flag");
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_POWER_SAVE), SysExErrorCode::DECODE_FAILED);
             }
         }
@@ -569,7 +549,7 @@ namespace enomik
         {
             if (_onGetPowerSave)
             {
-                Serial.println("SysEx: Getting power save");
+                EspNowMidiLog::d("SysEx: Getting power save");
                 _onGetPowerSave();
             }
             else
@@ -582,7 +562,7 @@ namespace enomik
         {
             if (_onReset)
             {
-                Serial.println("SysEx: Performing reset");
+                EspNowMidiLog::i("SysEx: Performing reset");
                 _onReset();
             }
             else
@@ -595,7 +575,7 @@ namespace enomik
         {
             if (_onGetVersion)
             {
-                Serial.println("SysEx: Getting version");
+                EspNowMidiLog::d("SysEx: Getting version");
                 _onGetVersion();
             }
             else

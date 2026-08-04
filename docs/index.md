@@ -7,6 +7,7 @@ wirelessly over the ESP-NOW protocol.
 
 - [Getting started](getting-started.md)
 - [Examples](examples.md)
+- [Logging](logging.md)
 - [Benchmarks](benchmarks.md)
 
 ## API references
