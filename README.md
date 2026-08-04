@@ -31,7 +31,6 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
   * **client**: fully configurable client that works with enomik boards and the enomik webapp
   * **client_echo**: simply echos the incoming MIDI messages
   * **client_hello_midi**: simple demo firmware that periodically sends midi messages via esp now
-  * **client_dac_i2s (wip)** - synth that can be controlled via dongle, e.g. send midi notes from a DAW to the dongle midi device - ** this is currently broken **
   * **client_waveshare-esp32-s3-relay-6ch** - simple relay controller that listens to note on/off messages, e.g. control solenoids 
   * **client_buttons** - reads button press/release and sends note on/off accordingly
   * **client_dmx** - control your dmx fixtures wirelessly
@@ -94,8 +93,8 @@ Use the **signed** API everywhere unless you already have raw wire bytes:
 ### enomik 3000
 Drop `enomik::Client` into your firmware and your board turns into a MIDI SysEx–configurable device: routing, pin modes, and basic I/O can be set from a host over SysEx instead of hard-coding every mapping. This library is integrated with the [ESP-NOW MIDI Kit](https://grantler-instruments.github.io/enomik-app/) — the no-code app for creating (wireless) MIDI devices.
 
-### Circuit Python
-A circuit python version is in the making as well. Contributions here are very welcome.
+### CircuitPython
+A CircuitPython port lives in `esp_now_midi.py` (same packet format as the C++ library). It is pretty much untested — contributions and real-hardware feedback are very welcome.
 
 ## Benchmarks
 This repository includes benchmark data and their analysis (see `benchmarks/` and `scripts/`).
@@ -146,7 +145,6 @@ See **[scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW
 * examples/dongle additionally depends on
   * Adafruit GFX Library
   * Adafruit SSD1306
-* examples/client_dac_i2s depends on mozzi
 * examples/client_dmx uses Grove DMX512 (SN75176) with a built-in minimal sender (no extra library). Optional: use **luksal/ESP32-DMX** or **pierrejay/esp32-EZDMX** instead (see comment in the sketch). 
 * examples/client_servo depends on **ESP32Servo**
 * examples/client_audio_m16_i2s depends on [M16](https://github.com/algomusic/M16)

@@ -98,7 +98,6 @@ jobs:
           # Install any external dependencies (add more as needed)
           arduino-cli lib install "Adafruit TinyUSB Library"
           arduino-cli lib install "MIDI Library"
-          arduino-cli lib install "Adafruit MPU6050"
           arduino-cli lib install "Adafruit_VL53L0X"
           arduino-cli lib install "Mozzi"
           arduino-cli lib install "AceButton"

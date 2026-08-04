@@ -45,7 +45,6 @@ jobs:
           mkdir -p $HOME/Arduino/libraries
           ln -s $GITHUB_WORKSPACE $HOME/Arduino/libraries/ESP-NOW-MIDI
           arduino-cli lib install "Adafruit TinyUSB Library"
-          arduino-cli lib install "Adafruit MPU6050"
           arduino-cli lib install "Adafruit_VL53L0X"
           arduino-cli lib install "Mozzi"
           arduino-cli lib install "AceButton"
