@@ -1,14 +1,22 @@
-#include "./Display.h"
+#pragma once
+
+#include "enomik_dongle.h"
 #include "./config.h"
 #include "./logo.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define SCREEN_WIDTH 128  // OLED display width, in pixels
-#define SCREEN_HEIGHT 64  // OLED display height, in pixels
-#define OLED_RESET -1     // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
 
-class SSD1306Display final : public Display {
+/**
+ * @brief Example OLED status UI for enomik::Dongle.
+ *
+ * Subclass enomik::Dongle::Display and register with setDisplay() to use a
+ * different panel or layout.
+ */
+class SSD1306Display final : public enomik::Dongle::Display {
 public:
   SSD1306Display()
     : oled_(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET) {}
@@ -55,47 +63,37 @@ private:
     oled_.display();
   }
 
-  /* ---------- Header ---------- */
+  void drawHeader(const uint8_t mac[6],
+                  const char* version,
+                  int peers,
+                  char usbStatus) {
+    static char macStr[18];
+    static char buf[64];
 
-void drawHeader(const uint8_t mac[6],
-                const char* version,
-                int peers,
-                char usbStatus) {
-  // Static buffers avoid repeated stack or heap pressure
-  static char macStr[18];
-  static char buf[64];
+    unsigned long displayUptime = (millis() / 1000) % 86400;
 
-  unsigned long displayUptime = (millis() / 1000) % 86400;  // Reset every 24h
+    snprintf(macStr, sizeof(macStr),
+             "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2],
+             mac[3], mac[4], mac[5]);
 
-  // Format MAC address
-  snprintf(macStr, sizeof(macStr),
-           "%02X:%02X:%02X:%02X:%02X:%02X",
-           mac[0], mac[1], mac[2],
-           mac[3], mac[4], mac[5]);
+    oled_.setCursor(0, 0);
 
-  oled_.setCursor(0, 0);
+    snprintf(buf, sizeof(buf), "mac:%s", macStr);
+    oled_.println(buf);
 
-  // Line 1: MAC address with legacy prefix
-  snprintf(buf, sizeof(buf), "mac:%s", macStr);
-  oled_.println(buf);
+    const bool showCon = ((millis() / HEADER_ALT_INTERVAL_MS) % 2) == 0;
+    if (showCon) {
+      snprintf(buf, sizeof(buf), "v%s con:%d t:%lu",
+               version, peers, displayUptime);
+    } else {
+      snprintf(buf, sizeof(buf), "v%s usb:%c t:%lu",
+               version, usbStatus, displayUptime);
+    }
+    oled_.println(buf);
 
-  // Line 2: alternate con / usb every 4s
-  const bool showCon = ((millis() / HEADER_ALT_INTERVAL_MS) % 2) == 0;
-  if (showCon) {
-    snprintf(buf, sizeof(buf), "v%s con:%d t:%lu",
-             version, peers, displayUptime);
-  } else {
-    snprintf(buf, sizeof(buf), "v%s usb:%c t:%lu",
-             version, usbStatus, displayUptime);
+    oled_.drawLine(0, 18, SCREEN_WIDTH, 18, SSD1306_WHITE);
   }
-  oled_.println(buf);
-
-  // Divider line positioned to match the old layout
-  oled_.drawLine(0, 18, SCREEN_WIDTH, 18, SSD1306_WHITE);
-}
-
-
-  /* ---------- History ---------- */
 
   void drawHistory(const MidiMessageHistory* history,
                    int size,
@@ -136,8 +134,6 @@ void drawHeader(const uint8_t mac[6],
     oled_.setCursor(0, y);
     oled_.print(line);
   }
-
-  /* ---------- Status Formatting ---------- */
 
   static void formatStatus(uint8_t status, char out[7]) {
     switch (status) {

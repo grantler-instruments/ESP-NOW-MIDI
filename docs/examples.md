@@ -6,7 +6,8 @@ directory contains sketches for common ESP-NOW MIDI configurations.
 ## Core examples
 
 - **`print_mac`**: prints the board's Wi-Fi MAC address.
-- **`dongle`**: bridges USB MIDI and ESP-NOW MIDI.
+- **`dongle`**: USB MIDI ↔ ESP-NOW bridge via `enomik::Dongle`. Optional OLED
+  through a `Dongle::Display` subclass (`SSD1306Display` in the example).
 - **`plain_echo`**: receives ESP-NOW MIDI without the Enomik helpers.
 - **`client`**: a SysEx-configurable Enomik client.
 - **`client_echo`**: echoes incoming MIDI messages.

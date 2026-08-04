@@ -9,13 +9,16 @@ hardware synthesizer, mobile phone, or any other device that supports USB MIDI.
 
 1. Flash the [`dongle`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples/dongle)
    example to a native USB-capable board, such as an ESP32-S2 Mini or an
-   ESP32-S3 board. Both the S2 and S3 can act as USB MIDI devices.
+   ESP32-S3 board. Both the S2 and S3 can act as USB MIDI devices. The sketch
+   uses `enomik::Dongle` (`begin()` / `loop()`).
 2. Find its Wi-Fi STA MAC address with the
    [`print_mac`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples/print_mac)
    example, or from the dongle display.
 
 If the dongle has an OLED display, set `HAS_DISPLAY` to `1` in
-`examples/dongle/config.h`.
+`examples/dongle/config.h`. To use a different panel or layout, subclass
+`enomik::Dongle::Display`, implement `begin()` / `update()`, and register it
+with `setDisplay()` before `begin()`.
 
 Once the dongle is configured and flashed, you should not need to touch its
 code again unless a library update requires new firmware.

@@ -22,11 +22,10 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
 ## Features
 * **enomik::Client I/O** Add `enomik::Client` to your sketch and it becomes a MIDI SysEx–configurable client: map pins to MIDI without extra wiring logic, e.g. digital input 3 → MIDI CC
 * **enomik::Client MIDI wrapper** Helper that takes care of the ESP-NOW setup, provides a common interface for USB and ESP-NOW MIDI
+* **enomik::Dongle** USB MIDI ↔ ESP-NOW bridge for a host-connected board (ESP32-S2/S3). Optional status display via `Dongle::Display` + `setDisplay()`
 * **examples**
   * **print_mac**: periodically prints the mac address to the serial monitor
-  * **dongle**: this is your esp now midi interface to your computer or any other usb midi host. it converts esp now message to midi messages, requires a midi capable board, e.g. esp32 s2 mini.
-  the config.h you can disable the display - in case you are not using one
-  if you wanna put them into a case, you can probably find 3d models online, here is one for an esp32 s2 mini: https://www.thingiverse.com/thing:5427531
+  * **dongle**: thin sketch around `enomik::Dongle` — your ESP-NOW MIDI interface to a computer or other USB MIDI host (requires a MIDI-capable board, e.g. ESP32-S2 Mini). Set `HAS_DISPLAY` in `config.h` for the example OLED, or register your own `Dongle::Display` subclass. Case idea for S2 Mini: https://www.thingiverse.com/thing:5427531
   * **plain_echo**: same as client_echo, but without the enomik helpers
   * **client**: fully configurable client that works with enomik boards and the enomik webapp
   * **client_echo**: simply echos the incoming MIDI messages
@@ -61,10 +60,10 @@ You usually run **two roles**: a **dongle** (USB MIDI + ESP-NOW on one board, e.
 
 ### 1. Set up the dongle
 
-1. Flash the **dongle** example onto your USB-capable board.
+1. Flash the **dongle** example onto your USB-capable board (`enomik::Dongle` with `begin()` / `loop()`).
 2. Note the dongle’s Wi-Fi STA MAC: run **print_mac** on that board (serial), or read it from the dongle display if you use one.
 
-If the dongle has an OLED, set `HAS_DISPLAY` to `1` in `examples/dongle/config.h`.
+If the dongle has an OLED, set `HAS_DISPLAY` to `1` in `examples/dongle/config.h`. Custom UI: subclass `enomik::Dongle::Display` and call `setDisplay()` before `begin()`.
 
 ### 2. Connect a remote board
 
