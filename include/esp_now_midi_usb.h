@@ -12,11 +12,17 @@
  * HIGHEST-RISK file in this port: no local IDF SDK to build-verify against,
  * and unlike GPIO/ADC/touch, a USB descriptor mistake usually means the
  * device fails to enumerate at all rather than misbehaving partially.
- * Reconcile against `$IDF_PATH/examples/peripherals/usb/device/tusb_midi`
- * (the official reference this is modeled on) once building for real -
- * particularly the exact ESP32 PHY bring-up call, which may need an
- * additional Kconfig option or `esp_tinyusb` wrapper call depending on your
- * IDF version (see the comment at usbInstall() below).
+ *
+ * Uses the `espressif/esp_tinyusb` managed component's own install path
+ * (`tinyusb_driver_install()` + `tinyusb_config_t`) rather than calling raw
+ * tinyusb (`tusb_init()`) directly: esp_tinyusb is the only way to get
+ * tinyusb on IDF at all, and it ships its own `tud_descriptor_*_cb()`
+ * implementations (driven by `tinyusb_config_t`) - defining our own would be
+ * a duplicate-symbol link error. `tinyusb_config_t`'s exact fields are
+ * unverified against a real build; reconcile against
+ * `managed_components/espressif__esp_tinyusb/include/tinyusb.h` (or
+ * `$IDF_PATH/examples/peripherals/usb/device/tusb_midi` if using raw
+ * tinyusb instead) if this doesn't compile as-is.
  */
 
 #ifdef ARDUINO
@@ -24,10 +30,8 @@
 #include <MIDI.h>
 #elif defined(ESP_PLATFORM)
 
-#include "tusb.h"
+#include "tinyusb.h"
 #include "class/midi/midi_device.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "./esp_now_midi_log.h"
 #include <cstdint>
 #include <cstring>
@@ -53,6 +57,10 @@ enum
     EPNUM_MIDI_IN = 0x81,
 };
 
+// esp_tinyusb's string_descriptor array convention: index 0 is the special
+// raw language-ID encoding, the rest are plain C strings it UTF-16-encodes
+// itself (see the note on usbInstall() below - this is the part most likely
+// to need correction against the real esp_tinyusb header).
 enum
 {
     STRID_LANGID = 0,
@@ -189,7 +197,7 @@ inline void dispatchPacket(const uint8_t packet[4])
 // avoid inventing the Audio Control / MIDIStreaming interface layout from
 // scratch.
 
-inline const uint8_t *deviceDescriptorCb()
+inline const tusb_desc_device_t &deviceDescriptor()
 {
     static const tusb_desc_device_t desc = {
         .bLength = sizeof(tusb_desc_device_t),
@@ -207,10 +215,10 @@ inline const uint8_t *deviceDescriptorCb()
         .iSerialNumber = STRID_SERIAL,
         .bNumConfigurations = 0x01,
     };
-    return reinterpret_cast<const uint8_t *>(&desc);
+    return desc;
 }
 
-inline const uint8_t *configDescriptorCb()
+inline const uint8_t *configDescriptor()
 {
     static const uint8_t desc[] = {
         TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, ENOMIK_USB_MIDI_CONFIG_TOTAL_LEN,
@@ -221,95 +229,45 @@ inline const uint8_t *configDescriptorCb()
     return desc;
 }
 
-inline const uint16_t *stringDescriptorCb(uint8_t index)
-{
-    static uint16_t buf[33];
-
-    if (index == STRID_LANGID)
-    {
-        buf[0] = static_cast<uint16_t>((TUSB_DESC_STRING << 8) | (2 * 1 + 2));
-        buf[1] = 0x0409; // English (US)
-        return buf;
-    }
-
-    const char *str = nullptr;
-    switch (index)
-    {
-    case STRID_MANUFACTURER:
-        str = manufacturerString();
-        break;
-    case STRID_PRODUCT:
-        str = productString();
-        break;
-    case STRID_SERIAL:
-        str = "0";
-        break;
-    default:
-        return nullptr;
-    }
-
-    size_t len = strlen(str);
-    if (len > 31)
-    {
-        len = 31;
-    }
-    for (size_t i = 0; i < len; i++)
-    {
-        buf[1 + i] = static_cast<uint16_t>(str[i]);
-    }
-    buf[0] = static_cast<uint16_t>((TUSB_DESC_STRING << 8) | (2 * (len + 1)));
-    return buf;
-}
-
-inline void usbDeviceTask(void * /*param*/)
-{
-    while (true)
-    {
-        tud_task();
-    }
-}
-
 inline bool &usbInstalled()
 {
     static bool installed = false;
     return installed;
 }
 
-// Brings up the raw tinyusb device stack: tusb_init() plus a dedicated task
-// driving tud_task(). This is the part most likely to need adjustment: some
-// IDF/esp_tinyusb versions expect ESP32 PHY/clock bring-up through their own
-// `tinyusb_driver_install()` wrapper instead of (or in addition to) a bare
-// `tusb_init()`. If the device doesn't enumerate, this is the first place to
-// check against the official tusb_midi IDF example.
+// Brings up USB device mode via esp_tinyusb's own installer, which owns
+// descriptor callbacks (tud_descriptor_*_cb - do NOT also define these
+// ourselves, esp_tinyusb's descriptors_control.c already does), ESP32
+// PHY/clock bring-up, and the tud_task() polling task internally.
+// tinyusb_config_t's field names/string_descriptor encoding are unverified -
+// see the file-level comment above.
 inline void usbInstall()
 {
     if (usbInstalled())
     {
         return;
     }
-    tusb_init();
-    xTaskCreate(usbDeviceTask, "usb_midi_task", 4096, nullptr, configMAX_PRIORITIES - 2, nullptr);
+
+    static const char langIdBytes[2] = {0x09, 0x04}; // English (US), esp_tinyusb's raw-byte convention
+    static const char *stringDescriptors[STRID_COUNT] = {
+        langIdBytes, // 0: language ID
+        manufacturerString(),
+        productString(),
+        "0", // serial
+    };
+
+    tinyusb_config_t cfg = {};
+    cfg.device_descriptor = &deviceDescriptor();
+    cfg.string_descriptor = stringDescriptors;
+    cfg.string_descriptor_count = STRID_COUNT;
+    cfg.external_phy = false;
+    cfg.configuration_descriptor = configDescriptor();
+
+    tinyusb_driver_install(&cfg);
     usbInstalled() = true;
 }
 
 } // namespace esp_now_midi_usb_detail
-
-// --- tinyusb descriptor callbacks (extern "C", core tinyusb entry points) ---
-
-extern "C" inline const uint8_t *tud_descriptor_device_cb(void)
-{
-    return esp_now_midi_usb_detail::deviceDescriptorCb();
-}
-
-extern "C" inline const uint8_t *tud_descriptor_configuration_cb(uint8_t /*index*/)
-{
-    return esp_now_midi_usb_detail::configDescriptorCb();
-}
-
-extern "C" inline const uint16_t *tud_descriptor_string_cb(uint8_t index, uint16_t /*langid*/)
-{
-    return esp_now_midi_usb_detail::stringDescriptorCb(index);
-}
 
 // --- TinyUSBDevice-equivalent ------------------------------------------------
 
