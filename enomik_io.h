@@ -1,11 +1,12 @@
 #pragma once
 
+#include <cstdio>
 #include <vector>
-#include <Preferences.h>
 #include "esp_now_midi.h"
 #include "utils/mac.h"
 #include "include/enomik_sysex.h"
 #include "include/enomik_pinconfig.h"
+#include "include/esp_now_midi_prefs.h"
 
 // Detect ESP32 variant and set ADC resolution
 #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -757,7 +758,8 @@ namespace enomik
 
             for (size_t i = 0; i < configs.size(); i++)
             {
-                String key = "cfg" + String(i);
+                char key[16];
+                snprintf(key, sizeof(key), "cfg%zu", i);
                 uint8_t buf[8] = {
                     configs[i].pin,
                     configs[i].mode,
@@ -767,7 +769,7 @@ namespace enomik
                     configs[i].midi_note,
                     configs[i].min_midi_value,
                     configs[i].max_midi_value};
-                _preferences.putBytes(key.c_str(), buf, sizeof(buf));
+                _preferences.putBytes(key, buf, sizeof(buf));
             }
 
             _preferences.putUInt("count", configs.size());
@@ -813,10 +815,11 @@ namespace enomik
 
             for (size_t i = 0; i < count; i++)
             {
-                String key = "cfg" + String(i);
+                char key[16];
+                snprintf(key, sizeof(key), "cfg%zu", i);
                 uint8_t buf[8];
 
-                if (_preferences.getBytes(key.c_str(), buf, 8) == 8)
+                if (_preferences.getBytes(key, buf, 8) == 8)
                 {
                     PinConfig cfg(buf[0], buf[1]);
                     cfg.midi_channel = buf[2];
