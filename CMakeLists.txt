@@ -7,7 +7,8 @@
 idf_component_register(
     INCLUDE_DIRS "include"
     # esp_tinyusb backs include/esp_now_midi_usb.h (USB MIDI on ESP32-S2/S3).
-    # Component name/version depends on the esp_tinyusb release targeted -
-    # verify against your IDF version if the build fails to find it.
-    REQUIRES esp_wifi esp_netif nvs_flash esp_tinyusb
+    # driver/esp_adc back include/esp_now_midi_gpio.h (GPIO/PWM/ADC/touch).
+    # Component names/versions depend on the IDF release targeted - verify
+    # against yours if the build fails to find one.
+    REQUIRES esp_wifi esp_netif nvs_flash esp_timer esp_tinyusb driver esp_adc
 )
