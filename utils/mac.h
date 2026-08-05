@@ -2,7 +2,8 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
-#elif defined(ESP_PLATFORM)
+#endif
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
 #include "esp_mac.h"
 #endif
 
