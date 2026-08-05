@@ -79,9 +79,32 @@ jobs:
           path: test/idf
           # Default is "idf.py build"; do not pass bare "build" (runs as a shell command).
 
-  build:
+  examples_idf:
+    name: examples_idf / ${{ matrix.example }} / ${{ matrix.idf_ver }} / ${{ matrix.target }}
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        idf_ver: ["v5.5.5", "v6.0.1"]
+        target: [esp32, esp32s3]
+        # Add new examples_idf/* directories here (same as the `board` list
+        # below for Arduino examples - no dynamic discovery, kept simple).
+        example: [dongle]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build examples_idf/${{ matrix.example }}
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ matrix.idf_ver }}
+          target: ${{ matrix.target }}
+          path: examples_idf/${{ matrix.example }}
+          # Default is "idf.py build"; do not pass bare "build" (runs as a shell command).
+
+  examples:
+    runs-on: ubuntu-latest
+
     strategy:
       matrix:
         board:
@@ -172,7 +195,7 @@ jobs:
           path: binaries/*.bin
 
   release:
-    needs: [unit-test, circuitpython-test, idf-build, build]
+    needs: [unit-test, circuitpython-test, idf-build, examples_idf, examples]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
