@@ -136,7 +136,8 @@ Public headers live under `include/` (that directory is the IDF include path):
 | [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h.md) | Packet types and MIDI helpers |
 | `esp_now_midi_log.h` | `EspNowMidiLog` → `ESP_LOG*`; see [Logging](logging.md) |
 | `esp_now_midi_wifi.h` | STA bring-up when `manageWifi` is true (see below) |
-| `version.h` | Forwards to repo-root `version.h` (semver macros / `getVersion()`) |
+| `version.h` | Semver macros / `getVersion()` |
+| `PeerStorage.h` | Peer list persistence (Arduino EEPROM / IDF NVS) |
 
 ## Wi-Fi
 

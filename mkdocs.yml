@@ -13,6 +13,7 @@ nav:
   - Guides:
       - Logging: logging.md
       - Benchmarks: benchmarks.md
+      - SysEx protocol: enomik-sysex-protocol.md
   - API reference:
       - Overview: api-reference.md
       - C++ Arduino:

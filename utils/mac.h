@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 #include "esp_mac.h"
-#include "../esp_now_midi_log.h"
+#include "../include/esp_now_midi_log.h"
 
 
 #define MAC_ADDRESS_SIZE 6

@@ -4,8 +4,8 @@
 #include <Preferences.h>
 #include "esp_now_midi.h"
 #include "utils/mac.h"
-#include "enomik_sysex.h"
-#include "./enomik_pinconfig.h"
+#include "include/enomik_sysex.h"
+#include "include/enomik_pinconfig.h"
 
 // Detect ESP32 variant and set ADC resolution
 #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)

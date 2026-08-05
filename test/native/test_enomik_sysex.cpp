@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "enomik_sysex_codec.h"
+#include "include/enomik_sysex_codec.h"
 
 namespace {
 
@@ -24,9 +24,9 @@ void requireCommand(const enomik::SysExPacket &pkt, enomik::SysExCommand cmd)
     REQUIRE(pkt.getCommand() == cmd);
 }
 
-PinConfig samplePinConfig()
+enomik::PinConfig samplePinConfig()
 {
-    PinConfig cfg(7, 0x03);
+    enomik::PinConfig cfg(7, 0x03);
     cfg.threshold = 5;
     cfg.midi_channel = 3;
     cfg.midi_type = MidiStatus::MIDI_CONTROL_CHANGE;
@@ -49,7 +49,7 @@ void requirePinConfigPayload(const enomik::SysExPacket &pkt)
     REQUIRE(pkt.data[12] == 100);
 }
 
-void requirePinConfigEqual(const PinConfig &actual, const PinConfig &expected)
+void requirePinConfigEqual(const enomik::PinConfig &actual, const enomik::PinConfig &expected)
 {
     REQUIRE(actual.pin == expected.pin);
     REQUIRE(actual.mode == expected.mode);
@@ -66,9 +66,9 @@ void requirePinConfigEqual(const PinConfig &actual, const PinConfig &expected)
     REQUIRE(actual.midi_note == wireMidiByte);
 }
 
-PinConfig notePinConfig()
+enomik::PinConfig notePinConfig()
 {
-    PinConfig cfg(5, 0x01);
+    enomik::PinConfig cfg(5, 0x01);
     cfg.threshold = 2;
     cfg.midi_channel = 10;
     cfg.midi_type = MidiStatus::MIDI_NOTE_ON;
@@ -374,7 +374,7 @@ TEST_CASE("decodePinConfig round-trips encoded payloads", "[sysex][decode]")
         const auto pkt = enomik::SysExEncoder::encodePinConfig(
             expected, enomik::SysExCommand::SET_PIN_CONFIG_RESPONSE);
 
-        PinConfig decoded(0, 0);
+        enomik::PinConfig decoded(0, 0);
         REQUIRE(enomik::SysExDecoder::decodePinConfig(pkt.getPayload(), pkt.getPayloadLength(), decoded));
         requirePinConfigEqual(decoded, expected);
     }
@@ -385,7 +385,7 @@ TEST_CASE("decodePinConfig round-trips encoded payloads", "[sysex][decode]")
         const auto pkt = enomik::SysExEncoder::encodePinConfig(
             expected, enomik::SysExCommand::SET_PIN_CONFIG);
 
-        PinConfig decoded(0, 0);
+        enomik::PinConfig decoded(0, 0);
         REQUIRE(enomik::SysExDecoder::decodePinConfig(pkt.getPayload(), pkt.getPayloadLength(), decoded));
         requirePinConfigEqual(decoded, expected);
     }
@@ -393,7 +393,7 @@ TEST_CASE("decodePinConfig round-trips encoded payloads", "[sysex][decode]")
     SECTION("rejects short payload")
     {
         const uint8_t payload[7] = {1, 2, 3, 4, 5, 6, 7};
-        PinConfig decoded(0, 0);
+        enomik::PinConfig decoded(0, 0);
         REQUIRE_FALSE(enomik::SysExDecoder::decodePinConfig(payload, 7, decoded));
     }
 }

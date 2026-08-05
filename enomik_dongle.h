@@ -1,11 +1,11 @@
 #pragma once
 
 #include "esp_now_midi.h"
-#include "MidiMessageHistory.h"
-#include "UsbMidiQueue.h"
+#include "include/MidiMessageHistory.h"
+#include "include/UsbMidiQueue.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
-#include "version.h"
+#include "include/version.h"
 #include <WiFi.h>
 #include <esp_system.h>
 #include <functional>

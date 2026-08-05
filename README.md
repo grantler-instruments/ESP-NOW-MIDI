@@ -142,7 +142,7 @@ Practical reading:
 
 Pin configuration, peers, MAC, reset, and version query use MIDI SysEx. Full specification:
 
-**[doc/enomik-sysex-protocol.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/doc/enomik-sysex-protocol.md)**
+**[docs/enomik-sysex-protocol.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/docs/enomik-sysex-protocol.md)**
 
 ## Release candidates
 

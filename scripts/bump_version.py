@@ -10,7 +10,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-VERSION_H = REPO_ROOT / "version.h"
+VERSION_H = REPO_ROOT / "include" / "version.h"
 LIBRARY_PROPERTIES = REPO_ROOT / "library.properties"
 ESP_NOW_MIDI_PY = REPO_ROOT / "esp_now_midi.py"
 WIZARD_SYSEX = REPO_ROOT / "scripts" / "wizard" / "enomik_sysex.py"

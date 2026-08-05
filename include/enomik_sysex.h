@@ -3,10 +3,6 @@
 #include "./enomik_sysex_codec.h"
 #include "./esp_now_midi_log.h"
 
-#ifdef ARDUINO
-#include <Arduino.h>
-#endif
-
 #include <functional>
 
 /**

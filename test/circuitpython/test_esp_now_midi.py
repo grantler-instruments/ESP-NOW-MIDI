@@ -27,7 +27,7 @@ from esp_now_midi import (  # noqa: E402
 
 class TestVersion(unittest.TestCase):
     def test_version_matches_version_h(self):
-        version_h = (REPO_ROOT / "version.h").read_text(encoding="utf-8")
+        version_h = (REPO_ROOT / "include" / "version.h").read_text(encoding="utf-8")
         major = int(re.search(r"ESP_NOW_MIDI_VERSION_MAJOR (\d+)", version_h).group(1))
         minor = int(re.search(r"ESP_NOW_MIDI_VERSION_MINOR (\d+)", version_h).group(1))
         patch = int(re.search(r"ESP_NOW_MIDI_VERSION_PATCH (\d+)", version_h).group(1))

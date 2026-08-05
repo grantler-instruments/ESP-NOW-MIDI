@@ -10,6 +10,7 @@ transport), and CircuitPython.
 - [Examples](examples.md)
 - [Logging](logging.md)
 - [Benchmarks](benchmarks.md)
+- [SysEx protocol](enomik-sysex-protocol.md)
 
 ## API reference
 

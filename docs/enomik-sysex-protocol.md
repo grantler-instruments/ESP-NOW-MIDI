@@ -8,8 +8,8 @@ All multi-byte values in SysEx payloads are **7-bit** (0–127), as required by 
 
 | File | Role |
 |---|---|
-| [`enomik_sysex_codec.h`](../enomik_sysex_codec.h) | Protocol constants, `SysExPacket`, `SysExEncoder`, `SysExDecoder` — pure encode/decode, no Arduino |
-| [`enomik_sysex.h`](../enomik_sysex.h) | `SysExHandler` — incoming command routing, callbacks, `EspNowMidiLog` logging |
+| [`enomik_sysex_codec.h`](../include/enomik_sysex_codec.h) | Protocol constants, `SysExPacket`, `SysExEncoder`, `SysExDecoder` — pure encode/decode, no Arduino |
+| [`enomik_sysex.h`](../include/enomik_sysex.h) | `SysExHandler` — incoming command routing, callbacks, `EspNowMidiLog` logging |
 | [`enomik_io.h`](../enomik_io.h) / [`enomik_client.h`](../enomik_client.h) | Pin config, NVS, ESP-NOW, USB MIDI wiring |
 | [`scripts/wizard/enomik_sysex.py`](../scripts/wizard/enomik_sysex.py) | Host-side builders and parser (wizard, tests) |
 
@@ -36,7 +36,7 @@ F0  7D  MAJOR  MINOR  CMD  [payload…]  F7
 | CMD | see below | Request or response command byte |
 | End | `0xF7` | MIDI SysEx end |
 
-**Compatibility:** firmware accepts packets whose **MAJOR** equals `ESP_NOW_MIDI_VERSION_MAJOR` from [`version.h`](../version.h). Mismatch yields an error response (see [Errors](#errors)).
+**Compatibility:** firmware accepts packets whose **MAJOR** equals `ESP_NOW_MIDI_VERSION_MAJOR` from [`version.h`](../include/version.h). Mismatch yields an error response (see [Errors](#errors)).
 
 When building messages for Web MIDI / `mido`, the inner data is everything **between** `F0` and `F7` (i.e. starting with `7D`).
 
@@ -365,8 +365,8 @@ F0  7D  00  0D  7F  02  04  07  F7
 ## Host implementation notes
 
 - **Web MIDI:** request SysEx access (`{ sysex: true }`). Incoming SysEx includes `F0`/`F7` in `event.data`.
-- **Firmware codec:** [`enomik_sysex_codec.h`](../enomik_sysex_codec.h) — enums and encode/decode (testable natively without Arduino).
-- **Firmware handler:** [`enomik_sysex.h`](../enomik_sysex.h) — routes requests to IO callbacks and sends responses.
+- **Firmware codec:** [`enomik_sysex_codec.h`](../include/enomik_sysex_codec.h) — enums and encode/decode (testable natively without Arduino).
+- **Firmware handler:** [`enomik_sysex.h`](../include/enomik_sysex.h) — routes requests to IO callbacks and sends responses.
 - **Python (wizard):** [`scripts/wizard/enomik_sysex.py`](../scripts/wizard/enomik_sysex.py) — builders and `parse()` for inner data.
 - **Constant sync (CI):** [`scripts/check_sysex_constants.py`](../scripts/check_sysex_constants.py) — verifies C++ codec and Python enums stay aligned.
 - **Tests:** Catch2 codec tests in [`test/native/test_enomik_sysex.cpp`](../test/native/test_enomik_sysex.cpp), handler tests in [`test/native/test_enomik_sysex_handler.cpp`](../test/native/test_enomik_sysex_handler.cpp), CI constant check in [`test/protocol/test_sysex_constants.py`](../test/protocol/test_sysex_constants.py).

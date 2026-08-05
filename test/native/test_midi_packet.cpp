@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "esp_now_midi_helpers.h"
+#include "include/esp_now_midi_helpers.h"
 
 namespace {
 
