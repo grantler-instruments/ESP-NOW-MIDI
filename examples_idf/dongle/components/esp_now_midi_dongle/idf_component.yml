@@ -1,0 +1,9 @@
+## Managed dependency for this example's USB MIDI backend
+## (include/esp_now_midi_usb.h). esp_timer/esp_wifi/nvs_flash/driver/esp_adc
+## are built into IDF itself and don't need a manifest entry - only
+## esp_tinyusb comes from the component registry.
+##
+## Unverified against a real build - see the risk note in
+## include/esp_now_midi_usb.h if this fails to resolve for your IDF version.
+dependencies:
+  espressif/esp_tinyusb: "*"
