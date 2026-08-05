@@ -1,2 +1,7 @@
 # Defaults for the compile smoke test. Override with `idf.py set-target`.
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# USB device mode for esp_now_midi_usb.h (ESP32-S2/S3 only). Option name is
+# unverified against a real IDF/esp_tinyusb build - check against the
+# official tusb_midi example if the build fails to pick this up.
+CONFIG_TINYUSB_ENABLED=y

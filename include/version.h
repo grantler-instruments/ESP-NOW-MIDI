@@ -12,16 +12,16 @@
  *
  * @return The version in `major.minor.patch` format.
  */
+#include "./esp_now_midi_compat.h"
+
 #ifdef ARDUINO
-#include <Arduino.h>
-inline String getVersion() {
-    return String(ESP_NOW_MIDI_VERSION_MAJOR) + "." +
-           String(ESP_NOW_MIDI_VERSION_MINOR) + "." +
-           String(ESP_NOW_MIDI_VERSION_PATCH);
+inline PortableString getVersion() {
+    return PortableString(ESP_NOW_MIDI_VERSION_MAJOR) + "." +
+           PortableString(ESP_NOW_MIDI_VERSION_MINOR) + "." +
+           PortableString(ESP_NOW_MIDI_VERSION_PATCH);
 }
 #else
-#include <string>
-inline std::string getVersion() {
+inline PortableString getVersion() {
     return std::to_string(ESP_NOW_MIDI_VERSION_MAJOR) + "." +
            std::to_string(ESP_NOW_MIDI_VERSION_MINOR) + "." +
            std::to_string(ESP_NOW_MIDI_VERSION_PATCH);

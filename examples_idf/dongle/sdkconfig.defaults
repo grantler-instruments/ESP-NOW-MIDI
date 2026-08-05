@@ -1,0 +1,8 @@
+# Defaults for the dongle example. Override with `idf.py set-target`.
+# Native USB is required - use esp32s2 or esp32s3.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# USB device mode for esp_now_midi_usb.h. Option name is unverified against
+# a real IDF/esp_tinyusb build - check against the official tusb_midi example
+# if the build fails to pick this up.
+CONFIG_TINYUSB_ENABLED=y

@@ -8,3 +8,7 @@ license: LGPL-3.0-or-later
 dependencies:
   idf:
     version: ">=5.5"
+  # Backs include/esp_now_midi_usb.h (USB MIDI on ESP32-S2/S3 via raw tinyusb).
+  # Unverified against a real IDF build - pin/adjust the version once building
+  # for real; see the risk note in include/esp_now_midi_usb.h.
+  espressif/esp_tinyusb: "*"
