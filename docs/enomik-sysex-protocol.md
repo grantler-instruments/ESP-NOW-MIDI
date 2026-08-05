@@ -10,7 +10,7 @@ All multi-byte values in SysEx payloads are **7-bit** (0–127), as required by 
 |---|---|
 | [`enomik_sysex_codec.h`](../include/enomik_sysex_codec.h) | Protocol constants, `SysExPacket`, `SysExEncoder`, `SysExDecoder` — pure encode/decode, no Arduino |
 | [`enomik_sysex.h`](../include/enomik_sysex.h) | `SysExHandler` — incoming command routing, callbacks, `EspNowMidiLog` logging |
-| [`enomik_io.h`](../enomik_io.h) / [`enomik_client.h`](../enomik_client.h) | Pin config, NVS, ESP-NOW, USB MIDI wiring |
+| [`enomik_io.h`](../include/enomik_io.h) / [`enomik_client.h`](../enomik_client.h) | Pin config, NVS, ESP-NOW, USB MIDI wiring |
 | [`scripts/wizard/enomik_sysex.py`](../scripts/wizard/enomik_sysex.py) | Host-side builders and parser (wizard, tests) |
 
 ## Packet layout

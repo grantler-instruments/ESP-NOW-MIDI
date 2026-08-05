@@ -2,7 +2,7 @@
 #include "esp_now_midi.h"
 #include <esp_now.h>
 #include <WiFi.h>
-#include "enomik_io.h"
+#include "include/enomik_io.h"
 #include "include/PeerStorage.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
