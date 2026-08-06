@@ -51,7 +51,7 @@ Wire layout: `[0x00][tick16 LE ×100µs][midi 1–3 bytes]`.
 
 - [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h/): MIDI message
   types, constants, and helpers such as pitch-bend conversion.
-- `midiTimedPacket.h` / `MidiJitterBuffer.h`: timed wire format and per-peer
+- `include/midiTimedPacket.h` / `include/MidiJitterBuffer.h`: timed wire format and per-peer
   playout ring used by `esp_now_midi`.
 - [`EspNowMidiLog`](logging.md) (`esp_now_midi_log.h`): internal printf-style
   logger (`e` / `w` / `i` / `d`) with Arduino `Serial` and ESP-IDF `ESP_LOG*`

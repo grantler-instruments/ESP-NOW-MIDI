@@ -20,8 +20,8 @@
 #include "./esp_now_midi_helpers.h"
 #include "./esp_now_midi_log.h"
 #include "./esp_now_midi_wifi.h"
-#include "../midiTimedPacket.h"
-#include "../MidiJitterBuffer.h"
+#include "./midiTimedPacket.h"
+#include "./MidiJitterBuffer.h"
 
 #ifndef ARDUINO
 using byte = uint8_t;

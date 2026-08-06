@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "MidiJitterBuffer.h"
-#include "midiTimedPacket.h"
+#include "include/MidiJitterBuffer.h"
+#include "include/midiTimedPacket.h"
 
 namespace {
 

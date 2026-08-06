@@ -1,7 +1,7 @@
 #pragma once
 
-#include "esp_now_midi_helpers.h"
-#include "midiTimedPacket.h"
+#include "./esp_now_midi_helpers.h"
+#include "./midiTimedPacket.h"
 #include <cstdint>
 #include <cstring>
 

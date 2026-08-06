@@ -1,6 +1,6 @@
 #pragma once
 
-#include "esp_now_midi_helpers.h"
+#include "./esp_now_midi_helpers.h"
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
