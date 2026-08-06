@@ -721,6 +721,9 @@ namespace enomik
                 msg.secondByte = (pb >> 7) & 0x7F;
                 break;
             }
+
+            default:
+                return;
             }
 
             _onMIDISendRequest(msg);

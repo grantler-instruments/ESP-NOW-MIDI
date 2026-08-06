@@ -89,7 +89,7 @@ jobs:
         target: [esp32, esp32s3]
         # Add new examples_idf/* directories here (same as the `board` list
         # below for Arduino examples - no dynamic discovery, kept simple).
-        example: [dongle]
+        example: [dongle, client]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

@@ -312,11 +312,10 @@ public:
 
 inline TinyUSBDeviceClass TinyUSBDevice;
 
-// --- DONGLE_USBMIDI-equivalent MIDI object -----------------------------------
+// --- USBMIDI / DONGLE_USBMIDI / CLIENT_USBMIDI-equivalent MIDI object --------
 //
-// enomik_dongle.h never calls sendX() on this object (it sends via the raw
-// writePacket() below), so this only needs to support receive: begin/read
-// plus the 13 setHandleX() registrations.
+// Dongle sends via TinyUsbRawMidiClass::writePacket(); Client calls sendX()
+// on this object. Receive path: begin/read + setHandleX() registrations.
 
 class TinyUsbMidiClass
 {
@@ -352,6 +351,99 @@ public:
     void setHandleClock(std::function<void()> cb) { esp_now_midi_usb_detail::handlers().clock = cb; }
     void setHandleSongPosition(std::function<void(unsigned int)> cb) { esp_now_midi_usb_detail::handlers().songPosition = cb; }
     void setHandleSongSelect(std::function<void(uint8_t)> cb) { esp_now_midi_usb_detail::handlers().songSelect = cb; }
+    // SysEx RX over USB is not implemented yet on the IDF backend (Client
+    // still receives SysEx over ESP-NOW once that handler is wired).
+    void setHandleSystemExclusive(std::function<void(uint8_t *, unsigned int)> /*cb*/) {}
+
+    void sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel)
+    {
+        sendVoice(0x09, static_cast<uint8_t>(0x90 | ((channel - 1) & 0x0F)), note, velocity);
+    }
+    void sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel)
+    {
+        sendVoice(0x08, static_cast<uint8_t>(0x80 | ((channel - 1) & 0x0F)), note, velocity);
+    }
+    void sendControlChange(uint8_t control, uint8_t value, uint8_t channel)
+    {
+        sendVoice(0x0B, static_cast<uint8_t>(0xB0 | ((channel - 1) & 0x0F)), control, value);
+    }
+    void sendProgramChange(uint8_t program, uint8_t channel)
+    {
+        sendVoice(0x0C, static_cast<uint8_t>(0xC0 | ((channel - 1) & 0x0F)), program, 0);
+    }
+    void sendAfterTouch(uint8_t pressure, uint8_t channel)
+    {
+        sendVoice(0x0D, static_cast<uint8_t>(0xD0 | ((channel - 1) & 0x0F)), pressure, 0);
+    }
+    void sendAfterTouch(uint8_t note, uint8_t pressure, uint8_t channel)
+    {
+        sendVoice(0x0A, static_cast<uint8_t>(0xA0 | ((channel - 1) & 0x0F)), note, pressure);
+    }
+    void sendPitchBend(int value, uint8_t channel)
+    {
+        const int clamped = value < -8192 ? -8192 : (value > 8191 ? 8191 : value);
+        const unsigned int centered = static_cast<unsigned int>(clamped + 8192);
+        sendVoice(0x0E, static_cast<uint8_t>(0xE0 | ((channel - 1) & 0x0F)),
+                  static_cast<uint8_t>(centered & 0x7F),
+                  static_cast<uint8_t>((centered >> 7) & 0x7F));
+    }
+    void sendStart() { sendVoice(0x0F, 0xFA, 0, 0); }
+    void sendStop() { sendVoice(0x0F, 0xFC, 0, 0); }
+    void sendContinue() { sendVoice(0x0F, 0xFB, 0, 0); }
+    void sendClock() { sendVoice(0x0F, 0xF8, 0, 0); }
+    void sendSongPosition(uint16_t value)
+    {
+        sendVoice(0x03, 0xF2, static_cast<uint8_t>(value & 0x7F),
+                  static_cast<uint8_t>((value >> 7) & 0x7F));
+    }
+    void sendSongSelect(uint8_t value) { sendVoice(0x02, 0xF3, value, 0); }
+    // Best-effort SysEx TX (starts/continues/ends CIN). No-op if length is 0.
+    void sendSysEx(uint16_t length, const uint8_t *data)
+    {
+        if (!data || length == 0)
+        {
+            return;
+        }
+        uint16_t i = 0;
+        while (i < length)
+        {
+            const uint16_t remaining = static_cast<uint16_t>(length - i);
+            uint8_t packet[4] = {0, 0, 0, 0};
+            if (remaining > 3)
+            {
+                packet[0] = (i == 0) ? 0x04 : 0x04; // sysex starts/continues
+                packet[1] = data[i++];
+                packet[2] = data[i++];
+                packet[3] = data[i++];
+            }
+            else if (remaining == 3)
+            {
+                packet[0] = 0x07;
+                packet[1] = data[i++];
+                packet[2] = data[i++];
+                packet[3] = data[i++];
+            }
+            else if (remaining == 2)
+            {
+                packet[0] = 0x06;
+                packet[1] = data[i++];
+                packet[2] = data[i++];
+            }
+            else
+            {
+                packet[0] = 0x05;
+                packet[1] = data[i++];
+            }
+            tud_midi_packet_write(packet);
+        }
+    }
+
+private:
+    static void sendVoice(uint8_t cin, uint8_t status, uint8_t d1, uint8_t d2)
+    {
+        const uint8_t packet[4] = {cin, status, d1, d2};
+        tud_midi_packet_write(packet);
+    }
 };
 
 // Mirrors Adafruit_USBD_MIDI's role: the object writePacket() is called on.

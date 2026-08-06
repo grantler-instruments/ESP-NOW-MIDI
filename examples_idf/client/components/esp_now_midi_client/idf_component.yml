@@ -1,0 +1,4 @@
+## Managed dependency for optional USB MIDI backend
+## (include/esp_now_midi_usb.h on ESP32-S2/S3).
+dependencies:
+  espressif/esp_tinyusb: "*"
