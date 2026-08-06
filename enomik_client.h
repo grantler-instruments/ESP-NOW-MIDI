@@ -213,9 +213,8 @@ namespace enomik
         {
             if (Client::instancePtr)
             {
+                // onSystemExclusive() already forwards to io + _onSysExHandler
                 Client::instancePtr->onSystemExclusive(data, length);
-                if (Client::instancePtr->_onSysExHandler)
-                    Client::instancePtr->_onSysExHandler(data, length);
             }
         }
 

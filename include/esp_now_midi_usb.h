@@ -101,12 +101,92 @@ struct HandlerTable
     std::function<void()> clock;
     std::function<void(unsigned int)> songPosition;
     std::function<void(uint8_t)> songSelect;
+    // Complete SysEx including F0…F7 (matches Arduino MIDI library / SysExPacket).
+    std::function<void(uint8_t *, unsigned int)> systemExclusive;
 };
 
 inline HandlerTable &handlers()
 {
     static HandlerTable table;
     return table;
+}
+
+// Reassembles USB-MIDI SysEx packets (CIN 0x4/5/6/7) into a full F0…F7 buffer.
+struct SysexAssembler
+{
+    static constexpr uint16_t CAPACITY = 256; // SysExPacket::MAX_DATA_SIZE
+    uint8_t buf[CAPACITY];
+    uint16_t len = 0;
+    bool active = false;
+
+    void reset()
+    {
+        len = 0;
+        active = false;
+    }
+
+    bool append(const uint8_t *bytes, uint8_t count)
+    {
+        for (uint8_t i = 0; i < count; ++i)
+        {
+            if (len >= CAPACITY)
+            {
+                reset();
+                return false;
+            }
+            buf[len++] = bytes[i];
+        }
+        return true;
+    }
+
+    void finish()
+    {
+        HandlerTable &h = handlers();
+        if (h.systemExclusive && len > 0)
+        {
+            h.systemExclusive(buf, len);
+        }
+        reset();
+    }
+};
+
+inline SysexAssembler &sysexAssembler()
+{
+    static SysexAssembler assembler;
+    return assembler;
+}
+
+inline void beginOrContinueSysex(const uint8_t *bytes, uint8_t count)
+{
+    SysexAssembler &a = sysexAssembler();
+    if (!a.active)
+    {
+        a.active = true;
+        a.len = 0;
+    }
+    if (!a.append(bytes, count))
+    {
+        EspNowMidiLog::w("USB MIDI SysEx overflow, dropping");
+    }
+}
+
+inline void endSysex(const uint8_t *bytes, uint8_t count)
+{
+    SysexAssembler &a = sysexAssembler();
+    if (!a.active)
+    {
+        // Short message that fits in a single end packet (e.g. F0 xx F7).
+        a.active = true;
+        a.len = 0;
+    }
+    if (a.append(bytes, count))
+    {
+        a.finish();
+    }
+    else
+    {
+        EspNowMidiLog::w("USB MIDI SysEx overflow on end, dropping");
+    }
 }
 
 // Dispatches one raw 4-byte USB-MIDI event packet to the registered handlers.
@@ -122,6 +202,22 @@ inline void dispatchPacket(const uint8_t packet[4])
 
     switch (cin)
     {
+    case 0x4: // SysEx starts or continues (3 data bytes)
+        beginOrContinueSysex(&packet[1], 3);
+        break;
+    case 0x5: // Single-byte System Common, or SysEx ends with 1 byte
+        if (sysexAssembler().active)
+        {
+            endSysex(&packet[1], 1);
+        }
+        // else: MTC / tune request / etc. — not needed by enomik
+        break;
+    case 0x6: // SysEx ends with 2 bytes
+        endSysex(&packet[1], 2);
+        break;
+    case 0x7: // SysEx ends with 3 bytes
+        endSysex(&packet[1], 3);
+        break;
     case 0x8: // Note Off
         if (h.noteOff)
             h.noteOff(channel, packet[2], packet[3]);
@@ -351,9 +447,10 @@ public:
     void setHandleClock(std::function<void()> cb) { esp_now_midi_usb_detail::handlers().clock = cb; }
     void setHandleSongPosition(std::function<void(unsigned int)> cb) { esp_now_midi_usb_detail::handlers().songPosition = cb; }
     void setHandleSongSelect(std::function<void(uint8_t)> cb) { esp_now_midi_usb_detail::handlers().songSelect = cb; }
-    // SysEx RX over USB is not implemented yet on the IDF backend (Client
-    // still receives SysEx over ESP-NOW once that handler is wired).
-    void setHandleSystemExclusive(std::function<void(uint8_t *, unsigned int)> /*cb*/) {}
+    void setHandleSystemExclusive(std::function<void(uint8_t *, unsigned int)> cb)
+    {
+        esp_now_midi_usb_detail::handlers().systemExclusive = cb;
+    }
 
     void sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel)
     {
