@@ -2,27 +2,23 @@
 /**
  * @file esp_now_midi_usb.h
  * @brief USB MIDI backend for enomik_dongle.h: Adafruit TinyUSB on Arduino,
- *        raw tinyusb on ESP-IDF.
+ *        esp_tinyusb on ESP-IDF.
  *
  * The ESP-IDF branch mirrors only the call surface enomik_dongle.h actually
  * uses (a `TinyUSBDevice`-like object, a `DONGLE_USBMIDI`-like MIDI object,
  * and the raw `g_dongle_usb_midi.writePacket()` used for sends) - it is not a
  * general-purpose MIDI library.
  *
- * HIGHEST-RISK file in this port: no local IDF SDK to build-verify against,
- * and unlike GPIO/ADC/touch, a USB descriptor mistake usually means the
- * device fails to enumerate at all rather than misbehaving partially.
+ * Built and linked against ESP-IDF v6.0.1 + `espressif/esp_tinyusb` (see
+ * `examples_idf/dongle` and CI). A USB descriptor mistake can still prevent
+ * host enumeration; if that happens, compare against
+ * `$IDF_PATH/examples/peripherals/usb/device/tusb_midi`.
  *
- * Uses the `espressif/esp_tinyusb` managed component's own install path
+ * Uses the `espressif/esp_tinyusb` managed component's install path
  * (`tinyusb_driver_install()` + `tinyusb_config_t`) rather than calling raw
- * tinyusb (`tusb_init()`) directly: esp_tinyusb is the only way to get
- * tinyusb on IDF at all, and it ships its own `tud_descriptor_*_cb()`
- * implementations (driven by `tinyusb_config_t`) - defining our own would be
- * a duplicate-symbol link error. `tinyusb_config_t`'s exact fields are
- * unverified against a real build; reconcile against
- * `managed_components/espressif__esp_tinyusb/include/tinyusb.h` (or
- * `$IDF_PATH/examples/peripherals/usb/device/tusb_midi` if using raw
- * tinyusb instead) if this doesn't compile as-is.
+ * tinyusb (`tusb_init()`) directly: esp_tinyusb owns PHY/clock bring-up,
+ * `tud_task()`, and `tud_descriptor_*_cb()` (driven by `tinyusb_config_t`) —
+ * defining our own descriptors would be a duplicate-symbol link error.
  */
 
 #ifdef ARDUINO
@@ -57,10 +53,9 @@ enum
     EPNUM_MIDI_IN = 0x81,
 };
 
-// esp_tinyusb's string_descriptor array convention: index 0 is the special
-// raw language-ID encoding, the rest are plain C strings it UTF-16-encodes
-// itself (see the note on usbInstall() below - this is the part most likely
-// to need correction against the real esp_tinyusb header).
+// esp_tinyusb string_descriptor convention (verified IDF v6.0.1): index 0 is
+// the special raw language-ID encoding; the rest are plain C strings that
+// esp_tinyusb UTF-16-encodes itself.
 enum
 {
     STRID_LANGID = 0,
