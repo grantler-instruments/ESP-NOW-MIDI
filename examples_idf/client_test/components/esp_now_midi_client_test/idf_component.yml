@@ -1,0 +1,3 @@
+## Managed dependency for USB MIDI backend (wizard Phase 1).
+dependencies:
+  espressif/esp_tinyusb: "*"

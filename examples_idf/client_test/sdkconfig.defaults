@@ -1,0 +1,9 @@
+# Defaults for the client_test example. Override with `idf.py set-target`.
+# Native USB is required for wizard Phase 1 — use esp32s2 or esp32s3.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+CONFIG_TINYUSB_MIDI_COUNT=1
+
+# include/esp_now_midi_gpio.h still uses the legacy touch_pad API; suppress the
+# IDF 6 -Werror=cpp deprecation until that wrapper is migrated.
+CONFIG_TOUCH_SUPPRESS_DEPRECATE_WARN=y
