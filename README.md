@@ -210,7 +210,7 @@ Build every example from the repo root:
 bash scripts/platformio_build_examples.sh
 ```
 
-Shared board settings live in `platformio/common.ini`. Example-specific dependencies are listed in each example's `platformio.ini`.
+Shared board settings live in `platformio/common.ini`. Example-specific dependencies are listed in each example's `platformio.ini`. Build artifacts go to `.pio/workspaces/` at the repo root (not under `examples/`), so Arduino IDE does not pick up dependency sketches from PlatformIO `libdeps`.
 
 **Note:** This library requires **Arduino-ESP32 3.3.0+**. Example configs use the [pioarduino `espressif32` platform](https://github.com/pioarduino/platform-espressif32) because official `platformio/espressif32` does not support Arduino core 3.x.
 
