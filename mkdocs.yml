@@ -7,15 +7,22 @@ docs_dir: docs
 site_dir: site
 
 nav:
+  - Home: index.md
   - Getting started: getting-started.md
   - Examples: examples.md
-  - Benchmarks: benchmarks.md
-  - Arduino C++ API reference:
-      - Overview: arduino-api.md
-      - Classes: api/Classes/index.md
-      - Files: api/Files/index.md
-      - Namespaces: api/Namespaces/index.md
-  - CircuitPython API reference: circuitpython-api.md
+  - Guides:
+      - Logging: logging.md
+      - Benchmarks: benchmarks.md
+      - SysEx protocol: enomik-sysex-protocol.md
+  - API reference:
+      - Overview: api-reference.md
+      - C++ Arduino:
+          - Overview: arduino-api.md
+          - Classes: api/Classes/index.md
+          - Files: api/Files/index.md
+          - Namespaces: api/Namespaces/index.md
+      - C++ ESP-IDF: idf-api.md
+      - CircuitPython: circuitpython-api.md
 
 theme:
   name: material
@@ -23,6 +30,7 @@ theme:
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.expand
+    - navigation.sections
     - navigation.top
     - search.suggest
     - search.highlight

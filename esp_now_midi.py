@@ -8,8 +8,8 @@ import espnow
 
 # Keep in sync with version.h
 VERSION_MAJOR = 0
-VERSION_MINOR = 13
-VERSION_PATCH = 1
+VERSION_MINOR = 17
+VERSION_PATCH = 0
 VERSION = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
 
 
@@ -96,12 +96,20 @@ class ESPNowMidi:
             reduce_power_at_cost_of_latency: Not implemented in CircuitPython
             auto_peer_discovery: Enable automatic peer discovery on receive
             channel: WiFi channel for ESP-NOW (default matches C++ ESP_NOW_MIDI_CHANNEL)
+
+        Returns:
+            True when ESP-NOW is ready.
         """
         self._auto_peer_discovery = auto_peer_discovery
         self._configure_wifi_channel(channel)
-        self.e = espnow.ESPNow()
-        self.e.active(True)
+        try:
+            self.e = espnow.ESPNow()
+            self.e.active(True)
+        except Exception as exc:
+            print("ESP-NOW MIDI init failed:", exc)
+            return False
         print("ESP-NOW MIDI initialized")
+        return True
     
     def _configure_wifi_channel(self, channel):
         """Best-effort WiFi channel setup before ESP-NOW init."""

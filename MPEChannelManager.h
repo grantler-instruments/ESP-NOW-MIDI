@@ -1,4 +1,8 @@
+#pragma once
+
 #include <Arduino.h>
+
+namespace enomik {
 
 class MPEChannelManager {
 private:
@@ -48,3 +52,5 @@ public:
         }
     }
 };
+
+} // namespace enomik

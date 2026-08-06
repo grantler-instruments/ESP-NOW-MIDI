@@ -4,10 +4,12 @@ PROJECT_BRIEF          = "Arduino library for sending and receiving MIDI message
 PROJECT_NUMBER         =
 OUTPUT_DIRECTORY       = .doxygen
 
-INPUT                  = .
+INPUT                  = include . README.md
 FILE_PATTERNS          = *.h *.md
 RECURSIVE              = NO
-EXCLUDE_PATTERNS       = .doxygen/* docs/*
+# Root esp_now_midi*.h shims are Arduino entry points; document include/ instead.
+EXCLUDE                = esp_now_midi.h
+EXCLUDE_PATTERNS       = .doxygen/* docs/* test/*
 USE_MDFILE_AS_MAINPAGE = README.md
 
 EXTRACT_ALL            = YES

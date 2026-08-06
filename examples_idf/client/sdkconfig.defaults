@@ -1,0 +1,10 @@
+# Defaults for the client example. Override with `idf.py set-target`.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# USB MIDI class in esp_tinyusb (used when HAS_USB_MIDI is defined for S2/S3).
+# Harmless on non-USB targets.
+CONFIG_TINYUSB_MIDI_COUNT=1
+
+# include/esp_now_midi_gpio.h still uses the legacy touch_pad API; suppress the
+# IDF 6 -Werror=cpp deprecation until that wrapper is migrated.
+CONFIG_TOUCH_SUPPRESS_DEPRECATE_WARN=y

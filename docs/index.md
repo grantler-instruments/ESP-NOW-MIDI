@@ -1,18 +1,20 @@
 # ESP-NOW MIDI
 
-ESP-NOW MIDI is an Arduino library for sending and receiving MIDI messages
-wirelessly over the ESP-NOW protocol.
+ESP-NOW MIDI is a library for sending and receiving MIDI messages wirelessly
+over the ESP-NOW protocol. It targets Arduino-ESP32, pure ESP-IDF (core
+transport plus Enomik Client/Dongle examples), and CircuitPython.
 
 ## Guides
 
 - [Getting started](getting-started.md)
 - [Examples](examples.md)
+- [Logging](logging.md)
 - [Benchmarks](benchmarks.md)
+- [SysEx protocol](enomik-sysex-protocol.md)
 
-## API references
+## API reference
 
-- The [Arduino C++ API reference](arduino-api.md) starts with a handwritten
-  overview; the Class, File, and Namespace pages are generated from Doxygen
-  comments in the library headers.
-- The [CircuitPython API reference](circuitpython-api.md) is generated from the
-  docstrings in `esp_now_midi.py`.
+- [API reference overview](api-reference.md)
+- [C++ Arduino](arduino-api.md) — full library + generated class/file docs
+- [C++ ESP-IDF](idf-api.md) — core transport + Enomik on IDF
+- [CircuitPython](circuitpython-api.md) — `esp_now_midi.py`

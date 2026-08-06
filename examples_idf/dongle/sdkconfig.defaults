@@ -1,0 +1,9 @@
+# Defaults for the dongle example. Override with `idf.py set-target`.
+# Native USB is required - use esp32s2 or esp32s3.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# Enables the USB MIDI class in esp_tinyusb (CFG_TUD_MIDI = this value,
+# see managed_components/espressif__esp_tinyusb/include/tusb_config.h once
+# built) - CONFIG_TINYUSB_ENABLED from an earlier guess doesn't exist as a
+# real Kconfig option, verified against a real IDF v6.0.1 build.
+CONFIG_TINYUSB_MIDI_COUNT=1

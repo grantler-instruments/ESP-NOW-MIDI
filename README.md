@@ -1,6 +1,11 @@
 # ESP-NOW-MIDI
-This is an Arduino library for sending and receiving MIDI messages via the ESP-NOW protocol.
-A typical setup requires two ESP-NOW capable boards, where the board connected to your computer needs to be MIDI-capable 
+Library for sending and receiving MIDI messages via the ESP-NOW protocol.
+A typical setup requires two ESP-NOW capable boards, where the board connected to your computer needs to be MIDI-capable.
+
+Supports:
+* **Arduino** — Arduino-ESP32 sketches under `examples/`
+* **ESP-IDF** — pure IDF component + examples under `examples_idf/`
+* **CircuitPython** — `esp_now_midi.py` (same on-air packet format)
 
 ## Documentation
 
@@ -22,16 +27,14 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
 ## Features
 * **enomik::Client I/O** Add `enomik::Client` to your sketch and it becomes a MIDI SysEx–configurable client: map pins to MIDI without extra wiring logic, e.g. digital input 3 → MIDI CC
 * **enomik::Client MIDI wrapper** Helper that takes care of the ESP-NOW setup, provides a common interface for USB and ESP-NOW MIDI
+* **enomik::Dongle** USB MIDI ↔ ESP-NOW bridge for a host-connected board (ESP32-S2/S3). Optional status display via `Dongle::Display` + `setDisplay()`
 * **examples**
   * **print_mac**: periodically prints the mac address to the serial monitor
-  * **dongle**: this is your esp now midi interface to your computer or any other usb midi host. it converts esp now message to midi messages, requires a midi capable board, e.g. esp32 s2 mini.
-  the config.h you can disable the display - in case you are not using one
-  if you wanna put them into a case, you can probably find 3d models online, here is one for an esp32 s2 mini: https://www.thingiverse.com/thing:5427531
+  * **dongle**: thin sketch around `enomik::Dongle` — your ESP-NOW MIDI interface to a computer or other USB MIDI host (requires a MIDI-capable board, e.g. ESP32-S2 Mini). Set `HAS_DISPLAY` in `config.h` for the example OLED, or register your own `Dongle::Display` subclass. Case idea for S2 Mini: https://www.thingiverse.com/thing:5427531
   * **plain_echo**: same as client_echo, but without the enomik helpers
   * **client**: fully configurable client that works with enomik boards and the enomik webapp
   * **client_echo**: simply echos the incoming MIDI messages
   * **client_hello_midi**: simple demo firmware that periodically sends midi messages via esp now
-  * **client_dac_i2s (wip)** - synth that can be controlled via dongle, e.g. send midi notes from a DAW to the dongle midi device - ** this is currently broken **
   * **client_waveshare-esp32-s3-relay-6ch** - simple relay controller that listens to note on/off messages, e.g. control solenoids 
   * **client_buttons** - reads button press/release and sends note on/off accordingly
   * **client_dmx** - control your dmx fixtures wirelessly
@@ -49,6 +52,24 @@ Any ESP board with Wi-Fi capabilities should work as a sender.
   * **client_audio_audiotools_i2s** - MIDI-controlled sine wave synth using [arduino-audio-tools](https://github.com/pschatzmann/arduino-audio-tools), streaming audio over I2S. Receives Note On/Off and adjusts frequency and amplitude accordingly
   * **din_midi_bridge** - bidirectional DIN MIDI ↔ ESP-NOW bridge: forwards incoming serial MIDI (5-pin DIN) over ESP-NOW, and plays back received ESP-NOW MIDI to a DIN MIDI OUT port
 
+## Logging
+
+Library internals use `EspNowMidiLog` (`e` / `w` / `i` / `d`) instead of raw `Serial` calls. There is no runtime log-level API yet.
+
+* **Error / warn / info** (`e`, `w`, `i`) always emit on Arduino (to `Serial`).
+* **Debug** (`d`) is compile-time gated. Define before including library headers:
+
+```cpp
+#define ESP_NOW_DEBUGGING 1
+#include <esp_now_midi.h>
+```
+
+Default is `0` (debug logs compiled out). On pure ESP-IDF, messages go through `ESP_LOG*` with tag `esp_now_midi`. Details: [Logging](https://grantler-instruments.github.io/ESP-NOW-MIDI/logging/).
+
+## Wi-Fi / ESP-IDF
+
+`esp_now_midi::begin(...)` brings up Wi-Fi STA by default (`manageWifi = true`) using an Arduino or ESP-IDF backend. Pass `manageWifi = false` if your app already owns Wi-Fi. The repo also ships as an ESP-IDF component (`CMakeLists.txt`). Install + Wi-Fi: [C++ ESP-IDF](https://grantler-instruments.github.io/ESP-NOW-MIDI/idf-api/).
+
 ## Breaking changes (this library is under active development => please make sure you are using the latest version)
 * This repo uses Semantic Versioning, although strict adherence will only come into effect at version 1.0.0.
 * Starting with version 0.10.0 the esp_now_midi setup was renamed to begin, power saving has been disabled in flavor for lower latencies (can be enabled by setting begin(reducePowerAtCostOfLatency=true)
@@ -62,10 +83,10 @@ You usually run **two roles**: a **dongle** (USB MIDI + ESP-NOW on one board, e.
 
 ### 1. Set up the dongle
 
-1. Flash the **dongle** example onto your USB-capable board.
+1. Flash the **dongle** example onto your USB-capable board (`enomik::Dongle` with `begin()` / `loop()`).
 2. Note the dongle’s Wi-Fi STA MAC: run **print_mac** on that board (serial), or read it from the dongle display if you use one.
 
-If the dongle has an OLED, set `HAS_DISPLAY` to `1` in `examples/dongle/config.h`.
+If the dongle has an OLED, set `HAS_DISPLAY` to `1` in `examples/dongle/config.h`. Custom UI: subclass `enomik::Dongle::Display` and call `setDisplay()` before `begin()`.
 
 ### 2. Connect a remote board
 
@@ -94,8 +115,8 @@ Use the **signed** API everywhere unless you already have raw wire bytes:
 ### enomik 3000
 Drop `enomik::Client` into your firmware and your board turns into a MIDI SysEx–configurable device: routing, pin modes, and basic I/O can be set from a host over SysEx instead of hard-coding every mapping. This library is integrated with the [ESP-NOW MIDI Kit](https://grantler-instruments.github.io/enomik-app/) — the no-code app for creating (wireless) MIDI devices.
 
-### Circuit Python
-A circuit python version is in the making as well. Contributions here are very welcome.
+### CircuitPython
+A CircuitPython port lives in `esp_now_midi.py` (same packet format as the C++ library). It is pretty much untested — contributions and real-hardware feedback are very welcome.
 
 ## Benchmarks
 This repository includes benchmark data and their analysis (see `benchmarks/` and `scripts/`).
@@ -126,7 +147,7 @@ Practical reading:
 
 Pin configuration, peers, MAC, reset, and version query use MIDI SysEx. Full specification:
 
-**[doc/enomik-sysex-protocol.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/doc/enomik-sysex-protocol.md)**
+**[docs/enomik-sysex-protocol.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/docs/enomik-sysex-protocol.md)**
 
 ## Release candidates
 
@@ -198,7 +219,6 @@ Shared board settings live in `platformio/common.ini`. Example-specific dependen
 * examples/dongle additionally depends on
   * Adafruit GFX Library
   * Adafruit SSD1306
-* examples/client_dac_i2s depends on mozzi
 * examples/client_dmx uses Grove DMX512 (SN75176) with a built-in minimal sender (no extra library). Optional: use **luksal/ESP32-DMX** or **pierrejay/esp32-EZDMX** instead (see comment in the sketch). 
 * examples/client_servo depends on **ESP32Servo**
 * examples/client_audio_m16_i2s depends on [M16](https://github.com/algomusic/M16)

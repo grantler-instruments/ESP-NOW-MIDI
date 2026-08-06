@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bump library version in version.h, library.properties, and esp_now_midi.py."""
+"""Bump library version in version.h, library.properties, idf_component.yml, and esp_now_midi.py."""
 
 from __future__ import annotations
 
@@ -10,8 +10,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-VERSION_H = REPO_ROOT / "version.h"
+VERSION_H = REPO_ROOT / "include" / "version.h"
 LIBRARY_PROPERTIES = REPO_ROOT / "library.properties"
+IDF_COMPONENT_YML = REPO_ROOT / "idf_component.yml"
 ESP_NOW_MIDI_PY = REPO_ROOT / "esp_now_midi.py"
 WIZARD_SYSEX = REPO_ROOT / "scripts" / "wizard" / "enomik_sysex.py"
 
@@ -53,6 +54,18 @@ def update_library_properties(major: int, minor: int, patch: int) -> None:
     LIBRARY_PROPERTIES.write_text(text, encoding="utf-8")
 
 
+def update_idf_component_yml(major: int, minor: int, patch: int) -> None:
+    text = IDF_COMPONENT_YML.read_text(encoding="utf-8")
+    text = re.sub(
+        r'^version:\s*".*"$',
+        f'version: "{major}.{minor}.{patch}"',
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    IDF_COMPONENT_YML.write_text(text, encoding="utf-8")
+
+
 def update_esp_now_midi_py(major: int, minor: int, patch: int) -> None:
     text = ESP_NOW_MIDI_PY.read_text(encoding="utf-8")
     text = re.sub(r"(VERSION_MAJOR = )\d+", rf"\g<1>{major}", text)
@@ -86,9 +99,11 @@ def main() -> int:
 
     update_version_h(*new)
     update_library_properties(*new)
+    update_idf_component_yml(*new)
     update_esp_now_midi_py(*new)
     if args.part in ("major", "minor"):
         update_wizard_sysex(new[0], new[1])
+
 
     print(f"Bumped {old_str} → {new_str}")
     return 0
