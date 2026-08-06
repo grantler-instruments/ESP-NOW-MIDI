@@ -100,7 +100,9 @@ jobs:
           esp_idf_version: ${{ matrix.idf_ver }}
           target: ${{ matrix.target }}
           path: examples_idf/${{ matrix.example }}
-          # Default is "idf.py build"; do not pass bare "build" (runs as a shell command).
+          # Regenerate sdkconfig for the matrix target (do not commit sdkconfig —
+          # it pins a single chip and breaks multi-target CI).
+          command: idf.py set-target "$IDF_TARGET" && idf.py build
 
   examples:
     runs-on: ubuntu-latest
