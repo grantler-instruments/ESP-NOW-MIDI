@@ -1,7 +1,10 @@
 # Examples
 
-The repository's [`examples/`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples)
-directory contains sketches for common ESP-NOW MIDI configurations.
+Arduino-ESP32 sketches live under
+[`examples/`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples).
+Pure ESP-IDF ports of the main Client / Dongle / client_test flows are under
+[`examples_idf/`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples_idf)
+(see [C++ ESP-IDF](idf-api.md)).
 
 ## Core examples
 
