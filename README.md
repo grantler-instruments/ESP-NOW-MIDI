@@ -3,9 +3,10 @@ Library for sending and receiving MIDI messages via the ESP-NOW protocol.
 A typical setup requires two ESP-NOW capable boards, where the board connected to your computer needs to be MIDI-capable.
 
 Supports:
-* **Arduino** — Arduino-ESP32 sketches under `examples/`
-* **ESP-IDF** — pure IDF component + examples under `examples_idf/`
-* **CircuitPython** — `esp_now_midi.py` (same on-air packet format)
+* **Arduino**:Arduino-ESP32 sketches under `examples/`
+* **ESP-IDF**: pure IDF component + examples under `examples_idf/`
+* **PlatformIO**: `library.json` + `platformio.ini` in each Arduino example
+* **CircuitPython**:`esp_now_midi.py` 
 
 ## Documentation
 
