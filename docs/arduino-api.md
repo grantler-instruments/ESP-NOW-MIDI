@@ -25,7 +25,7 @@ with `enomik::Client`. Use `enomik::Dongle` for the USB host bridge. Use plain
 
 ## Supporting APIs
 
-- [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h.md): MIDI message
+- [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h/): MIDI message
   types, constants, and helpers such as pitch-bend conversion.
 - [`EspNowMidiLog`](logging.md) (`esp_now_midi_log.h`): internal printf-style
   logger (`e` / `w` / `i` / `d`) with Arduino `Serial` and ESP-IDF `ESP_LOG*`

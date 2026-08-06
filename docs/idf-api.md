@@ -155,7 +155,7 @@ Public headers live under `include/` (that directory is the IDF include path):
 | Header | Role |
 |--------|------|
 | [`esp_now_midi.h`](api/Classes/classesp__now__midi.md) | Core transport |
-| [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h.md) | Packet types and MIDI helpers |
+| [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h/) | Packet types and MIDI helpers |
 | `esp_now_midi_log.h` | `EspNowMidiLog` → `ESP_LOG*`; see [Logging](logging.md) |
 | `esp_now_midi_wifi.h` | STA bring-up when `manageWifi` is true (see below) |
 | `esp_now_midi_gpio.h` | Digital / PWM / ADC / touch (Arduino + IDF) |
