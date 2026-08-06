@@ -1,4 +1,8 @@
 ## Managed dependency for optional USB MIDI backend
-## (include/esp_now_midi_usb.h on ESP32-S2/S3).
+## (include/esp_now_midi_usb.h). Only on native-USB targets — classic ESP32
+## has no TinyUSB device stack in the component registry.
 dependencies:
-  espressif/esp_tinyusb: "*"
+  espressif/esp_tinyusb:
+    version: "*"
+    rules:
+      - if: "target in [esp32s2, esp32s3]"

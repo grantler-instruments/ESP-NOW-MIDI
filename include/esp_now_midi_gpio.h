@@ -277,7 +277,13 @@ inline void touchAttachInterrupt(uint8_t pin, void (*callback)(void), int /*thre
         esp_now_midi_gpio_detail::touchDriverInitialized() = true;
     }
 
+#if CONFIG_IDF_TARGET_ESP32
+    // Classic ESP32: threshold is part of touch_pad_config (0 = use default).
+    touch_pad_config(channel, 0);
+#else
+    // S2/S3 (and newer): threshold is configured separately.
     touch_pad_config(channel);
+#endif
 }
 
 inline int touchRead(uint8_t pin)
@@ -288,8 +294,14 @@ inline int touchRead(uint8_t pin)
         return 0;
     }
 
+#if CONFIG_IDF_TARGET_ESP32
+    uint16_t raw16 = 0;
+    touch_pad_read(channel, &raw16);
+    uint32_t raw = raw16;
+#else
     uint32_t raw = 0;
     touch_pad_read_raw_data(channel, &raw);
+#endif
 
     // Normalize polarity to match Arduino-ESP32: always lower on touch.
     if (esp_now_midi_gpio_detail::TOUCH_RAW_INCREASES_ON_TOUCH)

@@ -86,7 +86,7 @@ jobs:
       fail-fast: false
       matrix:
         idf_ver: ["v6.0.1"] # matches the local IDF install used to verify this
-        target: [esp32, esp32s3]
+        target: [esp32, esp32s2, esp32s3]
         # Add new examples_idf/* directories here (same as the `board` list
         # below for Arduino examples - no dynamic discovery, kept simple).
         example: [dongle, client, client_test]
