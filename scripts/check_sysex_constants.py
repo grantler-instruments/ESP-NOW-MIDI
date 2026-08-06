@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-VERSION_H = REPO_ROOT / "version.h"
-ENOMIK_SYSEX_CODEC_H = REPO_ROOT / "enomik_sysex_codec.h"
+VERSION_H = REPO_ROOT / "include" / "version.h"
+ENOMIK_SYSEX_CODEC_H = REPO_ROOT / "include" / "enomik_sysex_codec.h"
 
 REQUEST_COMMANDS = (
     "SET_PIN_CONFIG",

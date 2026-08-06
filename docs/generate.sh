@@ -51,13 +51,13 @@ fi
 
 cd "$ROOT"
 
-# Keep docs version in sync with version.h (single source of truth).
-VERSION_MAJOR="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_MAJOR[[:space:]]+([0-9]+).*/\1/p' version.h)"
-VERSION_MINOR="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_MINOR[[:space:]]+([0-9]+).*/\1/p' version.h)"
-VERSION_PATCH="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_PATCH[[:space:]]+([0-9]+).*/\1/p' version.h)"
+# Keep docs version in sync with include/version.h (single source of truth).
+VERSION_MAJOR="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_MAJOR[[:space:]]+([0-9]+).*/\1/p' include/version.h)"
+VERSION_MINOR="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_MINOR[[:space:]]+([0-9]+).*/\1/p' include/version.h)"
+VERSION_PATCH="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_PATCH[[:space:]]+([0-9]+).*/\1/p' include/version.h)"
 VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "error: could not parse version from version.h" >&2
+  echo "error: could not parse version from include/version.h" >&2
   exit 1
 fi
 

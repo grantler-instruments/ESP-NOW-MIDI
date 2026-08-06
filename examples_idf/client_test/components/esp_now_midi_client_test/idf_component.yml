@@ -1,0 +1,7 @@
+## Managed dependency for USB MIDI backend (wizard Phase 1).
+## Only native-USB targets — classic ESP32 has no TinyUSB device stack.
+dependencies:
+  espressif/esp_tinyusb:
+    version: "*"
+    rules:
+      - if: "target in [esp32s2, esp32s3]"

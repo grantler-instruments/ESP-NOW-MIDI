@@ -1,10 +1,16 @@
 # C++ ESP-IDF API overview
 
-Use the **core** transport from a pure ESP-IDF project (no Arduino core).
+Use the library from a pure ESP-IDF project (no Arduino core).
 Requires **ESP-IDF ≥ 5.5** (send callback uses `wifi_tx_info_t`).
-Higher-level Enomik helpers (`enomik::Client`, `enomik::Dongle`, and related
-I/O) are Arduino-oriented today and are not part of this surface yet; they are
-planned to be ported to ESP-IDF as well.
+CI and local builds use **ESP-IDF v6.0.1**.
+
+The **core** transport (`esp_now_midi`) is the default IDF component surface
+under `include/`. Higher-level Enomik helpers (`enomik::Client`,
+`enomik::Dongle`, SysEx I/O) also build on IDF — see
+[`examples_idf/`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples_idf)
+(`client`, `client_test`, `dongle`). Those examples wrap the repo-root Enomik
+headers via a thin CMake component; they are not on the core component include
+path by default.
 
 ## Entry point
 
@@ -29,10 +35,14 @@ extern "C" void app_main(void)
 
 The repository root **is** the IDF component (`CMakeLists.txt` +
 `idf_component.yml`). Only headers under `include/` are on the component include
-path (core transport + helpers). Arduino-only Enomik headers at the repo root
-are **not** visible to IDF apps. The component depends on `esp_wifi`,
-`esp_netif`, and `nvs_flash`. Prefer naming the component directory
-`esp_now_midi` so `REQUIRES esp_now_midi` stays clean.
+path (core transport + portable helpers: GPIO, prefs, USB MIDI, logging, Wi-Fi).
+Repo-root Enomik headers (`enomik_client.h`, `enomik_dongle.h`, …) are **not**
+on that path by default — pull them in the same way
+[`examples_idf/`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples_idf)
+does (wrapper `INCLUDE_DIRS` pointing at the checkout root). The component
+depends on `esp_wifi`, `esp_netif`, `nvs_flash`, and related IDF drivers.
+Prefer naming the component directory `esp_now_midi` so
+`REQUIRES esp_now_midi` stays clean.
 
 This library is **not** published on the Espressif Component Registry yet; use
 git, a submodule, or a local path.
@@ -126,6 +136,18 @@ idf.py build
 
 See [`test/idf/README.md`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/test/idf/README.md).
 
+## Enomik examples (pure IDF)
+
+| Example | Role |
+|---------|------|
+| [`examples_idf/client`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples_idf/client) | `enomik::Client` — SysEx-configurable I/O |
+| [`examples_idf/client_test`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples_idf/client_test) | Deterministic DUT for [`scripts/wizard`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/scripts/wizard) |
+| [`examples_idf/dongle`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples_idf/dongle) | `enomik::Dongle` — USB MIDI ↔ ESP-NOW (S2/S3); optional SSD1306 |
+
+Dongle / USB MIDI clients need a native-USB target (`idf.py set-target esp32s2`
+or `esp32s3`). Classic ESP32 can still run the core transport and
+non-USB client I/O.
+
 ## Supporting headers
 
 Public headers live under `include/` (that directory is the IDF include path):
@@ -136,7 +158,12 @@ Public headers live under `include/` (that directory is the IDF include path):
 | [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h.md) | Packet types and MIDI helpers |
 | `esp_now_midi_log.h` | `EspNowMidiLog` → `ESP_LOG*`; see [Logging](logging.md) |
 | `esp_now_midi_wifi.h` | STA bring-up when `manageWifi` is true (see below) |
-| `version.h` | Forwards to repo-root `version.h` (semver macros / `getVersion()`) |
+| `esp_now_midi_gpio.h` | Digital / PWM / ADC / touch (Arduino + IDF) |
+| `esp_now_midi_prefs.h` | NVS-backed prefs subset |
+| `esp_now_midi_usb.h` | USB MIDI via `esp_tinyusb` (S2/S3) |
+| `esp_now_midi_compat.h` | `map` / `millis` / `constrain` fallbacks |
+| `version.h` | Semver macros / `getVersion()` |
+| `PeerStorage.h` | Peer list persistence (Arduino EEPROM / IDF NVS) |
 
 ## Wi-Fi
 
@@ -183,8 +210,8 @@ aligned with that.
 
 ## Browse generated reference
 
-The Doxygen pages cover the shared C++ headers (including Arduino-only Enomik
-types). For IDF builds, stick to the core types above.
+The Doxygen pages cover the shared C++ headers, including Enomik types used by
+both Arduino and IDF examples.
 
 - [Classes](api/Classes/index.md)
 - [Files](api/Files/index.md)

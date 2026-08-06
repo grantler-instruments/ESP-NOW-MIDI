@@ -1,19 +1,32 @@
+#pragma once
+
 #include "./config.h"
 #include "esp_now_midi.h"
 #include <esp_now.h>
+#ifdef ARDUINO
 #include <WiFi.h>
-#include "enomik_io.h"
-#include "PeerStorage.h"
+#endif
+#include "include/enomik_io.h"
+#include "include/PeerStorage.h"
+#include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
 
 #ifdef HAS_USB_MIDI
+#ifdef ARDUINO
 #include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
 
-// Global USB MIDI objects - MUST be at file scope
-Adafruit_USBD_MIDI g_usb_midi;
-MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, g_usb_midi, USBMIDI);
+// Global USB MIDI objects - MUST be at file scope; distinct from Dongle symbols.
+Adafruit_USBD_MIDI g_client_usb_midi;
+MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, g_client_usb_midi, CLIENT_USBMIDI);
+#elif defined(ESP_PLATFORM)
+#include "include/esp_now_midi_usb.h"
+
+// Global USB MIDI objects - MUST be at file scope; distinct from Dongle symbols.
+TinyUsbRawMidiClass g_client_usb_midi;
+TinyUsbMidiClass CLIENT_USBMIDI;
+#endif
 #endif
 
 namespace enomik
@@ -200,9 +213,8 @@ namespace enomik
         {
             if (Client::instancePtr)
             {
+                // onSystemExclusive() already forwards to io + _onSysExHandler
                 Client::instancePtr->onSystemExclusive(data, length);
-                if (Client::instancePtr->_onSysExHandler)
-                    Client::instancePtr->_onSysExHandler(data, length);
             }
         }
 
@@ -348,21 +360,20 @@ namespace enomik
                                  });
 
 #ifdef HAS_USB_MIDI
-            // Initialize USB MIDI using global instance
-            USBMIDI.begin(MIDI_CHANNEL_OMNI);
-            USBMIDI.turnThruOff();
-
-            // Set USB descriptors
             TinyUSBDevice.setManufacturerDescriptor("grantler instruments");
             TinyUSBDevice.setProductDescriptor("enomik3000_client");
 
-            // If already enumerated, re-enumerate
+            g_client_usb_midi.begin();
+
             if (TinyUSBDevice.mounted())
             {
                 TinyUSBDevice.detach();
                 delay(10);
-                TinyUSBDevice.attach();
             }
+            TinyUSBDevice.attach();
+
+            CLIENT_USBMIDI.begin(MIDI_CHANNEL_OMNI);
+            CLIENT_USBMIDI.turnThruOff();
 
             EspNowMidiLog::i("USB MIDI initialized");
 #endif
@@ -391,19 +402,19 @@ namespace enomik
 
 #ifdef HAS_USB_MIDI
             // --- Set handlers for USB MIDI ---
-            USBMIDI.setHandleSystemExclusive(handleSysExStatic);
-            USBMIDI.setHandleNoteOn(handleNoteOnStatic);
-            USBMIDI.setHandleNoteOff(handleNoteOffStatic);
-            USBMIDI.setHandleControlChange(handleControlChangeStatic);
-            USBMIDI.setHandleProgramChange(handleProgramChangeStatic);
-            USBMIDI.setHandleAfterTouchChannel(handleAfterTouchChannelStatic);
-            USBMIDI.setHandleAfterTouchPoly(handleAfterTouchPolyStatic);
-            USBMIDI.setHandlePitchBend(handlePitchBendStatic);
-            USBMIDI.setHandleStart(handleStartStatic);
-            USBMIDI.setHandleStop(handleStopStatic);
-            USBMIDI.setHandleContinue(handleContinueStatic);
-            USBMIDI.setHandleClock(handleClockStatic);
-            USBMIDI.setHandleSongSelect(handleSongSelectStatic);
+            CLIENT_USBMIDI.setHandleSystemExclusive(handleSysExStatic);
+            CLIENT_USBMIDI.setHandleNoteOn(handleNoteOnStatic);
+            CLIENT_USBMIDI.setHandleNoteOff(handleNoteOffStatic);
+            CLIENT_USBMIDI.setHandleControlChange(handleControlChangeStatic);
+            CLIENT_USBMIDI.setHandleProgramChange(handleProgramChangeStatic);
+            CLIENT_USBMIDI.setHandleAfterTouchChannel(handleAfterTouchChannelStatic);
+            CLIENT_USBMIDI.setHandleAfterTouchPoly(handleAfterTouchPolyStatic);
+            CLIENT_USBMIDI.setHandlePitchBend(handlePitchBendStatic);
+            CLIENT_USBMIDI.setHandleStart(handleStartStatic);
+            CLIENT_USBMIDI.setHandleStop(handleStopStatic);
+            CLIENT_USBMIDI.setHandleContinue(handleContinueStatic);
+            CLIENT_USBMIDI.setHandleClock(handleClockStatic);
+            CLIENT_USBMIDI.setHandleSongSelect(handleSongSelectStatic);
 #endif
 
             // Initialize peer storage (handles EEPROM internally)
@@ -460,7 +471,7 @@ namespace enomik
         void loop()
         {
 #ifdef HAS_USB_MIDI
-            USBMIDI.read();
+            CLIENT_USBMIDI.read();
 #endif
             io.loop();
         }
@@ -474,7 +485,7 @@ namespace enomik
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
 
-                USBMIDI.sendNoteOn(note, velocity, channel);
+                CLIENT_USBMIDI.sendNoteOn(note, velocity, channel);
             }
 #endif
             maybeLoopback([&]() { handleNoteOnStatic(channel, note, velocity); });
@@ -489,7 +500,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendNoteOff(note, velocity, channel);
+                CLIENT_USBMIDI.sendNoteOff(note, velocity, channel);
             }
 #endif
             maybeLoopback([&]() { handleNoteOffStatic(channel, note, velocity); });
@@ -504,7 +515,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendControlChange(control, value, channel);
+                CLIENT_USBMIDI.sendControlChange(control, value, channel);
             }
 #endif
             maybeLoopback([&]() { handleControlChangeStatic(channel, control, value); });
@@ -519,7 +530,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendProgramChange(program, channel);
+                CLIENT_USBMIDI.sendProgramChange(program, channel);
             }
 #endif
             maybeLoopback([&]() { handleProgramChangeStatic(channel, program); });
@@ -534,7 +545,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendAfterTouch(pressure, channel);
+                CLIENT_USBMIDI.sendAfterTouch(pressure, channel);
             }
 #endif
             maybeLoopback([&]() { handleAfterTouchChannelStatic(channel, pressure); });
@@ -549,7 +560,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendAfterTouch(note, pressure, channel);
+                CLIENT_USBMIDI.sendAfterTouch(note, pressure, channel);
             }
 #endif
             maybeLoopback([&]() { handleAfterTouchPolyStatic(channel, note, pressure); });
@@ -568,7 +579,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendPitchBend(value, channel);
+                CLIENT_USBMIDI.sendPitchBend(value, channel);
             }
 #endif
             maybeLoopback([&]() { handlePitchBendStatic(channel, value); });
@@ -582,7 +593,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendStart();
+                CLIENT_USBMIDI.sendStart();
             }
 #endif
             maybeLoopback([&]() { handleStartStatic(); });
@@ -596,7 +607,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendStop();
+                CLIENT_USBMIDI.sendStop();
             }
 #endif
             maybeLoopback([&]() { handleStopStatic(); });
@@ -610,7 +621,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendContinue();
+                CLIENT_USBMIDI.sendContinue();
             }
 #endif
             maybeLoopback([&]() { handleContinueStatic(); });
@@ -624,7 +635,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendClock();
+                CLIENT_USBMIDI.sendClock();
             }
 #endif
             maybeLoopback([&]() { handleClockStatic(); });
@@ -638,7 +649,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendSongPosition(value);
+                CLIENT_USBMIDI.sendSongPosition(value);
             }
 #endif
             maybeLoopback([&]() { handleSongPositionStatic(value); });
@@ -652,7 +663,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendSongSelect(value);
+                CLIENT_USBMIDI.sendSongSelect(value);
             }
 #endif
             maybeLoopback([&]() { handleSongSelectStatic(value); });
@@ -667,7 +678,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
-                USBMIDI.sendSysEx(length, data);
+                CLIENT_USBMIDI.sendSysEx(length, data);
             }
 #endif
             if (err != ESP_OK)
@@ -808,7 +819,7 @@ namespace enomik
             return true;
         }
 
-        bool addPeerFromString(const String &macStr)
+        bool addPeerFromString(const PortableString &macStr)
         {
             uint8_t mac[6];
             if (!macFromString(macStr, mac))
@@ -860,7 +871,7 @@ namespace enomik
             return peerStorage.get(index);
         }
 
-        String getMacString(int index)
+        PortableString getMacString(int index)
         {
             const uint8_t *mac = peerStorage.get(index);
             if (!mac)

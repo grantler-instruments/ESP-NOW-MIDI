@@ -37,7 +37,7 @@ public:
     const char* version,
     int peerCount,
     char usbStatus,
-    const MidiMessageHistory* history,
+    const enomik::MidiMessageHistory* history,
     int historySize,
     int historyHead) override {
     if (splashUntilMs_ != 0 && millis() < splashUntilMs_) {
@@ -95,14 +95,14 @@ private:
     oled_.drawLine(0, 18, SCREEN_WIDTH, 18, SSD1306_WHITE);
   }
 
-  void drawHistory(const MidiMessageHistory* history,
+  void drawHistory(const enomik::MidiMessageHistory* history,
                    int size,
                    int head) {
     int y = 22;
 
     for (int i = 0; i < size; ++i) {
       int idx = (head + i) % size;
-      const MidiMessageHistory& h = history[idx];
+      const enomik::MidiMessageHistory& h = history[idx];
 
       if (h.timestamp == 0) {
         continue;
@@ -117,7 +117,7 @@ private:
     }
   }
 
-  void drawHistoryLine(const MidiMessageHistory& h, int y) {
+  void drawHistoryLine(const enomik::MidiMessageHistory& h, int y) {
     char status[7];
     char line[32];
 

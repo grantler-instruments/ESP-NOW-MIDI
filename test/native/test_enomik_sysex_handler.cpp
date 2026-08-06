@@ -4,15 +4,15 @@
 #include <vector>
 
 #include "arduino_stubs.h"
-#include "enomik_sysex.h"
+#include "include/enomik_sysex.h"
 
 namespace {
 
 constexpr uint8_t kSampleMac[6] = {0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62};
 
-PinConfig samplePinConfig()
+enomik::PinConfig samplePinConfig()
 {
-    PinConfig cfg(7, 0x03);
+    enomik::PinConfig cfg(7, 0x03);
     cfg.threshold = 5;
     cfg.midi_channel = 3;
     cfg.midi_type = MidiStatus::MIDI_CONTROL_CHANGE;
@@ -22,7 +22,7 @@ PinConfig samplePinConfig()
     return cfg;
 }
 
-void requirePinConfigEqual(const PinConfig &actual, const PinConfig &expected)
+void requirePinConfigEqual(const enomik::PinConfig &actual, const enomik::PinConfig &expected)
 {
     REQUIRE(actual.pin == expected.pin);
     REQUIRE(actual.mode == expected.mode);
@@ -75,9 +75,9 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
         const auto request = enomik::SysExEncoder::encodePinConfig(
             expected, enomik::SysExCommand::SET_PIN_CONFIG);
 
-        PinConfig received(0, 0);
+        enomik::PinConfig received(0, 0);
         bool called = false;
-        handler.setOnSetPinConfig([&](const PinConfig &cfg) {
+        handler.setOnSetPinConfig([&](const enomik::PinConfig &cfg) {
             received = cfg;
             called = true;
         });
@@ -272,7 +272,7 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
     SECTION("GET_CONFIG streams pins, peers, loopback, power save, then completion")
     {
         handler.setOnGetConfig([&]() {
-            PinConfig cfg(3, 0x02);
+            enomik::PinConfig cfg(3, 0x02);
             handler.sendPinConfigResponse(cfg, enomik::SysExCommand::GET_ALL_PIN_CONFIGS_RESPONSE);
             handler.sendPeerResponse(0, kSampleMac, enomik::SysExCommand::GET_ALL_PEERS_RESPONSE);
             handler.sendMidiLoopbackResponse(
