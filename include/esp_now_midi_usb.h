@@ -239,8 +239,11 @@ inline bool &usbInstalled()
 // descriptor callbacks (tud_descriptor_*_cb - do NOT also define these
 // ourselves, esp_tinyusb's descriptors_control.c already does), ESP32
 // PHY/clock bring-up, and the tud_task() polling task internally.
-// tinyusb_config_t's field names/string_descriptor encoding are unverified -
-// see the file-level comment above.
+//
+// tinyusb_config_t verified against a real build (IDF v6.0.1 / esp_tinyusb
+// managed component, examples_idf/dongle/managed_components/): it nests
+// port/phy/task/descriptor/event_cb, not the flat shape this originally
+// guessed - see include/esp_now_midi_usb.h history if that ever regresses.
 inline void usbInstall()
 {
     if (usbInstalled())
@@ -257,11 +260,18 @@ inline void usbInstall()
     };
 
     tinyusb_config_t cfg = {};
-    cfg.device_descriptor = &deviceDescriptor();
-    cfg.string_descriptor = stringDescriptors;
-    cfg.string_descriptor_count = STRID_COUNT;
-    cfg.external_phy = false;
-    cfg.configuration_descriptor = configDescriptor();
+    cfg.port = TINYUSB_PORT_FULL_SPEED_0;
+    // phy: leave zero-initialized (skip_setup=false) - esp_tinyusb configures
+    // the internal USB PHY automatically, which is what we want.
+    cfg.task.size = 4096;
+    cfg.task.priority = 5;
+    cfg.task.xCoreID = 0;
+    cfg.descriptor.device = &deviceDescriptor();
+    cfg.descriptor.qualifier = nullptr; // full-speed only, no high-speed qualifier needed
+    cfg.descriptor.string = stringDescriptors;
+    cfg.descriptor.string_count = STRID_COUNT;
+    cfg.descriptor.full_speed_config = configDescriptor();
+    cfg.descriptor.high_speed_config = nullptr;
 
     tinyusb_driver_install(&cfg);
     usbInstalled() = true;

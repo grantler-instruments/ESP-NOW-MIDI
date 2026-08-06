@@ -2,25 +2,28 @@
  * USB MIDI <-> ESP-NOW dongle, pure ESP-IDF port of examples/dongle.
  *
  * Requires a native-USB target (ESP32-S2 / ESP32-S3):
- *   idf.py set-target esp32s3
+ *   idf.py set-target esp32s2
  *   idf.py build
  *
- * No display support here (examples/dongle's SSD1306Display.h is
- * Arduino/Adafruit_GFX-only and hasn't been ported) - USB <-> ESP-NOW
- * bridging only.
+ * Optional SSD1306 status display (Lolin S2 Mini defaults: SDA=33, SCL=35).
+ * Override with -DOLED_SDA_GPIO=… / -DOLED_SCL_GPIO=… if your board differs.
  */
 #include "esp_log.h"
 #include "enomik_dongle.h"
+#include "ssd1306_display.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 static const char *TAG = "enomik_dongle_idf_example";
 
 static enomik::Dongle g_dongle;
+static SSD1306Display g_display;
 
 extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "starting enomik::Dongle IDF example");
+
+    g_dongle.setDisplay(&g_display);
 
     // Optional: customize USB identity before begin().
     // g_dongle.setManufacturerDescriptor("grantler instruments");

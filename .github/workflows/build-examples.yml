@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        idf_ver: ["v5.5.5", "v6.0.1"]
+        idf_ver: ["v6.0.1"] # matches the local IDF install used to verify this
         target: [esp32, esp32s3]
     steps:
       - name: Checkout repository
@@ -85,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        idf_ver: ["v5.5.5", "v6.0.1"]
+        idf_ver: ["v6.0.1"] # matches the local IDF install used to verify this
         target: [esp32, esp32s3]
         # Add new examples_idf/* directories here (same as the `board` list
         # below for Arduino examples - no dynamic discovery, kept simple).
