@@ -1,6 +1,11 @@
 # ESP-NOW-MIDI
-This is an Arduino library for sending and receiving MIDI messages via the ESP-NOW protocol.
-A typical setup requires two ESP-NOW capable boards, where the board connected to your computer needs to be MIDI-capable 
+Library for sending and receiving MIDI messages via the ESP-NOW protocol.
+A typical setup requires two ESP-NOW capable boards, where the board connected to your computer needs to be MIDI-capable.
+
+Supports:
+* **Arduino** — Arduino-ESP32 sketches under `examples/`
+* **ESP-IDF** — pure IDF component + examples under `examples_idf/`
+* **CircuitPython** — `esp_now_midi.py` (same on-air packet format)
 
 ## Documentation
 
@@ -143,7 +148,7 @@ Practical reading:
 
 Pin configuration, peers, MAC, reset, and version query use MIDI SysEx. Full specification:
 
-**[doc/enomik-sysex-protocol.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/doc/enomik-sysex-protocol.md)**
+**[docs/enomik-sysex-protocol.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/docs/enomik-sysex-protocol.md)**
 
 ## Release candidates
 

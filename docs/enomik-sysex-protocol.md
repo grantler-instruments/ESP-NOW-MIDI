@@ -8,10 +8,10 @@ All multi-byte values in SysEx payloads are **7-bit** (0–127), as required by 
 
 | File | Role |
 |---|---|
-| [`enomik_sysex_codec.h`](../enomik_sysex_codec.h) | Protocol constants, `SysExPacket`, `SysExEncoder`, `SysExDecoder` — pure encode/decode, no Arduino |
-| [`enomik_sysex.h`](../enomik_sysex.h) | `SysExHandler` — incoming command routing, callbacks, `EspNowMidiLog` logging |
-| [`enomik_io.h`](../enomik_io.h) / [`enomik_client.h`](../enomik_client.h) | Pin config, NVS, ESP-NOW, USB MIDI wiring |
-| [`scripts/wizard/enomik_sysex.py`](../scripts/wizard/enomik_sysex.py) | Host-side builders and parser (wizard, tests) |
+| [`enomik_sysex_codec.h`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/include/enomik_sysex_codec.h) | Protocol constants, `SysExPacket`, `SysExEncoder`, `SysExDecoder` — pure encode/decode, no Arduino |
+| [`enomik_sysex.h`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/include/enomik_sysex.h) | `SysExHandler` — incoming command routing, callbacks, `EspNowMidiLog` logging |
+| [`enomik_io.h`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/include/enomik_io.h) / [`enomik_client.h`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/enomik_client.h) | Pin config, NVS, ESP-NOW, USB MIDI wiring |
+| [`scripts/wizard/enomik_sysex.py`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/enomik_sysex.py) | Host-side builders and parser (wizard, tests) |
 
 ## Packet layout
 
@@ -36,7 +36,7 @@ F0  7D  MAJOR  MINOR  CMD  [payload…]  F7
 | CMD | see below | Request or response command byte |
 | End | `0xF7` | MIDI SysEx end |
 
-**Compatibility:** firmware accepts packets whose **MAJOR** equals `ESP_NOW_MIDI_VERSION_MAJOR` from [`version.h`](../version.h). Mismatch yields an error response (see [Errors](#errors)).
+**Compatibility:** firmware accepts packets whose **MAJOR** equals `ESP_NOW_MIDI_VERSION_MAJOR` from [`version.h`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/include/version.h). Mismatch yields an error response (see [Errors](#errors)).
 
 When building messages for Web MIDI / `mido`, the inner data is everything **between** `F0` and `F7` (i.e. starting with `7D`).
 
@@ -228,8 +228,8 @@ One-shot full board snapshot for **pins + peers + device flags** (v0.14+; v0.13 
 
 1. Every stored pin config as `0x44` (same 8-byte payload as GET_ALL_PIN_CONFIGS).
 2. Every stored peer as `0x48` (same [peer entry](#peer-entry-payload) as GET_ALL_PEERS).
-3. One `0x4E` + loopback byte (same payload as [GET_MIDI_LOOPBACK](#get_midi_loopback--0x4e)).
-4. One `0x50` + power-save byte (same payload as [GET_POWER_SAVE](#get_power_save--0x50)).
+3. One `0x4E` + loopback byte (same payload as [GET_MIDI_LOOPBACK](#get_midi_loopback-0x4e)).
+4. One `0x50` + power-save byte (same payload as [GET_POWER_SAVE](#get_power_save-0x50)).
 5. Empty `0x4C` — **done** (no separate empty `0x44` / `0x48` in this stream).
 
 Order is always **pins, peers, loopback, power-save**. Empty board on v0.14+ → flag responses (usually `0`) then empty `0x4C`. Older firmware may omit newer flag responses and end on `0x4C` only. Hosts should ignore unknown mid-stream response cmds until `0x4C`.
@@ -365,11 +365,11 @@ F0  7D  00  0D  7F  02  04  07  F7
 ## Host implementation notes
 
 - **Web MIDI:** request SysEx access (`{ sysex: true }`). Incoming SysEx includes `F0`/`F7` in `event.data`.
-- **Firmware codec:** [`enomik_sysex_codec.h`](../enomik_sysex_codec.h) — enums and encode/decode (testable natively without Arduino).
-- **Firmware handler:** [`enomik_sysex.h`](../enomik_sysex.h) — routes requests to IO callbacks and sends responses.
-- **Python (wizard):** [`scripts/wizard/enomik_sysex.py`](../scripts/wizard/enomik_sysex.py) — builders and `parse()` for inner data.
-- **Constant sync (CI):** [`scripts/check_sysex_constants.py`](../scripts/check_sysex_constants.py) — verifies C++ codec and Python enums stay aligned.
-- **Tests:** Catch2 codec tests in [`test/native/test_enomik_sysex.cpp`](../test/native/test_enomik_sysex.cpp), handler tests in [`test/native/test_enomik_sysex_handler.cpp`](../test/native/test_enomik_sysex_handler.cpp), CI constant check in [`test/protocol/test_sysex_constants.py`](../test/protocol/test_sysex_constants.py).
+- **Firmware codec:** [`enomik_sysex_codec.h`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/include/enomik_sysex_codec.h) — enums and encode/decode (testable natively without Arduino).
+- **Firmware handler:** [`enomik_sysex.h`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/include/enomik_sysex.h) — routes requests to IO callbacks and sends responses.
+- **Python (wizard):** [`scripts/wizard/enomik_sysex.py`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/enomik_sysex.py) — builders and `parse()` for inner data.
+- **Constant sync (CI):** [`scripts/check_sysex_constants.py`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/check_sysex_constants.py) — verifies C++ codec and Python enums stay aligned.
+- **Tests:** Catch2 codec tests in [`test/native/test_enomik_sysex.cpp`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/test/native/test_enomik_sysex.cpp), handler tests in [`test/native/test_enomik_sysex_handler.cpp`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/test/native/test_enomik_sysex_handler.cpp), CI constant check in [`test/protocol/test_sysex_constants.py`](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/test/protocol/test_sysex_constants.py).
 
 When adding a new command:
 

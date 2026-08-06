@@ -8,3 +8,11 @@ license: LGPL-3.0-or-later
 dependencies:
   idf:
     version: ">=5.5"
+  # Backs include/esp_now_midi_usb.h (USB MIDI on ESP32-S2/S3).
+  # Verified against ESP-IDF v6.0.1 + examples_idf/dongle; pin if needed.
+  # Classic ESP32 has no USB device stack — skip so core consumers still build.
+  espressif/esp_tinyusb:
+    version: "*"
+    rules:
+      - if: "target in [esp32s2, esp32s3]"
+

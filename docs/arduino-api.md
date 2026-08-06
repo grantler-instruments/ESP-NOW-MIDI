@@ -49,7 +49,7 @@ Wire layout: `[0x00][tick16 LE ×100µs][midi 1–3 bytes]`.
 
 ## Supporting APIs
 
-- [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h.md): MIDI message
+- [`esp_now_midi_helpers.h`](api/Files/esp__now__midi__helpers_8h/): MIDI message
   types, constants, and helpers such as pitch-bend conversion.
 - `midiTimedPacket.h` / `MidiJitterBuffer.h`: timed wire format and per-peer
   playout ring used by `esp_now_midi`.

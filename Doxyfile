@@ -8,7 +8,7 @@ INPUT                  = include . README.md
 FILE_PATTERNS          = *.h *.md
 RECURSIVE              = NO
 # Root esp_now_midi*.h shims are Arduino entry points; document include/ instead.
-EXCLUDE                = esp_now_midi.h esp_now_midi_log.h esp_now_midi_wifi.h esp_now_midi_helpers.h
+EXCLUDE                = esp_now_midi.h
 EXCLUDE_PATTERNS       = .doxygen/* docs/* test/*
 USE_MDFILE_AS_MAINPAGE = README.md
 

@@ -1,50 +1,60 @@
 #pragma once
 
+#ifdef ARDUINO
 #include <Arduino.h>
+#endif
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
 #include "esp_mac.h"
-#include "../esp_now_midi_log.h"
+#endif
 
+#include "../include/esp_now_midi_log.h"
+#include "../include/esp_now_midi_compat.h"
+#include <cctype>
+#include <cstring>
 
 #define MAC_ADDRESS_SIZE 6
 
 namespace enomik {
 
 // Convert MAC address to string (uppercase with colons)
-inline String macToString(const uint8_t mac[MAC_ADDRESS_SIZE]) {
-    String result = "";
-    for (int i = 0; i < MAC_ADDRESS_SIZE; i++) {
-        if (mac[i] < 16) result += "0";
-        result += String(mac[i], HEX);
-        if (i < MAC_ADDRESS_SIZE - 1) result += ":";
-    }
-    result.toUpperCase();
-    return result;
+inline PortableString macToString(const uint8_t mac[MAC_ADDRESS_SIZE]) {
+    char buf[EspNowMidiLog::MAC_STR_LEN];
+    EspNowMidiLog::formatMac(buf, sizeof(buf), mac);
+    return PortableString(buf);
 }
 
 // Parse MAC address from string format "XX:XX:XX:XX:XX:XX"
-inline bool macFromString(const String& macStr, uint8_t mac[MAC_ADDRESS_SIZE]) {
-    String trimmed = macStr;
-    trimmed.trim();
-    trimmed.toUpperCase();
+inline bool macFromString(const PortableString& macStr, uint8_t mac[MAC_ADDRESS_SIZE]) {
+    const char* raw = macStr.c_str();
+    while (*raw != '\0' && isspace(static_cast<unsigned char>(*raw))) {
+        raw++;
+    }
 
-    if (trimmed.length() != 17) {
+    char trimmed[18] = {0};
+    size_t len = 0;
+    while (raw[len] != '\0' && !isspace(static_cast<unsigned char>(raw[len])) && len < sizeof(trimmed) - 1) {
+        trimmed[len] = static_cast<char>(toupper(static_cast<unsigned char>(raw[len])));
+        len++;
+    }
+
+    if (len != 17) {
         EspNowMidiLog::w("MacHelpers: Invalid MAC length. Expected XX:XX:XX:XX:XX:XX");
         return false;
     }
 
-    int bytePositions[MAC_ADDRESS_SIZE] = {0, 3, 6, 9, 12, 15};
+    static const int bytePositions[MAC_ADDRESS_SIZE] = {0, 3, 6, 9, 12, 15};
 
     for (int i = 0; i < MAC_ADDRESS_SIZE; i++) {
         int pos = bytePositions[i];
-        char char1 = trimmed.charAt(pos);
-        char char2 = trimmed.charAt(pos + 1);
+        char char1 = trimmed[pos];
+        char char2 = trimmed[pos + 1];
 
-        auto isHex = [](char c) { 
-            return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F'); 
+        auto isHex = [](char c) {
+            return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F');
         };
-        
-        auto hexToNibble = [](char c) { 
-            return (c >= '0' && c <= '9') ? (c - '0') : (c - 'A' + 10); 
+
+        auto hexToNibble = [](char c) {
+            return (c >= '0' && c <= '9') ? (c - '0') : (c - 'A' + 10);
         };
 
         if (!isHex(char1) || !isHex(char2)) {
@@ -57,7 +67,7 @@ inline bool macFromString(const String& macStr, uint8_t mac[MAC_ADDRESS_SIZE]) {
         mac[i] = (nibble1 << 4) | nibble2;
 
         // Check for colon separator (except after last byte)
-        if (i < MAC_ADDRESS_SIZE - 1 && trimmed.charAt(pos + 2) != ':') {
+        if (i < MAC_ADDRESS_SIZE - 1 && trimmed[pos + 2] != ':') {
             EspNowMidiLog::w("MacHelpers: Missing colon after byte %d", i);
             return false;
         }

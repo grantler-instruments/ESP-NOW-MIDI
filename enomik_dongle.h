@@ -1,12 +1,15 @@
 #pragma once
 
 #include "esp_now_midi.h"
-#include "MidiMessageHistory.h"
-#include "UsbMidiQueue.h"
+#include "include/MidiMessageHistory.h"
+#include "include/UsbMidiQueue.h"
+#include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
-#include "version.h"
+#include "include/version.h"
+#ifdef ARDUINO
 #include <WiFi.h>
+#endif
 #include <esp_system.h>
 #include <functional>
 
@@ -24,12 +27,20 @@
 #endif
 
 #ifdef HAS_USB_MIDI
+#ifdef ARDUINO
 #include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
 
 // Global USB MIDI objects — MUST be at file scope; distinct from Client symbols.
 Adafruit_USBD_MIDI g_dongle_usb_midi;
 MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, g_dongle_usb_midi, DONGLE_USBMIDI);
+#elif defined(ESP_PLATFORM)
+#include "include/esp_now_midi_usb.h"
+
+// Global USB MIDI objects — MUST be at file scope; distinct from Client symbols.
+TinyUsbRawMidiClass g_dongle_usb_midi;
+TinyUsbMidiClass DONGLE_USBMIDI;
+#endif
 #endif
 
 namespace enomik
@@ -354,7 +365,7 @@ namespace enomik
         }
 
         /** @return Local STA MAC as a colon-separated hex string. */
-        String getMacAddress() const
+        PortableString getMacAddress() const
         {
             return macToString(_baseMac);
         }
@@ -375,7 +386,7 @@ namespace enomik
             return espnowMIDI.addPeer(mac);
         }
 
-        bool addPeerFromString(const String &macStr)
+        bool addPeerFromString(const PortableString &macStr)
         {
             uint8_t mac[6];
             if (!macFromString(macStr, mac))
@@ -538,7 +549,7 @@ namespace enomik
         uint8_t _baseMac[6];
         const char *_manufacturer;
         const char *_product;
-        String _version;
+        PortableString _version;
         BridgeFilter _toHostFilter;
         BridgeFilter _fromHostFilter;
 

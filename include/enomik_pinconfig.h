@@ -6,6 +6,8 @@
  * @brief Pin-to-MIDI mapping configuration.
  */
 
+namespace enomik {
+
 /**
  * @brief Maps an input pin to a MIDI message.
  */
@@ -38,3 +40,5 @@ struct PinConfig
     PinConfig(uint8_t p, uint8_t m)
         : pin(p), mode(m) {}
 };
+
+} // namespace enomik

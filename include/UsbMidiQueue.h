@@ -1,11 +1,17 @@
 #pragma once
 
+#ifdef ARDUINO
 #include <Arduino.h>
-#include "esp_now_midi_helpers.h"
+#elif defined(ESP_PLATFORM)
+#include "freertos/FreeRTOS.h"
+#endif
+#include "./esp_now_midi_helpers.h"
 
 #ifndef USB_MIDI_QUEUE_SIZE
 #define USB_MIDI_QUEUE_SIZE 64
 #endif
+
+namespace enomik {
 
 /**
  * @brief ISR-safe ring buffer for MIDI messages destined for USB MIDI OUT.
@@ -94,3 +100,5 @@ private:
   volatile uint16_t _tail = 0;
   volatile bool _pendingClock = false;
 };
+
+} // namespace enomik
