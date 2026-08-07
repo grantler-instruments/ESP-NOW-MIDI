@@ -1,7 +1,7 @@
 # ESP-NOW-MIDI
 
 Library for sending and receiving MIDI messages via the ESP-NOW protocol.
-A typical setup uses two ESP-NOW capable boards: a USB MIDI **dongle** connected to your computer (or other USB MIDI host), and one or more remote ESP boards. The dongle shows up as a class-compliant MIDI device — use it with any DAW, Max, pd, Processing, openFrameworks, game engines that support MIDI, or even in the browser or on a phone.
+A typical setup uses two ESP-NOW capable boards: a USB MIDI **dongle** connected to your computer (or other USB MIDI host), and one or more remote ESP boards. The dongle shows up as a class-compliant MIDI device, use it with any DAW, Max, pd, Processing, openFrameworks, game engines that support MIDI, or even in the browser or on a phone.
 
 ## Documentation
 
@@ -18,7 +18,7 @@ Full guide: [grantler-instruments.github.io/ESP-NOW-MIDI](https://grantler-instr
 - **Arduino**: Arduino-ESP32 sketches under `examples/`
 - **ESP-IDF**: pure IDF component + examples under `examples_idf/`
 - **PlatformIO**: `library.json` + `platformio.ini` in each Arduino example
-- **CircuitPython**: `esp_now_midi.py` (same packet format as the C++ library; largely untested — contributions welcome)
+- **CircuitPython**: `esp_now_midi.py` (same packet format as the C++ library; largely untested, contributions welcome)
 
 ## Hardware
 
@@ -58,15 +58,43 @@ More detail: [Getting started](https://grantler-instruments.github.io/ESP-NOW-MI
 
 ## Examples
 
-Arduino sketches live under `examples/`; ESP-IDF ports under `examples_idf/`. Catalog (core, hardware, audio, test): [Examples](https://grantler-instruments.github.io/ESP-NOW-MIDI/examples/).
+Catalog (core, hardware, audio, test): [Examples](https://grantler-instruments.github.io/ESP-NOW-MIDI/examples/).
 
-## PlatformIO
+### Arduino
 
-This library includes `library.json` and a `platformio.ini` in each Arduino example.
+Sketches under `examples/` — open in Arduino IDE or `arduino-cli`, or build with PlatformIO (below). Requires **Arduino-ESP32 3.3.0+**.
 
-### Use in your own project
+### ESP-IDF
 
-Add to your `platformio.ini`:
+Pure IDF ports under `examples_idf/` (`dongle`, `client`, `client_test`). From an example folder:
+
+```bash
+idf.py set-target esp32s2   # or esp32 / esp32s3
+idf.py build
+```
+
+See each example’s README and the [C++ ESP-IDF](https://grantler-instruments.github.io/ESP-NOW-MIDI/idf-api/) guide.
+
+### PlatformIO
+
+Each Arduino example has a `platformio.ini`; shared board settings live in `platformio/common.ini`. Build artifacts go to `.pio/workspaces/` at the repo root (not under `examples/`), so Arduino IDE does not pick up dependency sketches from PlatformIO `libdeps`.
+
+From an example folder (e.g. `examples/dongle`):
+
+```bash
+pio run
+pio run -t upload
+```
+
+Build every example from the repo root:
+
+```bash
+bash scripts/platformio_build_examples.sh
+```
+
+Example configs use the [pioarduino `espressif32` platform](https://github.com/pioarduino/platform-espressif32) because official `platformio/espressif32` does not support Arduino core 3.x.
+
+To use the library in your own PlatformIO project, add to `platformio.ini`:
 
 ```ini
 [env:lolin_s2_mini]
@@ -92,25 +120,6 @@ For ESP32-S3 boards with USB MIDI, also set:
 ```ini
 board_build.usb_mode = tinyusb
 ```
-
-### Build an example
-
-From an example folder (e.g. `examples/dongle`):
-
-```bash
-pio run
-pio run -t upload
-```
-
-Build every example from the repo root:
-
-```bash
-bash scripts/platformio_build_examples.sh
-```
-
-Shared board settings live in `platformio/common.ini`. Example-specific dependencies are listed in each example's `platformio.ini`. Build artifacts go to `.pio/workspaces/` at the repo root (not under `examples/`), so Arduino IDE does not pick up dependency sketches from PlatformIO `libdeps`.
-
-**Note:** This library requires **Arduino-ESP32 3.3.0+**. Example configs use the [pioarduino `espressif32` platform](https://github.com/pioarduino/platform-espressif32) because official `platformio/espressif32` does not support Arduino core 3.x.
 
 ## Dependencies
 
