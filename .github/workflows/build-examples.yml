@@ -196,8 +196,26 @@ jobs:
           name: esp32-binaries-${{ matrix.board.name }}
           path: binaries/*.bin
 
+  examples_pio:
+    name: examples / PlatformIO
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build all PlatformIO examples
+        run: bash scripts/platformio_build_examples.sh
+
   release:
-    needs: [unit-test, circuitpython-test, idf-build, examples_idf, examples]
+    needs: [unit-test, circuitpython-test, idf-build, examples_idf, examples, examples_pio]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
