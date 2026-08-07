@@ -17,17 +17,35 @@ on:
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
+# Tag pushes cannot deploy to the github-pages environment when only branches
+# (e.g. main) are allowed by environment protection rules. On tags we re-run
+# this workflow from main; deploy-versions.sh picks up the new tag there.
+
 permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write
 
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
+  retrigger:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy docs from main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run "${{ github.workflow }}" \
+            --repo "${{ github.repository }}" \
+            --ref main
+
   build:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -61,6 +79,7 @@ jobs:
           path: site
 
   deploy:
+    if: github.ref_type != 'tag'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
