@@ -3,6 +3,9 @@ name: Publish documentation
 on:
   push:
     branches: [main]
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+"
     paths:
       - "docs/**"
       - "mkdocs.yml"
@@ -29,6 +32,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -43,8 +49,8 @@ jobs:
           sudo apt-get install -y doxygen unzip
           python -m pip install -r docs/requirements.txt
 
-      - name: Generate and build site
-        run: bash docs/generate.sh
+      - name: Build versioned site
+        run: bash docs/deploy-versions.sh
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

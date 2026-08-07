@@ -2,13 +2,22 @@
 # Generate the documentation site: Doxygen XML -> doxybook2 markdown -> MkDocs.
 #
 # Usage (from anywhere, e.g. the docs/ directory):
-#   ./generate.sh          # build the site into <repo>/site
-#   ./generate.sh serve    # build and serve locally with live reload
+#   ./generate.sh           # build the site into <repo>/site
+#   ./generate.sh serve     # build and serve locally with live reload
+#   ./generate.sh prepare   # doxygen + doxybook2 only (for mike / CI)
+#
+# Env:
+#   DOCS_ROOT     Source tree to document (default: repo containing this script)
+#   DOCS_VERSION  Version id for absolute API links (e.g. latest, 0.18).
+#                 When set, doxybook baseUrl is /ESP-NOW-MIDI/$DOCS_VERSION/api/
+#                 When unset, baseUrl is /api/ (local serve).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TOOLS_DIR="$ROOT/.tools"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${DOCS_ROOT:-$SCRIPT_DIR/..}" && pwd)"
+TOOLS_DIR="${DOCS_TOOLS_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)/.tools}"
 DOXYBOOK2_VERSION="v1.5.0"
+MODE="${1:-build}"
 
 # --- Resolve tools -----------------------------------------------------------
 
@@ -37,19 +46,26 @@ else
   DOXYBOOK2="$TOOLS_DIR/doxybook2/bin/doxybook2"
 fi
 
-if [ -x "$ROOT/.venv/bin/mkdocs" ]; then
-  MKDOCS="$ROOT/.venv/bin/mkdocs"
-elif command -v mkdocs >/dev/null 2>&1; then
-  MKDOCS="mkdocs"
-else
-  echo "error: mkdocs not found. Set it up with:" >&2
-  echo "  python3 -m venv $ROOT/.venv && $ROOT/.venv/bin/pip install -r $ROOT/docs/requirements.txt" >&2
-  exit 1
+if [ "$MODE" != "prepare" ]; then
+  if [ -x "$(cd "$SCRIPT_DIR/.." && pwd)/.venv/bin/mkdocs" ]; then
+    MKDOCS="$(cd "$SCRIPT_DIR/.." && pwd)/.venv/bin/mkdocs"
+  elif command -v mkdocs >/dev/null 2>&1; then
+    MKDOCS="mkdocs"
+  else
+    echo "error: mkdocs not found. Set it up with:" >&2
+    echo "  python3 -m venv $(cd "$SCRIPT_DIR/.." && pwd)/.venv && $(cd "$SCRIPT_DIR/.." && pwd)/.venv/bin/pip install -r $SCRIPT_DIR/requirements.txt" >&2
+    exit 1
+  fi
 fi
 
 # --- Generate ----------------------------------------------------------------
 
 cd "$ROOT"
+
+if [ ! -f include/version.h ]; then
+  echo "error: include/version.h not found in $ROOT" >&2
+  exit 1
+fi
 
 # Keep docs version in sync with include/version.h (single source of truth).
 VERSION_MAJOR="$(sed -nE 's/.*ESP_NOW_MIDI_VERSION_MAJOR[[:space:]]+([0-9]+).*/\1/p' include/version.h)"
@@ -61,19 +77,47 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
-echo "==> Running doxygen (PROJECT_NUMBER=$VERSION)"
+if [ -n "${DOCS_VERSION:-}" ]; then
+  DOXYBOOK_BASE_URL="/ESP-NOW-MIDI/${DOCS_VERSION}/api/"
+else
+  DOXYBOOK_BASE_URL="/api/"
+fi
+
+DOXYBOOK_TEMPLATE="$ROOT/docs/doxybook.json"
+if [ ! -f "$DOXYBOOK_TEMPLATE" ]; then
+  DOXYBOOK_TEMPLATE="$SCRIPT_DIR/doxybook.json"
+fi
+DOXYBOOK_CONFIG="$(mktemp)"
+python3 - "$DOXYBOOK_TEMPLATE" "$DOXYBOOK_CONFIG" "$DOXYBOOK_BASE_URL" <<'PY'
+import json, sys
+src, dst, base_url = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(src, encoding="utf-8") as f:
+    cfg = json.load(f)
+cfg["baseUrl"] = base_url
+with open(dst, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+PY
+trap 'rm -f "$DOXYBOOK_CONFIG"' EXIT
+
+echo "==> Running doxygen (PROJECT_NUMBER=$VERSION, doxybook baseUrl=$DOXYBOOK_BASE_URL)"
 # Override PROJECT_NUMBER without editing Doxyfile.
 (cat Doxyfile; printf 'PROJECT_NUMBER = %s\n' "$VERSION") | doxygen -
 
 echo "==> Generating API markdown with doxybook2"
 rm -rf docs/api
 mkdir -p docs/api
-"$DOXYBOOK2" --input .doxygen/xml --output docs/api --config docs/doxybook.json
+"$DOXYBOOK2" --input .doxygen/xml --output docs/api --config "$DOXYBOOK_CONFIG"
 
-if [ "${1:-build}" = "serve" ]; then
+if [ "$MODE" = "prepare" ]; then
+  echo "==> Prepare complete (skipped MkDocs build)"
+  exit 0
+fi
+
+if [ "$MODE" = "serve" ]; then
   echo "==> Serving site at http://127.0.0.1:8000/"
   exec "$MKDOCS" serve --config-file mkdocs.yml
-else
-  echo "==> Building site into $ROOT/site"
-  "$MKDOCS" build --strict --config-file mkdocs.yml
 fi
+
+echo "==> Building site into $ROOT/site"
+"$MKDOCS" build --strict --config-file mkdocs.yml

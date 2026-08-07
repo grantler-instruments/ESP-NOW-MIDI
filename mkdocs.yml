@@ -35,6 +35,10 @@ theme:
     - search.suggest
     - search.highlight
 
+extra:
+  version:
+    provider: mike
+
 extra_css:
   - extra.css
 

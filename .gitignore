@@ -31,3 +31,4 @@ examples_idf/**/sdkconfig.old
 docs/.doxygen/
 docs/api/
 site/
+.docs-serve/
