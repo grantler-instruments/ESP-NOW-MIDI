@@ -3,6 +3,9 @@ name: Publish documentation
 on:
   push:
     branches: [main]
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+"
     paths:
       - "docs/**"
       - "mkdocs.yml"
@@ -14,21 +17,42 @@ on:
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
+# Tag pushes cannot deploy to the github-pages environment when only branches
+# (e.g. main) are allowed by environment protection rules. On tags we re-run
+# this workflow from main; deploy-versions.sh picks up the new tag there.
+
 permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write
 
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
+  retrigger:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy docs from main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run "${{ github.workflow }}" \
+            --repo "${{ github.repository }}" \
+            --ref main
+
   build:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -43,8 +67,8 @@ jobs:
           sudo apt-get install -y doxygen unzip
           python -m pip install -r docs/requirements.txt
 
-      - name: Generate and build site
-        run: bash docs/generate.sh
+      - name: Build versioned site
+        run: bash docs/deploy-versions.sh
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -55,6 +79,7 @@ jobs:
           path: site
 
   deploy:
+    if: github.ref_type != 'tag'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

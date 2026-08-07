@@ -149,7 +149,7 @@ This repo uses Semantic Versioning — see [CHANGELOG.md](CHANGELOG.md). Since 1
 
 ## Contributing
 
-Bugs and PRs are welcome on GitHub. Before tagging a release, run the interactive hardware test wizard (`examples/client_test` + `examples/dongle`); see [scripts/wizard/README.md](scripts/wizard/README.md).
+Bugs and PRs are welcome on GitHub. Before tagging a release, run the interactive hardware test wizard (`examples/client_test` + `examples/dongle`); see [scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/README.md).
 
 ## License
 

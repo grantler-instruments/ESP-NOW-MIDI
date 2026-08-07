@@ -5,9 +5,9 @@
   .md-header .md-tabs {
     position: absolute;
     top: 0;
-    /* Align with the centered 61rem header grid, leaving room for the
-       branding on the left and search/repository controls on the right. */
-    left: calc(50% - 19.5rem);
+    /* Leave room for logo + site title + mike version selector on the left,
+       and search/repository controls on the right. */
+    left: calc(50% - 11.5rem);
     right: calc(50% - 16rem);
     width: auto;
     background-color: transparent;
@@ -27,6 +27,30 @@
   .md-header__source .md-source__repository {
     display: none;
   }
+
+  /* Title + version sit in one flex row so the selector doesn't collide
+     with the absolutely positioned tabs. */
+  .md-header__topic:first-child {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 14rem;
+  }
+
+  .md-version {
+    flex: 0 0 auto;
+  }
+}
+
+/* Anchor the version menu below its trigger (Material defaults to top: .15rem). */
+.md-version {
+  position: relative;
+}
+
+.md-version__list {
+  top: 100%;
+  margin-top: 0.1rem;
+  z-index: 3;
 }
 
 /* Give the wide benchmark table more room without widening every page. */

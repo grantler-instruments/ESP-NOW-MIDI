@@ -1,5 +1,5 @@
 {
-  "baseUrl": "/ESP-NOW-MIDI/api/",
+  "baseUrl": "/api/",
   "indexInFolders": true,
   "linkSuffix": "/",
   "indexClassesName": "index",
