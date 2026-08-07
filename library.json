@@ -1,6 +1,6 @@
 {
   "name": "ESP-NOW-MIDI",
-  "version": "0.12.1",
+  "version": "0.18.0",
   "description": "Arduino library for sending and receiving MIDI messages via the ESP-NOW protocol.",
   "keywords": [
     "midi",
@@ -31,17 +31,22 @@
   "headers": [
     "esp_now_midi.h",
     "enomik_client.h",
-    "enomik_io.h",
-    "midiHelpers.h"
+    "include/enomik_io.h",
+    "include/esp_now_midi_helpers.h"
   ],
   "export": {
     "exclude": [
-      "idf_examples",
+      "examples_idf",
       ".arduino-build",
       "benchmarks",
       "scripts",
       "test",
-      "examples"
+      "examples",
+      "docs",
+      ".github",
+      "platformio",
+      "mkdocs.yml",
+      "Doxyfile"
     ]
   },
   "dependencies": [

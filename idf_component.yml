@@ -1,5 +1,5 @@
 ## IDF Component Manager metadata for the ESP-NOW MIDI core
-version: "0.17.0"
+version: "0.18.0"
 description: ESP-NOW MIDI transport for ESP32 (Arduino and ESP-IDF)
 url: https://github.com/grantler-instruments/ESP-NOW-MIDI
 issues: https://github.com/grantler-instruments/ESP-NOW-MIDI/issues
