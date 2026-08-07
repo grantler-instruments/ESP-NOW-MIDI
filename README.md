@@ -127,11 +127,11 @@ Library dependencies should install automatically. Extra libraries used by indiv
 
 ## Versioning
 
-This repo uses Semantic Versioning. Strict adherence starts at 1.0.0; until then, APIs may change — use the latest release and see [CHANGELOG.md](CHANGELOG.md). Notable migration: since 0.10.0, `esp_now_midi` setup was renamed to `begin()`; power saving is off by default for lower latency (`begin(reducePowerAtCostOfLatency=true)` to re-enable).
+This repo uses Semantic Versioning. Strict adherence starts at 1.0.0; until then, APIs may change — use the latest release and see [CHANGELOG.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/CHANGELOG.md). Notable migration: since 0.10.0, `esp_now_midi` setup was renamed to `begin()`; power saving is off by default for lower latency (`begin(reducePowerAtCostOfLatency=true)` to re-enable).
 
 ## Contributing
 
-Bugs and PRs are welcome on GitHub. Before tagging a release, run the interactive hardware test wizard (`examples/client_test` + `examples/dongle`); see [scripts/wizard/README.md](scripts/wizard/README.md).
+Bugs and PRs are welcome on GitHub. Before tagging a release, run the interactive hardware test wizard (`examples/client_test` + `examples/dongle`); see [scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/README.md).
 
 ## License
 
