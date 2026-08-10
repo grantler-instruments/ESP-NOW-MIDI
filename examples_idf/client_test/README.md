@@ -2,7 +2,7 @@
 
 ESP-IDF port of [`examples/client_test`](../../examples/client_test): deterministic
 device-under-test for [`scripts/wizard`](../../scripts/wizard). Same MIDI-only
-contract (echo on channel 10, periodic handshake, SysEx-configured buttons).
+contract (echo on channel 10, periodic handshake, SysEx-configured I/O pins).
 
 ## Build
 

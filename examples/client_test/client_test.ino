@@ -5,13 +5,14 @@
 //
 //   Phase 1 (USB):     wizard talks to this board directly over USB MIDI
 //                      - GET_MAC SysEx round-trip (proves SysEx both ways)
-//                      - SET_PIN_CONFIG for the two button pins
+//                      - SET_MIDI_LOOPBACK on
+//                      - SET_PIN_CONFIG for digital/analog I/O pins
 //                      - echo test on TEST_ECHO_CHANNEL
 //                      - ADD_PEER with the dongle MAC (persisted)
-//                      - physical button presses -> notes
+//                      - physical button / pot checks -> CCs
 //
 //   Phase 2 (ESP-NOW): wizard talks to the dongle; this board is reached
-//                      wirelessly. Same echo + button checks over the air.
+//                      wirelessly. Same echo + I/O checks over the air.
 //
 // Contract relied on by the wizard (MIDI only — no side-channel protocol):
 //   * channel-voice messages on TEST_ECHO_CHANNEL are echoed back verbatim

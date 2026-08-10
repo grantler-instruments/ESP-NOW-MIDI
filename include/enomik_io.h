@@ -47,6 +47,7 @@ namespace enomik
         unsigned long lastChangeTime = 0;
         unsigned long lastSendTime = 0;
         float smoothedValue = 0;
+        uint8_t spikeCount = 0;
         bool touched = false;
     };
 
@@ -60,9 +61,17 @@ namespace enomik
     {
     public:
         static constexpr unsigned long DEBOUNCE_MS = 4;
-        static constexpr int ANALOG_THRESHOLD = 2;
         static constexpr unsigned long ANALOG_MIN_INTERVAL = 5;
-        static constexpr float SMOOTHING_FACTOR = 0.3f;
+        /** EMA alpha on raw ADC/touch; lower = less chatter after 7-bit quantize. */
+        static constexpr float SMOOTHING_FACTOR = 0.15f;
+        /** Snap mapped 7-bit values this close to min/max onto the endpoint. */
+        static constexpr int ANALOG_ENDPOINT_SNAP = 1;
+        /** Snap window for 14-bit pitch bend endpoints. */
+        static constexpr int PITCH_BEND_ENDPOINT_SNAP = 64;
+        /** Ignore ADC jumps larger than this until confirmed (pot wiper dropouts). */
+        static constexpr int ANALOG_SPIKE_LIMIT = ADC_MAX_VALUE / 4;
+        /** Consecutive out-of-range samples required before accepting a large jump. */
+        static constexpr uint8_t ANALOG_SPIKE_CONFIRM = 3;
 
         /** @brief Restores pin configurations, initializes their hardware, and configures SysEx handlers. */
         void begin()
@@ -565,39 +574,67 @@ namespace enomik
             return false;
         }
 
+        static int snapToEndpoints(int value, int minValue, int maxValue, int snap)
+        {
+            if (value <= minValue + snap)
+                return minValue;
+            if (value >= maxValue - snap)
+                return maxValue;
+            return value;
+        }
+
+        /** EMA update with glitch rejection for intermittent ADC dropouts. */
+        static bool updateSmoothedAnalog(int rawValue, PinState &state)
+        {
+            if (state.lastValue == -1)
+            {
+                state.smoothedValue = rawValue;
+                state.spikeCount = 0;
+                return true;
+            }
+
+            if (abs(rawValue - (int)state.smoothedValue) > ANALOG_SPIKE_LIMIT)
+            {
+                state.spikeCount++;
+                if (state.spikeCount < ANALOG_SPIKE_CONFIRM)
+                    return false; // ignore transient glitch
+
+                // Sustained large move (e.g. fast pot sweep) — accept immediately.
+                state.smoothedValue = rawValue;
+                state.spikeCount = 0;
+                return true;
+            }
+
+            state.spikeCount = 0;
+            state.smoothedValue = (SMOOTHING_FACTOR * rawValue) +
+                                  (1.0f - SMOOTHING_FACTOR) * state.smoothedValue;
+            return true;
+        }
+
         bool processAnalogInput(const PinConfig &config, PinState &state,
                                 unsigned long now, int &currentValue)
         {
             int rawValue = analogRead(config.pin);
+            if (!updateSmoothedAnalog(rawValue, state))
+                return false;
 
-            // Initialize smoothed value on first read
-            if (state.lastValue == -1)
-                state.smoothedValue = rawValue;
-            else
-                state.smoothedValue = (SMOOTHING_FACTOR * rawValue) +
-                                      (1.0f - SMOOTHING_FACTOR) * state.smoothedValue;
-
-            // For pitch bend, preserve full ADC resolution
             if (config.midi_type == MidiStatus::MIDI_PITCH_BEND)
             {
-                // Map directly to 14-bit pitch bend range (0-16383)
                 currentValue = map((int)state.smoothedValue, 0, ADC_MAX_VALUE, 0, 16383);
                 currentValue = constrain(currentValue, 0, 16383);
-
-                // Use higher threshold for pitch bend since we have more resolution
-                if (state.lastValue != -1 && abs(currentValue - state.lastValue) < (ANALOG_THRESHOLD * 4))
-                    return false;
+                currentValue = snapToEndpoints(currentValue, 0, 16383, PITCH_BEND_ENDPOINT_SNAP);
             }
             else
             {
-                // For other MIDI types, use standard 7-bit range
-                int mappedValue = map((int)state.smoothedValue, 0, ADC_MAX_VALUE,
-                                      config.min_midi_value, config.max_midi_value);
-                currentValue = constrain(mappedValue, 0, 127);
-
-                if (state.lastValue != -1 && abs(currentValue - state.lastValue) < ANALOG_THRESHOLD)
-                    return false;
+                const int minMidi = config.min_midi_value;
+                const int maxMidi = config.max_midi_value;
+                currentValue = map((int)state.smoothedValue, 0, ADC_MAX_VALUE, minMidi, maxMidi);
+                currentValue = constrain(currentValue, minMidi, maxMidi);
+                currentValue = snapToEndpoints(currentValue, minMidi, maxMidi, ANALOG_ENDPOINT_SNAP);
             }
+
+            if (state.lastValue != -1 && currentValue == state.lastValue)
+                return false;
 
             if (now - state.lastSendTime < ANALOG_MIN_INTERVAL)
                 return false;
@@ -612,7 +649,7 @@ namespace enomik
 
             if (config.threshold == 0)
             {
-                // No threshold set, send scaled touch values with smoothing
+                // Continuous mode: smooth, map, snap endpoints, send on change.
                 if (state.lastValue == -1)
                     state.smoothedValue = touchValue;
                 else
@@ -623,12 +660,13 @@ namespace enomik
                 int mappedValue = map((int)state.smoothedValue, 0, 100, 127, 0);
                 mappedValue = constrain(mappedValue, 0, 127);
 
-                // Apply user's min/max range
-                currentValue = map(mappedValue, 0, 127,
-                                   config.min_midi_value, config.max_midi_value);
-                currentValue = constrain(currentValue, config.min_midi_value, config.max_midi_value);
+                const int minMidi = config.min_midi_value;
+                const int maxMidi = config.max_midi_value;
+                currentValue = map(mappedValue, 0, 127, minMidi, maxMidi);
+                currentValue = constrain(currentValue, minMidi, maxMidi);
+                currentValue = snapToEndpoints(currentValue, minMidi, maxMidi, ANALOG_ENDPOINT_SNAP);
 
-                if (state.lastValue != -1 && abs(currentValue - state.lastValue) < ANALOG_THRESHOLD)
+                if (state.lastValue != -1 && currentValue == state.lastValue)
                     return false;
 
                 if (now - state.lastSendTime < ANALOG_MIN_INTERVAL)
