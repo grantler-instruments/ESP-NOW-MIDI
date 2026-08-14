@@ -17,8 +17,8 @@ empty response with the same CMD as stream end.
 from __future__ import annotations
 
 # Keep these in sync with version.h
-PROTOCOL_MAJOR = 0
-PROTOCOL_MINOR = 18
+PROTOCOL_MAJOR = 1
+PROTOCOL_MINOR = 0
 
 MANUFACTURER_ID = 0x7D
 
@@ -104,7 +104,7 @@ MODE_ANALOG_INPUT = 0x03
 MODE_ANALOG_OUTPUT = 0x04
 MODE_INPUT_TOUCH = 0x05
 
-# MIDI status bytes (esp_now_midi_helpers.h)
+# MIDI status bytes (midiHelpers.h)
 MIDI_NOTE_OFF = 0x80
 MIDI_NOTE_ON = 0x90
 MIDI_CONTROL_CHANGE = 0xB0

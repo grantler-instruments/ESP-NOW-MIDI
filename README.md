@@ -31,6 +31,24 @@ Full guide: [grantler-instruments.github.io/ESP-NOW-MIDI](https://grantler-instr
 - **MIDI wrapper**: ESP-NOW setup plus a common interface for USB and ESP-NOW MIDI.
 - **`enomik::Dongle`**: USB MIDI ↔ ESP-NOW bridge for a host-connected board. Optional status display via `Dongle::Display` + `setDisplay()`.
 
+## Logging
+
+Library internals use `EspNowMidiLog` (`e` / `w` / `i` / `d`) instead of raw `Serial` calls. There is no runtime log-level API yet.
+
+* **Error / warn / info** (`e`, `w`, `i`) always emit on Arduino (to `Serial`).
+* **Debug** (`d`) is compile-time gated. Define before including library headers:
+
+```cpp
+#define ESP_NOW_DEBUGGING 1
+#include <esp_now_midi.h>
+```
+
+Default is `0` (debug logs compiled out). On pure ESP-IDF, messages go through `ESP_LOG*` with tag `esp_now_midi`. Details: [Logging](https://grantler-instruments.github.io/ESP-NOW-MIDI/logging/).
+
+## Wi-Fi / ESP-IDF
+
+`esp_now_midi::begin(...)` brings up Wi-Fi STA by default (`manageWifi = true`) using an Arduino or ESP-IDF backend. Pass `manageWifi = false` if your app already owns Wi-Fi. The repo also ships as an ESP-IDF component (`CMakeLists.txt`). Install + Wi-Fi: [C++ ESP-IDF](https://grantler-instruments.github.io/ESP-NOW-MIDI/idf-api/).
+
 ## Quick start
 
 You usually run **two roles**: a **dongle** (USB MIDI + ESP-NOW on one board) and one or more **remote ESPs**.
@@ -127,7 +145,7 @@ Library dependencies should install automatically. Extra libraries used by indiv
 
 ## Versioning
 
-This repo uses Semantic Versioning. Strict adherence starts at 1.0.0; until then, APIs may change — use the latest release and see [CHANGELOG.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/CHANGELOG.md). Notable migration: since 0.10.0, `esp_now_midi` setup was renamed to `begin()`; power saving is off by default for lower latency (`begin(reducePowerAtCostOfLatency=true)` to re-enable).
+This repo uses Semantic Versioning — see [CHANGELOG.md](CHANGELOG.md). Since 1.0.0, optional jitter reduction uses timed ESP-NOW frames (`0x00` + `uint16` tick ×100µs + MIDI). Default remains raw ASAP. Older peers that treat `len > 3` as SysEx will drop timed packets — only enable `setReduceJitterAtCostOfLatency(true)` when both ends understand the format. CircuitPython timed/buffer support is not in this release yet. Notable earlier migration: since 0.10.0, `esp_now_midi` setup was renamed to `begin()`; power saving is off by default for lower latency (`begin(reducePowerAtCostOfLatency=true)` to re-enable).
 
 ## Contributing
 

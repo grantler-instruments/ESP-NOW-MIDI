@@ -14,9 +14,14 @@
 #include <cstring>
 #include <esp_now.h>
 #include <esp_wifi.h>
+#if !defined(ARDUINO) && defined(ESP_PLATFORM)
+#include <esp_timer.h>
+#endif
 #include "./esp_now_midi_helpers.h"
 #include "./esp_now_midi_log.h"
 #include "./esp_now_midi_wifi.h"
+#include "./midiTimedPacket.h"
+#include "./MidiJitterBuffer.h"
 
 #ifndef ARDUINO
 using byte = uint8_t;
@@ -189,6 +194,101 @@ public:
   }
 
   /**
+   * @brief Enables opt-in jitter reduction at the cost of added playout latency.
+   *
+   * When enabled, non-realtime MIDI is sent as timed packets and inbound timed
+   * packets are held for `getJitterBufferMs()` before dispatch. When disabled
+   * (default), outbound MIDI stays raw and inbound timed packets are accepted
+   * but released ASAP. Realtime messages (`F8`/`FA`/`FB`/`FC`) are always sent
+   * and delivered ASAP. Each peer must enable this independently.
+   *
+   * @param enabled `true` to stamp TX and buffer timed RX.
+   */
+  void setReduceJitterAtCostOfLatency(bool enabled)
+  {
+    _reduceJitterAtCostOfLatency = enabled;
+    if (enabled)
+    {
+      _txSessionStartUs = timeNowMicros();
+    }
+  }
+
+  /**
+   * @brief Returns whether jitter reduction is enabled.
+   * @return `true` when timed TX and buffered RX are active.
+   */
+  bool getReduceJitterAtCostOfLatency() const
+  {
+    return _reduceJitterAtCostOfLatency;
+  }
+
+  /**
+   * @brief Sets the receiver playout cushion `T` in milliseconds.
+   *
+   * Default is `ESP_NOW_MIDI_JITTER_BUFFER_MS` (8). `0` means ASAP release for
+   * timed packets even when jitter reduction is enabled. Only applied on this
+   * device when jitter reduction is on.
+   *
+   * @param ms Playout delay in milliseconds.
+   */
+  void setJitterBufferMs(uint16_t ms)
+  {
+    _jitterBufferMs = ms;
+  }
+
+  /**
+   * @brief Returns the configured playout cushion `T`.
+   * @return Delay in milliseconds.
+   */
+  uint16_t getJitterBufferMs() const
+  {
+    return _jitterBufferMs;
+  }
+
+  /**
+   * @brief Drains due (or flushed) jitter-buffer entries into MIDI handlers.
+   *
+   * Call regularly from `loop()` when using timed receive. `enomik::Dongle`
+   * and `enomik::Client` call this for you.
+   */
+  void update()
+  {
+    const uint32_t now = timeNowMicros();
+    const bool flush = !_reduceJitterAtCostOfLatency || _jitterBufferMs == 0;
+    for (MidiJitterBuffer::PeerState *peer = _jitterBuffer.peersBegin();
+         peer != _jitterBuffer.peersEnd(); ++peer)
+    {
+      if (!peer->in_use)
+      {
+        continue;
+      }
+      MidiJitterBuffer::Entry entry;
+      if (flush)
+      {
+        while (MidiJitterBuffer::pop(*peer, entry))
+        {
+          dispatchMessage(entry.message);
+        }
+      }
+      else
+      {
+        while (MidiJitterBuffer::popDue(*peer, now, entry))
+        {
+          dispatchMessage(entry.message);
+        }
+      }
+    }
+  }
+
+  /**
+   * @brief Returns how many malformed timed frames were dropped.
+   */
+  uint32_t getTimedPacketErrorCount() const
+  {
+    return _timedPacketErrorCount;
+  }
+
+  /**
    * @brief Registers an ESP-NOW peer for MIDI transmission.
    * @param macAddress Six-byte Wi-Fi MAC address of the peer.
    * @return `true` when the peer was added to ESP-NOW and the local peer list;
@@ -317,7 +417,7 @@ public:
     message.secondByte = velocity;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -336,7 +436,7 @@ public:
     message.secondByte = velocity;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -355,7 +455,7 @@ public:
     message.secondByte = value;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -373,7 +473,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -391,7 +491,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -410,7 +510,7 @@ public:
     message.secondByte = pressure;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -446,7 +546,7 @@ public:
     message.secondByte = (value >> 7) & 0x7F;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -485,7 +585,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /** @brief Sends the MIDI Stop real-time message to all peers.
@@ -499,7 +599,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /** @brief Sends the MIDI Continue real-time message to all peers.
@@ -513,7 +613,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /** @brief Sends the MIDI Timing Clock real-time message to all peers.
@@ -527,7 +627,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -545,7 +645,7 @@ public:
     message.secondByte = (value >> 7) & 0x7F;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -563,7 +663,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /** @brief Sends a MIDI Tune Request message to all peers.
@@ -577,7 +677,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -595,7 +695,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /** @brief Sends a MIDI Active Sensing message to all peers.
@@ -609,7 +709,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
   /** @brief Sends a MIDI System Reset message to all peers.
    * @return ESP-NOW send result. */
@@ -622,7 +722,7 @@ public:
     message.secondByte = 0;
 
     midi_message_packet packet = midi_message_packet::fromMessage(message);
-    return sendToAllPeers((uint8_t *)&packet, packet.getDataSize());
+    return sendMidiMessagePacket(packet);
   }
 
   /**
@@ -657,8 +757,9 @@ public:
     {
       addPeer(mac);
     }
-    // Handle SysEx separately (larger than 3 bytes)
-    if (len > sizeof(midi_message_packet))
+
+    // Fixed-size SysEx blob (must not use bare len > 3 — timed frames are 4–6).
+    if (len == static_cast<int>(sizeof(midi_sysex_message)))
     {
       midi_sysex_message sysexMessage;
       memcpy(&sysexMessage, incomingData, sizeof(midi_sysex_message));
@@ -666,92 +767,57 @@ public:
       return;
     }
 
+    if (midi_timed_packet::isTimedFrame(incomingData, len))
+    {
+      uint16_t tick = 0;
+      midi_message_packet timedMidi{};
+      if (!midi_timed_packet::parse(incomingData, len, tick, timedMidi))
+      {
+        ++_timedPacketErrorCount;
+        EspNowMidiLog::d("[ESP-NOW] bad timed MIDI frame");
+        return;
+      }
+
+      const midi_message message = timedMidi.toMessage();
+      const bool asap = !_reduceJitterAtCostOfLatency || _jitterBufferMs == 0 ||
+                        isMidiRealtimeStatus(timedMidi.statusByte);
+      if (asap)
+      {
+        dispatchMessage(message);
+        return;
+      }
+
+      MidiJitterBuffer::PeerState *peer =
+          _jitterBuffer.findOrAllocPeer(PeerInfo::packMac(mac));
+      if (peer == nullptr)
+      {
+        dispatchMessage(message);
+        return;
+      }
+
+      MidiJitterBuffer::Entry forced{};
+      bool hasForced = false;
+      const uint32_t now = timeNowMicros();
+      const uint32_t tUs = static_cast<uint32_t>(_jitterBufferMs) * 1000UL;
+      const uint32_t absurdUs =
+          static_cast<uint32_t>(ESP_NOW_MIDI_ABSURD_OFFSET_MS) * 1000UL;
+      const uint32_t absurdCap =
+          absurdUs > (2UL * tUs) ? absurdUs : (2UL * tUs);
+      _jitterBuffer.push(*peer, now, tick, message, tUs,
+                         static_cast<uint32_t>(ESP_NOW_MIDI_REANCHOR_GAP_MS) * 1000UL,
+                         absurdCap, forced, hasForced);
+      if (hasForced)
+      {
+        dispatchMessage(forced.message);
+      }
+      return;
+    }
+
     // Convert variable-length packet to internal message format
     midi_message_packet packet;
     memset(&packet, 0, sizeof(packet)); // Zero out the packet first
     memcpy(&packet, incomingData, len); // Copy only received bytes
-    midi_message message = packet.toMessage();
-
-    switch (message.status)
-    {
-    case MIDI_NOTE_ON:
-      if (onNoteOnHandler)
-        onNoteOnHandler(message.channel, message.firstByte, message.secondByte);
-      break;
-    case MIDI_NOTE_OFF:
-      if (onNoteOffHandler)
-        onNoteOffHandler(message.channel, message.firstByte, message.secondByte);
-      break;
-    case MIDI_CONTROL_CHANGE:
-      if (onControlChangeHandler)
-        onControlChangeHandler(message.channel, message.firstByte, message.secondByte);
-      break;
-    case MIDI_PROGRAM_CHANGE:
-      if (onProgramChangeHandler)
-        onProgramChangeHandler(message.channel, message.firstByte);
-      break;
-    case MIDI_AFTERTOUCH:
-      if (onAfterTouchChannelHandler)
-        onAfterTouchChannelHandler(message.channel, message.firstByte);
-      break;
-    case MIDI_POLY_AFTERTOUCH:
-      if (onAfterTouchPolyHandler)
-        onAfterTouchPolyHandler(message.channel, message.firstByte, message.secondByte);
-      break;
-    case MIDI_PITCH_BEND:
-    {
-      int pitchBendValue = (message.secondByte << 7) | message.firstByte;
-      int16_t signedValue = pitchBendValue - 8192;
-      if (onPitchBendHandler)
-        onPitchBendHandler(message.channel, signedValue);
-      break;
-    }
-    case MIDI_START:
-      if (onStartHandler)
-        onStartHandler();
-      break;
-    case MIDI_STOP:
-      if (onStopHandler)
-        onStopHandler();
-      break;
-    case MIDI_CONTINUE:
-      if (onContinueHandler)
-        onContinueHandler();
-      break;
-    case MIDI_TIME_CLOCK:
-      if (onClockHandler)
-        onClockHandler();
-      break;
-    case MIDI_SONG_POS_POINTER:
-    {
-      int songPosValue = (message.secondByte << 7) | message.firstByte;
-      if (onSongPositionHandler)
-        onSongPositionHandler(songPosValue);
-      break;
-    }
-    case MIDI_SONG_SELECT:
-      if (onSongSelectHandler)
-        onSongSelectHandler(message.firstByte);
-      break;
-    case MIDI_TIME_CODE:
-      if (onTimeCodeHandler)
-        onTimeCodeHandler(message.firstByte);
-      break;
-    case MIDI_ACTIVE_SENSING:
-      if (onActiveSensingHandler)
-        onActiveSensingHandler();
-      break;
-    case MIDI_SYSTEM_RESET:
-      if (onSystemResetHandler)
-        onSystemResetHandler();
-      break;
-    case MIDI_UNKNOWN:
-    case MIDI_SYSEX:
-    case MIDI_TUNE_REQUEST:
-    case SYSEX_END:
-    default:
-      break;
-    }
+    dispatchMessage(packet.toMessage());
   }
 
   /**
@@ -912,6 +978,120 @@ private:
   DataSentCallback userDataSentCallback = nullptr;
   bool _autoPeerDiscovery = true;
   bool _reducePowerAtCostOfLatency = false;
+  bool _reduceJitterAtCostOfLatency = false;
+  uint16_t _jitterBufferMs = ESP_NOW_MIDI_JITTER_BUFFER_MS;
+  uint32_t _txSessionStartUs = 0;
+  uint32_t _timedPacketErrorCount = 0;
+  MidiJitterBuffer _jitterBuffer;
+
+  /** Monotonic microseconds; Arduino `micros()` or ESP-IDF `esp_timer`. */
+  static uint32_t timeNowMicros()
+  {
+#ifdef ARDUINO
+    return micros();
+#elif defined(ESP_PLATFORM)
+    return static_cast<uint32_t>(esp_timer_get_time());
+#else
+    return 0;
+#endif
+  }
+
+  esp_err_t sendMidiMessagePacket(const midi_message_packet &packet)
+  {
+    if (_reduceJitterAtCostOfLatency && !isMidiRealtimeStatus(packet.statusByte))
+    {
+      uint8_t buf[midi_timed_packet::kMaxSize];
+      const uint16_t tick =
+          midi_timed_packet::microsToTick(timeNowMicros() - _txSessionStartUs);
+      const size_t n = midi_timed_packet::pack(buf, sizeof(buf), tick, packet);
+      if (n == 0)
+      {
+        return ESP_FAIL;
+      }
+      return sendToAllPeers(buf, n);
+    }
+    return sendToAllPeers(reinterpret_cast<const uint8_t *>(&packet), packet.getDataSize());
+  }
+
+  void dispatchMessage(const midi_message &message)
+  {
+    switch (message.status)
+    {
+    case MIDI_NOTE_ON:
+      if (onNoteOnHandler)
+        onNoteOnHandler(message.channel, message.firstByte, message.secondByte);
+      break;
+    case MIDI_NOTE_OFF:
+      if (onNoteOffHandler)
+        onNoteOffHandler(message.channel, message.firstByte, message.secondByte);
+      break;
+    case MIDI_CONTROL_CHANGE:
+      if (onControlChangeHandler)
+        onControlChangeHandler(message.channel, message.firstByte, message.secondByte);
+      break;
+    case MIDI_PROGRAM_CHANGE:
+      if (onProgramChangeHandler)
+        onProgramChangeHandler(message.channel, message.firstByte);
+      break;
+    case MIDI_AFTERTOUCH:
+      if (onAfterTouchChannelHandler)
+        onAfterTouchChannelHandler(message.channel, message.firstByte);
+      break;
+    case MIDI_POLY_AFTERTOUCH:
+      if (onAfterTouchPolyHandler)
+        onAfterTouchPolyHandler(message.channel, message.firstByte, message.secondByte);
+      break;
+    case MIDI_PITCH_BEND:
+    {
+      int pitchBendValue = (message.secondByte << 7) | message.firstByte;
+      int16_t signedValue = pitchBendValue - 8192;
+      if (onPitchBendHandler)
+        onPitchBendHandler(message.channel, signedValue);
+      break;
+    }
+    case MIDI_START:
+      if (onStartHandler)
+        onStartHandler();
+      break;
+    case MIDI_STOP:
+      if (onStopHandler)
+        onStopHandler();
+      break;
+    case MIDI_CONTINUE:
+      if (onContinueHandler)
+        onContinueHandler();
+      break;
+    case MIDI_TIME_CLOCK:
+      if (onClockHandler)
+        onClockHandler();
+      break;
+    case MIDI_SONG_POS_POINTER:
+    {
+      int songPosValue = (message.secondByte << 7) | message.firstByte;
+      if (onSongPositionHandler)
+        onSongPositionHandler(songPosValue);
+      break;
+    }
+    case MIDI_SONG_SELECT:
+      if (onSongSelectHandler)
+        onSongSelectHandler(message.firstByte);
+      break;
+    case MIDI_TIME_CODE:
+      if (onTimeCodeHandler)
+        onTimeCodeHandler(message.firstByte);
+      break;
+    case MIDI_ACTIVE_SENSING:
+      if (onActiveSensingHandler)
+        onActiveSensingHandler();
+      break;
+    case MIDI_SYSTEM_RESET:
+      if (onSystemResetHandler)
+        onSystemResetHandler();
+      break;
+    default:
+      break;
+    }
+  }
 
   // MIDI Handlers
   void (*onNoteOnHandler)(byte channel, byte note, byte velocity) = nullptr;

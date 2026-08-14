@@ -71,6 +71,7 @@ static void maybeHandshake() {
 
 void setup() {
   _client.begin();
+  _client.setReduceJitterAtCostOfLatency(true);
 
   _client.setHandleNoteOn(onNoteOn);
   _client.setHandleNoteOff(onNoteOff);

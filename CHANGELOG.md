@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0
+
+- Optional jitter reduction via timed ESP-NOW frames and a receive-side jitter buffer (`setReduceJitterAtCostOfLatency`)
+
 ## 0.18.0
 
 - PlatformIO support (`library.json`, per-example `platformio.ini`, CI example builds)
