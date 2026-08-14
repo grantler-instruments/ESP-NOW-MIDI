@@ -15,6 +15,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include "./esp_now_midi_helpers.h"
+#include "./esp_now_midi_sysex.h"
 #include "./esp_now_midi_log.h"
 #include "./esp_now_midi_wifi.h"
 
@@ -626,19 +627,38 @@ public:
   }
 
   /**
-   * @brief Sends a SysEx payload to all peers.
-   * @param data SysEx bytes in the fixed 128-byte message buffer.
-   * @param length Number of payload bytes to copy from @p data.
-   * @return ESP-NOW send result.
+   * @brief Sends a SysEx payload to all peers (fragmented if needed).
+   * @param data Complete SysEx bytes, typically including `F0`…`F7`.
+   * @param length Number of bytes in @p data (1..1024).
+   * @return ESP-NOW send result of the last fragment, or `ESP_ERR_INVALID_ARG`
+   * when length is out of range / encode fails; `ESP_FAIL` when any fragment fails.
    *
-   * Incoming SysEx messages are not dispatched to a callback by this class.
+   * Large SysEx is split into versioned ESP-NOW frames (see esp_now_midi_sysex.h).
+   * Fragment sends are sequential and may briefly delay voice messages.
    */
-  inline esp_err_t sendSysex(uint8_t data[128], uint8_t length)
+  inline esp_err_t sendSysex(const uint8_t *data, uint16_t length)
   {
-    midi_sysex_message sysexMessage;
-    sysexMessage.length = length;
-    memcpy(sysexMessage.data, data, length);
-    return sendToAllPeers((uint8_t *)&sysexMessage, sizeof(sysexMessage));
+    if (data == nullptr || length == 0 || length > esp_now_midi_sysex::MAX_MESSAGE)
+      return ESP_ERR_INVALID_ARG;
+
+    const uint8_t total = esp_now_midi_sysex::fragmentCount(length);
+    uint8_t frame[esp_now_midi_sysex::MAX_FRAME];
+    esp_err_t lastErr = ESP_OK;
+
+    for (uint8_t seq = 0; seq < total; ++seq)
+    {
+      const uint16_t offset = esp_now_midi_sysex::fragmentPayloadOffset(seq);
+      const uint16_t payloadLen = esp_now_midi_sysex::fragmentPayloadLength(length, seq);
+      const size_t frameLen = esp_now_midi_sysex::encodeFrame(
+          frame, sizeof(frame), seq, total, length, data + offset, payloadLen);
+      if (frameLen == 0)
+        return ESP_ERR_INVALID_ARG;
+
+      lastErr = sendToAllPeers(frame, frameLen);
+      if (lastErr != ESP_OK)
+        return lastErr;
+    }
+    return lastErr;
   }
 
   /**
@@ -657,12 +677,17 @@ public:
     {
       addPeer(mac);
     }
-    // Handle SysEx separately (larger than 3 bytes)
-    if (len > sizeof(midi_message_packet))
+    // SysEx transport frames are always longer than short MIDI (1–3 bytes).
+    if (len > static_cast<int>(sizeof(midi_message_packet)))
     {
-      midi_sysex_message sysexMessage;
-      memcpy(&sysexMessage, incomingData, sizeof(midi_sysex_message));
-      // TODO: Handle SysEx message if needed
+      const uint8_t *complete = nullptr;
+      uint16_t completeLen = 0;
+      if (_sysexReassembler.feed(mac, incomingData, len, static_cast<uint32_t>(millis()),
+                                complete, completeLen))
+      {
+        if (onSysExHandler)
+          onSysExHandler(const_cast<uint8_t *>(complete), completeLen);
+      }
       return;
     }
 
@@ -890,6 +915,19 @@ public:
   }
 
   /**
+   * @brief Registers a SysEx receive handler.
+   * @param callback Called with a complete reconstituted SysEx buffer (1..1024
+   * bytes) after fragment reassembly; pass `nullptr` to clear it.
+   *
+   * The buffer is owned by the transport and is only valid for the duration of
+   * the callback.
+   */
+  void setHandleSysEx(void (*callback)(uint8_t *data, uint16_t length))
+  {
+    onSysExHandler = callback;
+  }
+
+  /**
    * @brief Checks whether a MAC address is registered as a peer.
    * @param mac Six-byte Wi-Fi MAC address to look up.
    * @return `true` when the peer is registered.
@@ -930,6 +968,8 @@ private:
   void (*onTimeCodeHandler)(byte value) = nullptr;
   void (*onActiveSensingHandler)() = nullptr;
   void (*onSystemResetHandler)() = nullptr;
+  void (*onSysExHandler)(uint8_t *data, uint16_t length) = nullptr;
+  esp_now_midi_sysex::Reassembler _sysexReassembler;
 };
 
 esp_now_midi *esp_now_midi::_instance = nullptr;

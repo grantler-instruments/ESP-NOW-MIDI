@@ -3,6 +3,7 @@
 #include "esp_now_midi.h"
 #include "include/MidiMessageHistory.h"
 #include "include/UsbMidiQueue.h"
+#include "include/UsbSysExQueue.h"
 #include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
@@ -223,6 +224,7 @@ namespace enomik
             espnowMIDI.setHandleClock(handleClockStatic);
             espnowMIDI.setHandleSongPosition(handleSongPositionStatic);
             espnowMIDI.setHandleSongSelect(handleSongSelectStatic);
+            espnowMIDI.setHandleSysEx(handleSysExStatic);
 
             EspNowMidiLog::i("Registered peers: %d", espnowMIDI.getPeersCount());
 
@@ -261,6 +263,7 @@ namespace enomik
                 EspNowMidiLog::i("USB disconnected");
                 _usbMidiInitialized = false;
                 _usbMidiQueue.clear();
+                _usbSysExQueue.clear();
             }
 
             if (!_usbMidiInitialized && TinyUSBDevice.mounted())
@@ -283,6 +286,7 @@ namespace enomik
                 DONGLE_USBMIDI.setHandleClock(onClockStatic);
                 DONGLE_USBMIDI.setHandleSongPosition(onSongPositionStatic);
                 DONGLE_USBMIDI.setHandleSongSelect(onSongSelectStatic);
+                DONGLE_USBMIDI.setHandleSystemExclusive(onSysExStatic);
 
                 _usbMidiInitialized = true;
                 EspNowMidiLog::i("USB MIDI ready!");
@@ -292,6 +296,7 @@ namespace enomik
             {
                 DONGLE_USBMIDI.read();
                 drainUsbMidiQueue();
+                drainUsbSysExQueue();
             }
 
             logUsbState(now);
@@ -507,6 +512,7 @@ namespace enomik
         uint32_t _lastDisplayUpdate;
         uint32_t _displayIntervalMs;
         UsbMidiQueue _usbMidiQueue;
+        UsbSysExQueue _usbSysExQueue;
         MidiMessageHistory _messageHistory[DONGLE_MAX_HISTORY];
         int _messageIndex;
         uint8_t _baseMac[6];
@@ -716,7 +722,7 @@ namespace enomik
 
             if (TinyUSBDevice.suspended())
             {
-                if (_usbMidiQueue.hasPending())
+                if (_usbMidiQueue.hasPending() || _usbSysExQueue.hasPending())
                 {
                     TinyUSBDevice.remoteWakeup();
                 }
@@ -736,6 +742,27 @@ namespace enomik
                     break;
                 }
                 _usbMidiQueue.consumeHead();
+            }
+        }
+
+        void drainUsbSysExQueue()
+        {
+            if (!TinyUSBDevice.mounted() || TinyUSBDevice.suspended() || !TinyUSBDevice.ready())
+            {
+                return;
+            }
+
+            const uint8_t *data = nullptr;
+            uint16_t length = 0;
+            while (_usbSysExQueue.peek(data, length))
+            {
+#ifdef ARDUINO
+                // Array already includes F0/F7 boundaries.
+                DONGLE_USBMIDI.sendSysEx(length, data, true);
+#else
+                DONGLE_USBMIDI.sendSysEx(length, data);
+#endif
+                _usbSysExQueue.consumeHead();
             }
         }
 
@@ -937,6 +964,13 @@ namespace enomik
             instancePtr->bridgeToHost(msg);
         }
 
+        static void handleSysExStatic(uint8_t *data, uint16_t length)
+        {
+            if (!instancePtr || data == nullptr || length == 0)
+                return;
+            instancePtr->_usbSysExQueue.enqueue(data, length);
+        }
+
         // --- USB host → ESP-NOW ---
 
         static void onNoteOnStatic(byte channel, byte pitch, byte velocity)
@@ -1094,6 +1128,18 @@ namespace enomik
             msg.firstByte = value;
             msg.secondByte = 0;
             instancePtr->bridgeFromHost(msg);
+        }
+
+        static void onSysExStatic(byte *data, unsigned length)
+        {
+            if (!instancePtr || data == nullptr || length == 0)
+                return;
+            if (length > esp_now_midi_sysex::MAX_MESSAGE)
+            {
+                EspNowMidiLog::w("USB SysEx too large (%u), dropping", static_cast<unsigned>(length));
+                return;
+            }
+            instancePtr->espnowMIDI.sendSysex(data, static_cast<uint16_t>(length));
         }
     };
 
