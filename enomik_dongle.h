@@ -104,6 +104,10 @@ namespace enomik
               _display(nullptr),
               _lastDisplayUpdate(0),
               _displayIntervalMs(DONGLE_UPDATE_DISPLAY_INTERVAL_MS),
+              _displayDirty(true),
+              _lastDrawnPeerCount(-1),
+              _lastDrawnUsbStatus(0),
+              _lastDrawnSecond(static_cast<unsigned long>(-1)),
               _messageIndex(0),
               _manufacturer("grantler instruments"),
               _product("enomik3000_dongle"),
@@ -506,6 +510,10 @@ namespace enomik
         Display *_display;
         uint32_t _lastDisplayUpdate;
         uint32_t _displayIntervalMs;
+        bool _displayDirty;
+        int _lastDrawnPeerCount;
+        char _lastDrawnUsbStatus;
+        unsigned long _lastDrawnSecond;
         UsbMidiQueue _usbMidiQueue;
         MidiMessageHistory _messageHistory[DONGLE_MAX_HISTORY];
         int _messageIndex;
@@ -522,6 +530,7 @@ namespace enomik
             _messageHistory[_messageIndex].outgoing = outgoing;
             _messageHistory[_messageIndex].timestamp = millis();
             _messageIndex = (_messageIndex + 1) % DONGLE_MAX_HISTORY;
+            _displayDirty = true;
         }
 
         void queueToUsb(const midi_message &msg, bool addHistory)
@@ -768,11 +777,31 @@ namespace enomik
                 return;
             }
             _lastDisplayUpdate = now;
+
+            const int peerCount = espnowMIDI.getPeersCount();
+            const char usbStatus = getUsbStatusChar();
+            const unsigned long second = now / 1000;
+
+            // Header text (uptime, con/usb toggle) only changes once a second, so a
+            // second boundary forces a redraw even without new history/peer/usb
+            // activity. Otherwise skip the whole clear+draw+flush when nothing the
+            // display shows has actually changed since the last frame.
+            if (!_displayDirty && peerCount == _lastDrawnPeerCount &&
+                usbStatus == _lastDrawnUsbStatus && second == _lastDrawnSecond)
+            {
+                return;
+            }
+
+            _displayDirty = false;
+            _lastDrawnPeerCount = peerCount;
+            _lastDrawnUsbStatus = usbStatus;
+            _lastDrawnSecond = second;
+
             _display->update(
                 _baseMac,
                 _version.c_str(),
-                espnowMIDI.getPeersCount(),
-                getUsbStatusChar(),
+                peerCount,
+                usbStatus,
                 _messageHistory,
                 DONGLE_MAX_HISTORY,
                 _messageIndex);
