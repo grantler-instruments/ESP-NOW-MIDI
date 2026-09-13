@@ -216,7 +216,7 @@ private:
   // unconditional full-frame push. Mirrors that function's own I2C sequence
   // (see Adafruit_SSD1306::display()) restricted to a page range.
   void pushPages(uint8_t pageStart, uint8_t pageEnd) {
-    static constexpr uint16_t WIRE_CHUNK = 32;
+    static constexpr uint16_t WIRE_CHUNK = 128; // matches ESP32 core's I2C_BUFFER_LENGTH
 
     oled_.ssd1306_command(SSD1306_PAGEADDR);
     oled_.ssd1306_command(pageStart);
