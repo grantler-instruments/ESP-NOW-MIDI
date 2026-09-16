@@ -80,6 +80,8 @@ public:
             EspNowMidiLog::e("PeerStorage: nvs_open failed: %d", static_cast<int>(err));
             return false;
         }
+#else
+        (void)eepromSize;
 #endif
 
         load();
@@ -206,18 +208,27 @@ private:
 #if defined(ESP_PLATFORM) && !defined(ARDUINO)
     nvs_handle_t nvsHandle;
     char nvsKey[16];
+#elif !defined(ARDUINO)
+    StorageFormat ramStore_{};
+    bool ramValid_ = false;
 #endif
 
     void load() {
         StorageFormat storage;
+        bool found = false;
 
 #ifdef ARDUINO
         EEPROM.get(eepromAddr, storage);
-        bool found = true;
+        found = true;
 #elif defined(ESP_PLATFORM)
         size_t length = sizeof(storage);
         esp_err_t err = nvs_get_blob(nvsHandle, nvsKey, &storage, &length);
-        bool found = (err == ESP_OK && length == sizeof(storage));
+        found = (err == ESP_OK && length == sizeof(storage));
+#else
+        found = ramValid_;
+        if (found) {
+            storage = ramStore_;
+        }
 #endif
 
         if (!found || storage.validFlag != VALID_FLAG) {
@@ -258,6 +269,9 @@ private:
         if (err != ESP_OK) {
             EspNowMidiLog::e("PeerStorage: nvs_commit failed: %d", static_cast<int>(err));
         }
+#else
+        ramStore_ = storage;
+        ramValid_ = true;
 #endif
     }
 

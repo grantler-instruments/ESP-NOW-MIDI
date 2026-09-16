@@ -1,6 +1,8 @@
 #pragma once
 
 #include "esp_now_midi.h"
+#include "include/PeerStorage.h"
+#include "include/PeerMuteList.h"
 #include "include/MidiMessageHistory.h"
 #include "include/UsbMidiQueue.h"
 #include "include/esp_now_midi_compat.h"
@@ -228,6 +230,43 @@ namespace enomik
             espnowMIDI.setHandleSongPosition(handleSongPositionStatic);
             espnowMIDI.setHandleSongSelect(handleSongSelectStatic);
 
+            if (!peerStorage.begin())
+            {
+                EspNowMidiLog::e("Failed to initialize peer storage");
+            }
+            else
+            {
+                EspNowMidiLog::i("Restoring peers from storage...");
+                int restoredCount = 0;
+                int skippedCount = 0;
+                for (int i = 0; i < peerStorage.count(); i++)
+                {
+                    const uint8_t *mac = peerStorage.get(i);
+                    if (!mac)
+                    {
+                        continue;
+                    }
+                    if (!espnowMIDI.hasPeer(mac))
+                    {
+                        if (espnowMIDI.addPeer(mac))
+                        {
+                            EspNowMidiLog::i("Restored peer: %s", macToString(mac).c_str());
+                            restoredCount++;
+                        }
+                        else
+                        {
+                            EspNowMidiLog::e("Failed to restore peer: %s", macToString(mac).c_str());
+                        }
+                    }
+                    else
+                    {
+                        skippedCount++;
+                    }
+                }
+                EspNowMidiLog::i("Peer restoration complete: %d restored, %d skipped",
+                              restoredCount, skippedCount);
+            }
+
             EspNowMidiLog::i("Registered peers: %d", espnowMIDI.getPeersCount());
 
             if (_display)
@@ -348,9 +387,107 @@ namespace enomik
             return espnowMIDI.getPeersCount();
         }
 
+        /**
+         * @brief Gets the MAC address of a registered peer.
+         * @param index Peer index in `[0, getPeersCount())`.
+         * @return Pointer to the 6-byte MAC, or `nullptr` when @p index is out of range.
+         */
+        const uint8_t *getPeer(int index) const
+        {
+            return espnowMIDI.getPeer(index);
+        }
+
+        /** @brief Force the next loop() to refresh the display (e.g. after UI input). */
+        void invalidateDisplay()
+        {
+            _displayDirty = true;
+            _lastDisplayUpdate = 0;
+        }
+
         bool addPeer(const uint8_t mac[6])
         {
-            return espnowMIDI.addPeer(mac);
+            if (!mac)
+            {
+                return false;
+            }
+            if (!espnowMIDI.hasPeer(mac))
+            {
+                if (!espnowMIDI.addPeer(mac))
+                {
+                    return false;
+                }
+            }
+            if (!peerStorage.exists(mac))
+            {
+                if (!peerStorage.add(mac))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool removePeer(const uint8_t mac[6])
+        {
+            if (!mac)
+            {
+                return false;
+            }
+            clearMuted(mac);
+            const bool live = espnowMIDI.removePeer(mac);
+            bool stored = false;
+            if (peerStorage.exists(mac))
+            {
+                stored = peerStorage.remove(mac);
+            }
+            return live || stored;
+        }
+
+        bool removePeer(int index)
+        {
+            const uint8_t *mac = espnowMIDI.getPeer(index);
+            if (!mac)
+            {
+                return false;
+            }
+            uint8_t copy[6];
+            memcpy(copy, mac, 6);
+            return removePeer(copy);
+        }
+
+        /**
+         * @brief Mutes or unmutes a registered peer for this session.
+         *
+         * Muted peers are ignored in both directions (USB ↔ ESP-NOW). Mute is
+         * not persisted; deleting a peer also clears its mute.
+         */
+        bool setMuted(const uint8_t mac[6], bool muted)
+        {
+            if (!mac || !espnowMIDI.hasPeer(mac))
+            {
+                return false;
+            }
+            if (!_mutes.set(mac, muted))
+            {
+                return false;
+            }
+            _displayDirty = true;
+            return true;
+        }
+
+        bool setMuted(int index, bool muted)
+        {
+            return setMuted(espnowMIDI.getPeer(index), muted);
+        }
+
+        bool isMuted(const uint8_t mac[6]) const
+        {
+            return _mutes.contains(mac);
+        }
+
+        bool isMuted(int index) const
+        {
+            return isMuted(espnowMIDI.getPeer(index));
         }
 
         bool addPeerFromString(const PortableString &macStr)
@@ -373,7 +510,7 @@ namespace enomik
             msg.firstByte = note;
             msg.secondByte = velocity;
             queueToUsb(msg, true);
-            return espnowMIDI.sendNoteOn(note, velocity, channel) == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendNoteOff(byte note, byte velocity, byte channel)
@@ -384,7 +521,7 @@ namespace enomik
             msg.firstByte = note;
             msg.secondByte = velocity;
             queueToUsb(msg, true);
-            return espnowMIDI.sendNoteOff(note, velocity, channel) == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendControlChange(byte control, byte value, byte channel)
@@ -395,7 +532,7 @@ namespace enomik
             msg.firstByte = control;
             msg.secondByte = value;
             queueToUsb(msg, true);
-            return espnowMIDI.sendControlChange(control, value, channel) == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendProgramChange(byte program, byte channel)
@@ -406,7 +543,7 @@ namespace enomik
             msg.firstByte = program;
             msg.secondByte = 0;
             queueToUsb(msg, true);
-            return espnowMIDI.sendProgramChange(program, channel) == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendAfterTouch(byte pressure, byte channel)
@@ -417,7 +554,7 @@ namespace enomik
             msg.firstByte = pressure;
             msg.secondByte = 0;
             queueToUsb(msg, true);
-            return espnowMIDI.sendAfterTouch(pressure, channel) == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendPolyAfterTouch(byte note, byte pressure, byte channel)
@@ -428,7 +565,7 @@ namespace enomik
             msg.firstByte = note;
             msg.secondByte = pressure;
             queueToUsb(msg, true);
-            return espnowMIDI.sendAfterTouchPoly(note, pressure, channel) == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendPitchBend(int value, byte channel)
@@ -440,7 +577,7 @@ namespace enomik
             msg.firstByte = unsignedValue & 0x7F;
             msg.secondByte = (unsignedValue >> 7) & 0x7F;
             queueToUsb(msg, true);
-            return espnowMIDI.sendPitchBend(value, channel) == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendStart()
@@ -451,7 +588,7 @@ namespace enomik
             msg.firstByte = 0;
             msg.secondByte = 0;
             queueToUsb(msg, true);
-            return espnowMIDI.sendStart() == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendStop()
@@ -462,7 +599,7 @@ namespace enomik
             msg.firstByte = 0;
             msg.secondByte = 0;
             queueToUsb(msg, true);
-            return espnowMIDI.sendStop() == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendContinue()
@@ -473,13 +610,18 @@ namespace enomik
             msg.firstByte = 0;
             msg.secondByte = 0;
             queueToUsb(msg, true);
-            return espnowMIDI.sendContinue() == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendClock()
         {
             _usbMidiQueue.enqueueClock();
-            return espnowMIDI.sendClock() == ESP_OK;
+            midi_message msg;
+            msg.status = MIDI_TIME_CLOCK;
+            msg.channel = 0;
+            msg.firstByte = 0;
+            msg.secondByte = 0;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendSongPosition(uint16_t value)
@@ -490,7 +632,7 @@ namespace enomik
             msg.firstByte = value & 0x7F;
             msg.secondByte = (value >> 7) & 0x7F;
             queueToUsb(msg, false);
-            return espnowMIDI.sendSongPosition(value) == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
         bool sendSongSelect(uint8_t value)
@@ -501,7 +643,7 @@ namespace enomik
             msg.firstByte = value;
             msg.secondByte = 0;
             queueToUsb(msg, true);
-            return espnowMIDI.sendSongSelect(value) == ESP_OK;
+            return sendMidiToUnmutedPeers(msg) == ESP_OK;
         }
 
     private:
@@ -523,6 +665,8 @@ namespace enomik
         PortableString _version;
         BridgeFilter _toHostFilter;
         BridgeFilter _fromHostFilter;
+        PeerStorage peerStorage;
+        PeerMuteList _mutes;
 
         void addToHistory(const midi_message &msg, bool outgoing)
         {
@@ -542,9 +686,14 @@ namespace enomik
             _usbMidiQueue.enqueue(msg);
         }
 
-        /** ESP-NOW → USB host. Runs toHost filter, then queues (clock coalesced). */
+        /** ESP-NOW → USB host. Drops muted senders, then toHost filter, then queues. */
         void bridgeToHost(midi_message &msg, bool addHistory = true)
         {
+            const uint8_t *from = espnowMIDI.lastSenderMac();
+            if (from && isMuted(from))
+            {
+                return;
+            }
             if (_toHostFilter && !_toHostFilter(msg))
             {
                 return;
@@ -573,56 +722,42 @@ namespace enomik
 
         void dispatchToEspNow(const midi_message &msg)
         {
-            switch (msg.status)
+            sendMidiToUnmutedPeers(msg);
+        }
+
+        void clearMuted(const uint8_t mac[6])
+        {
+            _mutes.clear(mac);
+            _displayDirty = true;
+        }
+
+        esp_err_t sendToUnmutedPeers(const uint8_t *data, size_t len)
+        {
+            const int n = espnowMIDI.getPeersCount();
+            if (n == 0)
             {
-            case MIDI_NOTE_ON:
-                espnowMIDI.sendNoteOn(msg.firstByte, msg.secondByte, msg.channel);
-                break;
-            case MIDI_NOTE_OFF:
-                espnowMIDI.sendNoteOff(msg.firstByte, msg.secondByte, msg.channel);
-                break;
-            case MIDI_CONTROL_CHANGE:
-                espnowMIDI.sendControlChange(msg.firstByte, msg.secondByte, msg.channel);
-                break;
-            case MIDI_PROGRAM_CHANGE:
-                espnowMIDI.sendProgramChange(msg.firstByte, msg.channel);
-                break;
-            case MIDI_AFTERTOUCH:
-                espnowMIDI.sendAfterTouch(msg.firstByte, msg.channel);
-                break;
-            case MIDI_POLY_AFTERTOUCH:
-                espnowMIDI.sendAfterTouchPoly(msg.firstByte, msg.secondByte, msg.channel);
-                break;
-            case MIDI_PITCH_BEND:
+                return ESP_FAIL;
+            }
+            esp_err_t result = ESP_OK;
+            for (int i = 0; i < n; i++)
             {
-                const int value = ((msg.secondByte << 7) | msg.firstByte) - 8192;
-                espnowMIDI.sendPitchBend(value, msg.channel);
-                break;
+                const uint8_t *mac = espnowMIDI.getPeer(i);
+                if (!mac || isMuted(mac))
+                {
+                    continue;
+                }
+                const esp_err_t err = espnowMIDI.send(mac, data, len);
+                if (err != ESP_OK)
+                {
+                    result = err;
+                }
             }
-            case MIDI_START:
-                espnowMIDI.sendStart();
-                break;
-            case MIDI_STOP:
-                espnowMIDI.sendStop();
-                break;
-            case MIDI_CONTINUE:
-                espnowMIDI.sendContinue();
-                break;
-            case MIDI_TIME_CLOCK:
-                espnowMIDI.sendClock();
-                break;
-            case MIDI_SONG_POS_POINTER:
-            {
-                const uint16_t pos = (msg.secondByte << 7) | msg.firstByte;
-                espnowMIDI.sendSongPosition(pos);
-                break;
-            }
-            case MIDI_SONG_SELECT:
-                espnowMIDI.sendSongSelect(msg.firstByte);
-                break;
-            default:
-                break;
-            }
+            return result;
+        }
+
+        esp_err_t sendMidiToUnmutedPeers(const midi_message &msg)
+        {
+            return sendToUnmutedPeers(reinterpret_cast<const uint8_t *>(&msg), sizeof(msg));
         }
 
         void readMacAddress()

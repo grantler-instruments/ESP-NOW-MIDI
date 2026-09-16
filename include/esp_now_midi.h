@@ -261,6 +261,80 @@ public:
     return _peersCount;
   }
 
+  /**
+   * @brief Gets the MAC address of a registered peer.
+   * @param index Peer index in `[0, getPeersCount())`.
+   * @return Pointer to the 6-byte MAC, or `nullptr` when @p index is out of range.
+   */
+  const uint8_t *getPeer(int index) const
+  {
+    if (index < 0 || index >= _peersCount)
+    {
+      return nullptr;
+    }
+    return _peers[index].mac;
+  }
+
+  /**
+   * @brief Removes a registered peer from ESP-NOW and the local list.
+   * @param macAddress Six-byte Wi-Fi MAC address of the peer.
+   * @return `true` when the peer was found and removed.
+   */
+  bool removePeer(const uint8_t macAddress[6])
+  {
+    if (!macAddress)
+    {
+      return false;
+    }
+
+    int index = -1;
+    const uint64_t packed = PeerInfo::packMac(macAddress);
+    for (int i = 0; i < _peersCount; i++)
+    {
+      if (_peers[i].packed_mac == packed)
+      {
+        index = i;
+        break;
+      }
+    }
+    if (index < 0)
+    {
+      return false;
+    }
+
+    const esp_err_t result = esp_now_del_peer(_peers[index].mac);
+    if (result != ESP_OK)
+    {
+      EspNowMidiLog::e("Failed to remove peer, error: %d", result);
+      return false;
+    }
+
+    EspNowMidiLog::mac("Removed peer: ", macAddress);
+    for (int i = index; i < _peersCount - 1; i++)
+    {
+      _peers[i] = _peers[i + 1];
+    }
+    _peersCount--;
+    memset(&_peers[_peersCount], 0, sizeof(_peers[_peersCount]));
+    return true;
+  }
+
+  /**
+   * @brief Removes a registered peer by list index.
+   * @param index Peer index in `[0, getPeersCount())`.
+   * @return `true` when the peer was found and removed.
+   */
+  bool removePeer(int index)
+  {
+    if (index < 0 || index >= _peersCount)
+    {
+      return false;
+    }
+    uint8_t mac[6];
+    memcpy(mac, _peers[index].mac, 6);
+    return removePeer(mac);
+  }
+
   /** @brief Logs every registered peer MAC address. */
   void printPeers() const
   {
@@ -299,6 +373,22 @@ public:
       }
     }
     return result;
+  }
+
+  /**
+   * @brief Sends raw data to a single ESP-NOW peer.
+   * @param macAddress Six-byte Wi-Fi MAC address of the peer.
+   * @param data Bytes to transmit.
+   * @param len Number of bytes in @p data.
+   * @return ESP-NOW send result.
+   */
+  esp_err_t send(const uint8_t macAddress[6], const uint8_t *data, size_t len)
+  {
+    if (!macAddress || !data)
+    {
+      return ESP_ERR_INVALID_ARG;
+    }
+    return esp_now_send(macAddress, data, len);
   }
 
   /**
@@ -653,6 +743,11 @@ public:
    */
   void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
   {
+    if (mac)
+    {
+      memcpy(_lastSenderMac, mac, 6);
+      _lastSenderValid = true;
+    }
     if (_autoPeerDiscovery && !hasPeer(mac))
     {
       addPeer(mac);
@@ -905,6 +1000,15 @@ public:
     return false;
   }
 
+  /**
+   * @brief MAC of the peer that sent the packet currently being dispatched.
+   * @return Pointer to 6 bytes, or `nullptr` if no packet has been received yet.
+   */
+  const uint8_t *lastSenderMac() const
+  {
+    return _lastSenderValid ? _lastSenderMac : nullptr;
+  }
+
 private:
   PeerInfo _peers[MAX_PEERS];     // Array to store peer info with optimized MAC storage
   int _peersCount;                // Current number of peers
@@ -912,6 +1016,8 @@ private:
   DataSentCallback userDataSentCallback = nullptr;
   bool _autoPeerDiscovery = true;
   bool _reducePowerAtCostOfLatency = false;
+  uint8_t _lastSenderMac[6] = {0};
+  bool _lastSenderValid = false;
 
   // MIDI Handlers
   void (*onNoteOnHandler)(byte channel, byte note, byte velocity) = nullptr;
