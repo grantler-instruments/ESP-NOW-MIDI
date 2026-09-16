@@ -117,9 +117,8 @@ private:
   int lastOverlayPeerCount_ = -1;
   int lastAddNibble_ = -1;
   uint8_t lastAddMac_[6] = {0};
-  int lastContextCursor_ = -1;
   uint32_t lastMutedMask_ = 0;
-  bool lastContextMuted_ = false;
+  bool lastPowerSave_ = false;
 
   uint32_t mutedMaskFor(int peerCount) const {
     uint32_t mask = 0;
@@ -148,9 +147,8 @@ private:
     const int scroll = menu_->scroll();
     const int addNibble = menu_->addNibble();
     const uint8_t* addMac = menu_->addMac();
-    const int contextCursor = menu_->contextCursor();
     const uint32_t mutedMask = mutedMaskFor(peerCount);
-    const bool contextMuted = dongle_ && dongle_->isMuted(menu_->contextMac());
+    const bool powerSave = dongle_ && dongle_->isPowerSave();
     if (!forceFullPush_ &&
         page == lastDrawnPage_ &&
         cursor == lastCursor_ &&
@@ -158,9 +156,8 @@ private:
         peerCount == lastOverlayPeerCount_ &&
         addNibble == lastAddNibble_ &&
         memcmp(addMac, lastAddMac_, 6) == 0 &&
-        contextCursor == lastContextCursor_ &&
         mutedMask == lastMutedMask_ &&
-        contextMuted == lastContextMuted_) {
+        powerSave == lastPowerSave_) {
       return;
     }
 
@@ -170,82 +167,41 @@ private:
     lastOverlayPeerCount_ = peerCount;
     lastAddNibble_ = addNibble;
     memcpy(lastAddMac_, addMac, 6);
-    lastContextCursor_ = contextCursor;
     lastMutedMask_ = mutedMask;
-    lastContextMuted_ = contextMuted;
+    lastPowerSave_ = powerSave;
     forceFullPush_ = false;
 
     oled_.clearDisplay();
-    if (page == GrantlerMenu::Page::Menu) {
-      drawMenu();
-    } else if (page == GrantlerMenu::Page::Peers) {
-      drawPeers(peerCount);
-    } else if (page == GrantlerMenu::Page::AddPeer) {
+    if (page == GrantlerMenu::Page::AddPeer) {
       drawAddPeer();
-    } else if (page == GrantlerMenu::Page::PeerContext) {
-      drawPeerContext();
+    } else {
+      drawListPage();
     }
+    drawButtonHints();
     pushPages(0, 7);
   }
 
-  void drawMenu() {
+  void drawListPage() {
     oled_.setCursor(0, 0);
-    oled_.print("MENU");
+    oled_.print(menu_->title());
 
-    for (int i = 0; i < GrantlerMenu::kEntryCount; ++i) {
-      oled_.setCursor(0, 8 + i * 8);
-      oled_.print(i == menu_->cursor() ? "> " : "  ");
-      oled_.print(GrantlerMenu::kEntries[i].label);
-    }
-  }
-
-  void drawPeers(int peerCount) {
-    char title[24];
-    snprintf(title, sizeof(title), "Peers %d/%d", peerCount, MAX_PEERS);
-    oled_.setCursor(0, 0);
-    oled_.print(title);
-
-    const int listCount = GrantlerMenu::peerListCount(peerCount);
+    const int count = menu_->listCount();
     const int scroll = menu_->scroll();
     const int cursor = menu_->cursor();
-
     for (int row = 0; row < GrantlerMenu::kVisibleRows; ++row) {
       const int idx = scroll + row;
-      if (idx >= listCount) {
+      if (idx >= count) {
         break;
       }
-
       oled_.setCursor(0, 8 + row * 8);
       oled_.print(idx == cursor ? "> " : "  ");
-
-      if (idx == 0) {
-        oled_.print("Back");
-        continue;
-      }
-      if (idx == listCount - 1) {
-        oled_.print("Add peer");
-        continue;
-      }
-
-      const int peerIndex = idx - 1;
-      const uint8_t* mac = dongle_ ? dongle_->getPeer(peerIndex) : nullptr;
-      if (!mac) {
-        continue;
-      }
-      const bool muted = dongle_->isMuted(peerIndex);
-      char line[20];
-      snprintf(line, sizeof(line),
-               "%s%02X:%02X:%02X:%02X:%02X:%02X",
-               muted ? "M " : "",
-               mac[0], mac[1], mac[2],
-               mac[3], mac[4], mac[5]);
-      oled_.print(line);
+      oled_.print(menu_->listLabel(idx));
     }
   }
 
   void drawAddPeer() {
     oled_.setCursor(0, 0);
-    oled_.print("Add peer");
+    oled_.print(menu_->title());
 
     const uint8_t* mac = menu_->addMac();
     const int current = menu_->addNibble();
@@ -270,28 +226,18 @@ private:
         }
       }
     }
-
-    oled_.setCursor(0, 40);
-    oled_.print("16: digit  17: next");
-    oled_.setCursor(0, 48);
-    oled_.print("hold 17: cancel");
   }
 
-  void drawPeerContext() {
-    const uint8_t* mac = menu_->contextMac();
-    char title[18];
-    snprintf(title, sizeof(title),
-             "%02X:%02X:%02X:%02X:%02X:%02X",
-             mac[0], mac[1], mac[2],
-             mac[3], mac[4], mac[5]);
-    oled_.setCursor(0, 0);
-    oled_.print(title);
+  void drawButtonHints() {
+    oled_.drawFastHLine(0, 55, SCREEN_WIDTH, SSD1306_WHITE);
 
-    for (int i = 0; i < GrantlerMenu::kPeerContextCount; ++i) {
-      oled_.setCursor(0, 16 + i * 8);
-      oled_.print(i == menu_->contextCursor() ? "> " : "  ");
-      oled_.print(menu_->peerContextLabel(i));
-    }
+    // Up/down triangles for the cursor button (default font has no arrows).
+    oled_.fillTriangle(3, 57, 0, 62, 6, 62, SSD1306_WHITE);
+    oled_.fillTriangle(11, 62, 8, 57, 14, 57, SSD1306_WHITE);
+
+    const char* right = "ok";
+    oled_.setCursor(SCREEN_WIDTH - 6 * static_cast<int>(strlen(right)), 56);
+    oled_.print(right);
   }
 
   // Page 0 (rows 0-7): never repainted after this — the mac never changes.

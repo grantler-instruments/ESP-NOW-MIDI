@@ -43,6 +43,9 @@ void setup() {
   buttonConfig->setFeature(ButtonConfig::kFeatureRepeatPress);
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
   buttonConfig->setLongPressDelay(BTN_LONG_PRESS_MS);
+  // AceButton ignores a Clicked if the press lasted longer than clickDelay
+  // (default 200 ms). Match long-press so a normal OK still enters / Backs.
+  buttonConfig->setClickDelay(BTN_LONG_PRESS_MS);
 
   // Optional: hard-add a known peer (or wait for auto-discovery)
   // uint8_t clientMac[6] = { 0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62 };

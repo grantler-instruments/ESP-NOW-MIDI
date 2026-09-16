@@ -9,6 +9,7 @@
 #include "utils/esp.h"
 #include "utils/mac.h"
 #include "include/version.h"
+#include "include/esp_now_midi_prefs.h"
 #ifdef ARDUINO
 #include <WiFi.h>
 #endif
@@ -207,7 +208,7 @@ namespace enomik
             }
             TinyUSBDevice.attach();
 
-            if (!espnowMIDI.begin())
+            if (!espnowMIDI.begin(loadPowerSavePreference()))
             {
                 EspNowMidiLog::e("Failed to initialize ESP-NOW MIDI");
                 return false;
@@ -456,6 +457,59 @@ namespace enomik
         }
 
         /**
+         * @brief Replaces a peer MAC in live ESP-NOW + storage.
+         *
+         * Same address is a no-op. Refuses if @p newMac is already another
+         * peer. Session mute follows the new address.
+         */
+        bool replacePeer(const uint8_t oldMac[6], const uint8_t newMac[6])
+        {
+            if (!oldMac || !newMac)
+            {
+                return false;
+            }
+            if (memcmp(oldMac, newMac, 6) == 0)
+            {
+                return true;
+            }
+            const bool oldLive = espnowMIDI.hasPeer(oldMac);
+            const bool oldStored = peerStorage.exists(oldMac);
+            if (!oldLive && !oldStored)
+            {
+                return false;
+            }
+            if (espnowMIDI.hasPeer(newMac) || peerStorage.exists(newMac))
+            {
+                return false;
+            }
+
+            uint8_t oldCopy[6];
+            uint8_t newCopy[6];
+            memcpy(oldCopy, oldMac, 6);
+            memcpy(newCopy, newMac, 6);
+            const bool muted = isMuted(oldCopy);
+
+            if (!removePeer(oldCopy))
+            {
+                return false;
+            }
+            if (!addPeer(newCopy))
+            {
+                addPeer(oldCopy);
+                if (muted)
+                {
+                    setMuted(oldCopy, true);
+                }
+                return false;
+            }
+            if (muted)
+            {
+                setMuted(newCopy, true);
+            }
+            return true;
+        }
+
+        /**
          * @brief Mutes or unmutes a registered peer for this session.
          *
          * Muted peers are ignored in both directions (USB ↔ ESP-NOW). Mute is
@@ -488,6 +542,24 @@ namespace enomik
         bool isMuted(int index) const
         {
             return isMuted(espnowMIDI.getPeer(index));
+        }
+
+        /**
+         * @brief Power-save preference (modem sleep + lower TX power).
+         *
+         * Off by default for lower latency. Stored in NVS/Preferences and
+         * restored on boot.
+         */
+        void setPowerSave(bool enabled)
+        {
+            espnowMIDI.setReducePowerAtCostOfLatency(enabled);
+            savePowerSavePreference(enabled);
+            _displayDirty = true;
+        }
+
+        bool isPowerSave() const
+        {
+            return espnowMIDI.getReducePowerAtCostOfLatency();
         }
 
         bool addPeerFromString(const PortableString &macStr)
