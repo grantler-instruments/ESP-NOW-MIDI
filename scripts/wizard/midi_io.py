@@ -63,8 +63,18 @@ class MidiLink:
     def send(self, msg: mido.Message) -> None:
         self.outport.send(msg)
 
-    def wait_for(self, predicate, timeout: float = 2.0, allow_esc: bool = False):
-        """Return the first matching MIDI message, None on timeout, or CANCELLED."""
+    def wait_for(
+        self,
+        predicate,
+        timeout: float = 2.0,
+        allow_esc: bool = False,
+        on_message=None,
+    ):
+        """Return the first matching MIDI message, None on timeout, or CANCELLED.
+
+        If `on_message` is set, it is called for every incoming message before
+        the predicate runs (useful for logging received values).
+        """
         deadline = time.monotonic() + timeout
         ctx = _cbreak_stdin() if allow_esc else nullcontext()
         with ctx:
@@ -72,6 +82,8 @@ class MidiLink:
                 if allow_esc and _poll_esc():
                     return CANCELLED
                 for msg in self.inport.iter_pending():
+                    if on_message is not None:
+                        on_message(msg)
                     if predicate(msg):
                         return msg
                 time.sleep(0.005)

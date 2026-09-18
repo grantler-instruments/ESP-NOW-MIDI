@@ -3,34 +3,40 @@
 #include "enomik_dongle.h"
 #include "./config.h"
 #include "./logo.h"
+#include "./Menu.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
 #include <cstring>
+
+using GrantlerMenu = Menu<enomik::Dongle>;
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 
 /**
- * @brief Example OLED status UI for enomik::Dongle.
+ * @brief OLED status + two-button menu UI for the Grantler dongle.
  *
- * Subclass enomik::Dongle::Display and register with setDisplay() to use a
- * different panel or layout.
- *
- * Only redraws what actually changed, and only pushes the affected SSD1306
- * hardware page(s) over I2C instead of the whole 1024-byte frame:
+ * Status page only redraws what actually changed, and only pushes the affected
+ * SSD1306 hardware page(s) over I2C instead of the whole 1024-byte frame:
  *   - page 0 (mac line): static, drawn once when the splash ends, never again
  *   - page 1 (version/peers/usb/uptime line): redrawn+pushed only when its
  *     text changes
  *   - pages 2-7 (separator + history): the separator is drawn once with the
  *     mac line; the history block is redrawn+pushed only when a new message
  *     arrives (historyHead advances)
+ *
+ * Menu and Peers pages replace the full frame while they are active, then
+ * restore the status chrome when returning home.
  */
 class SSD1306Display final : public enomik::Dongle::Display {
 public:
   SSD1306Display()
     : oled_(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET) {}
+
+  void setDongle(enomik::Dongle* dongle) { dongle_ = dongle; }
+  void setMenu(GrantlerMenu* menu) { menu_ = menu; }
 
   bool begin() override {
     if (!oled_.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -57,8 +63,20 @@ public:
       }
       splashUntilMs_ = 0;
 
-      // Splash bitmap occupied the whole buffer; wipe it and lay down the
-      // parts of the real UI that never change again (mac line, separator).
+      lastHeaderLine2_[0] = '\0';
+      lastHistoryHead_ = -1;
+      forceFullPush_ = true;
+    }
+
+    const GrantlerMenu::Page page = menu_ ? menu_->page() : GrantlerMenu::Page::Status;
+
+    if (page != GrantlerMenu::Page::Status) {
+      menu_->syncPeerList(peerCount);
+      drawOverlayIfChanged(page, peerCount);
+      return;
+    }
+
+    if (lastDrawnPage_ != GrantlerMenu::Page::Status || forceFullPush_) {
       oled_.clearDisplay();
       drawMacLine(mac);
       drawSeparator();
@@ -66,6 +84,8 @@ public:
       lastHistoryHead_ = -1;
       forceFullPush_ = true;
     }
+
+    lastDrawnPage_ = GrantlerMenu::Page::Status;
 
     const bool header2Dirty = drawHeaderLine2IfChanged(version, peerCount, usbStatus);
     const bool historyDirty = drawHistoryIfChanged(history, historySize, historyHead);
@@ -85,10 +105,34 @@ public:
 
 private:
   Adafruit_SSD1306 oled_;
+  enomik::Dongle* dongle_ = nullptr;
+  GrantlerMenu* menu_ = nullptr;
   uint32_t splashUntilMs_ = 0;
   bool forceFullPush_ = false;
   char lastHeaderLine2_[64] = {0};
   int lastHistoryHead_ = -1;
+  GrantlerMenu::Page lastDrawnPage_ = GrantlerMenu::Page::Status;
+  int lastCursor_ = -1;
+  int lastScroll_ = -1;
+  int lastOverlayPeerCount_ = -1;
+  int lastAddNibble_ = -1;
+  uint8_t lastAddMac_[6] = {0};
+  uint32_t lastMutedMask_ = 0;
+  bool lastPowerSave_ = false;
+
+  uint32_t mutedMaskFor(int peerCount) const {
+    uint32_t mask = 0;
+    if (!dongle_) {
+      return 0;
+    }
+    const int n = peerCount < 32 ? peerCount : 32;
+    for (int i = 0; i < n; ++i) {
+      if (dongle_->isMuted(i)) {
+        mask |= (1u << i);
+      }
+    }
+    return mask;
+  }
 
   void drawSplash() {
     oled_.clearDisplay();
@@ -96,6 +140,104 @@ private:
     const int y = (SCREEN_HEIGHT - LOGO_HEIGHT) / 2;
     oled_.drawXBitmap(x, y, logo_bits, LOGO_WIDTH, LOGO_HEIGHT, SSD1306_WHITE);
     oled_.display();
+  }
+
+  void drawOverlayIfChanged(GrantlerMenu::Page page, int peerCount) {
+    const int cursor = menu_->cursor();
+    const int scroll = menu_->scroll();
+    const int addNibble = menu_->addNibble();
+    const uint8_t* addMac = menu_->addMac();
+    const uint32_t mutedMask = mutedMaskFor(peerCount);
+    const bool powerSave = dongle_ && dongle_->isPowerSave();
+    if (!forceFullPush_ &&
+        page == lastDrawnPage_ &&
+        cursor == lastCursor_ &&
+        scroll == lastScroll_ &&
+        peerCount == lastOverlayPeerCount_ &&
+        addNibble == lastAddNibble_ &&
+        memcmp(addMac, lastAddMac_, 6) == 0 &&
+        mutedMask == lastMutedMask_ &&
+        powerSave == lastPowerSave_) {
+      return;
+    }
+
+    lastDrawnPage_ = page;
+    lastCursor_ = cursor;
+    lastScroll_ = scroll;
+    lastOverlayPeerCount_ = peerCount;
+    lastAddNibble_ = addNibble;
+    memcpy(lastAddMac_, addMac, 6);
+    lastMutedMask_ = mutedMask;
+    lastPowerSave_ = powerSave;
+    forceFullPush_ = false;
+
+    oled_.clearDisplay();
+    if (page == GrantlerMenu::Page::AddPeer) {
+      drawAddPeer();
+    } else {
+      drawListPage();
+    }
+    drawButtonHints();
+    pushPages(0, 7);
+  }
+
+  void drawListPage() {
+    oled_.setCursor(0, 0);
+    oled_.print(menu_->title());
+
+    const int count = menu_->listCount();
+    const int scroll = menu_->scroll();
+    const int cursor = menu_->cursor();
+    for (int row = 0; row < GrantlerMenu::kVisibleRows; ++row) {
+      const int idx = scroll + row;
+      if (idx >= count) {
+        break;
+      }
+      oled_.setCursor(0, 8 + row * 8);
+      oled_.print(idx == cursor ? "> " : "  ");
+      oled_.print(menu_->listLabel(idx));
+    }
+  }
+
+  void drawAddPeer() {
+    oled_.setCursor(0, 0);
+    oled_.print(menu_->title());
+
+    const uint8_t* mac = menu_->addMac();
+    const int current = menu_->addNibble();
+    oled_.setCursor(0, 16);
+
+    for (int b = 0; b < 6; ++b) {
+      if (b > 0) {
+        oled_.print(':');
+      }
+      for (int n = 0; n < 2; ++n) {
+        const int nibbleIndex = b * 2 + n;
+        const uint8_t nibble =
+          (n == 0) ? static_cast<uint8_t>(mac[b] >> 4) : static_cast<uint8_t>(mac[b] & 0x0F);
+        const char c = (nibble < 10) ? static_cast<char>('0' + nibble)
+                                     : static_cast<char>('A' + nibble - 10);
+        if (nibbleIndex == current) {
+          oled_.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
+          oled_.write(c);
+          oled_.setTextColor(SSD1306_WHITE);
+        } else {
+          oled_.write(c);
+        }
+      }
+    }
+  }
+
+  void drawButtonHints() {
+    oled_.drawFastHLine(0, 55, SCREEN_WIDTH, SSD1306_WHITE);
+
+    // Up/down triangles for the cursor button (default font has no arrows).
+    oled_.fillTriangle(3, 57, 0, 62, 6, 62, SSD1306_WHITE);
+    oled_.fillTriangle(11, 62, 8, 57, 14, 57, SSD1306_WHITE);
+
+    const char* right = "ok";
+    oled_.setCursor(SCREEN_WIDTH - 6 * static_cast<int>(strlen(right)), 56);
+    oled_.print(right);
   }
 
   // Page 0 (rows 0-7): never repainted after this — the mac never changes.

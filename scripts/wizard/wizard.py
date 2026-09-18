@@ -36,10 +36,11 @@ import enomik_sysex as sx
 from midi_io import CANCELLED, MidiLink, find_link
 
 TEST_CHANNEL = 10  # enomik (1-based) channel used for echo
-BUTTON_CHANNEL = 1
-PIN_A, NOTE_A = 16, 60
-PIN_B, NOTE_B = 17, 61
-PIN_C, NOTE_C = 9, 62
+IO_CHANNEL = 1
+PIN_DIGITAL_A, CC_DIGITAL_A = 16, 16
+PIN_DIGITAL_B, CC_DIGITAL_B = 17, 17
+PIN_ANALOG_IN, CC_ANALOG_IN = 10, 10
+PIN_ANALOG_OUT, CC_ANALOG_OUT = 21, 17  # listens to CC 17 (loopback from pin 17)
 ECHO_NOTE = 64
 
 PASS = "PASS"
@@ -101,18 +102,64 @@ class Wizard:
         else:
             self.record("SysEx GET_MAC round-trip", False, "no response")
 
-        # Configure button pins (INPUT_PULLUP, active low).
-        for pin, note in ((PIN_A, NOTE_A), (PIN_B, NOTE_B), (PIN_C, NOTE_C)):
+        # MIDI loopback: outgoing Client MIDI is fed back to receive handlers
+        # (so pin 17 → CC 17 drives analog out pin 21 without a host round-trip).
+        resp = self.request_sysex(
+            link, sx.build_set_midi_loopback(True), "midi_loopback", timeout=2.0
+        )
+        ok = bool(resp and resp.get("enabled") is True)
+        self.record("SysEx SET_MIDI_LOOPBACK on", ok)
+
+        # Digital buttons (INPUT_PULLUP, active low) → CC.
+        for pin, cc in ((PIN_DIGITAL_A, CC_DIGITAL_A), (PIN_DIGITAL_B, CC_DIGITAL_B)):
             cfg = sx.build_set_pin_config(
                 pin=pin,
                 mode=sx.MODE_INPUT_PULLUP,
-                channel=BUTTON_CHANNEL,
-                midi_type=sx.MIDI_NOTE_ON,
-                note_or_cc=note,
+                channel=IO_CHANNEL,
+                midi_type=sx.MIDI_CONTROL_CHANGE,
+                note_or_cc=cc,
             )
             resp = self.request_sysex(link, cfg, "pin_config", timeout=2.0)
-            ok = bool(resp and resp["pin"] == pin and resp["note_or_cc"] == note)
-            self.record(f"SysEx SET_PIN_CONFIG pin {pin} -> note {note}", ok)
+            ok = bool(resp and resp["pin"] == pin and resp["note_or_cc"] == cc)
+            self.record(f"SysEx SET_PIN_CONFIG pin {pin} digital -> CC {cc}", ok)
+
+        # Potentiometer → CC 10.
+        cfg = sx.build_set_pin_config(
+            pin=PIN_ANALOG_IN,
+            mode=sx.MODE_ANALOG_INPUT,
+            channel=IO_CHANNEL,
+            midi_type=sx.MIDI_CONTROL_CHANGE,
+            note_or_cc=CC_ANALOG_IN,
+        )
+        resp = self.request_sysex(link, cfg, "pin_config", timeout=2.0)
+        ok = bool(
+            resp
+            and resp["pin"] == PIN_ANALOG_IN
+            and resp["note_or_cc"] == CC_ANALOG_IN
+        )
+        self.record(
+            f"SysEx SET_PIN_CONFIG pin {PIN_ANALOG_IN} analog in -> CC {CC_ANALOG_IN}",
+            ok,
+        )
+
+        # PWM out listens to CC 17 (same CC as digital pin 17; driven via loopback).
+        cfg = sx.build_set_pin_config(
+            pin=PIN_ANALOG_OUT,
+            mode=sx.MODE_ANALOG_OUTPUT,
+            channel=IO_CHANNEL,
+            midi_type=sx.MIDI_CONTROL_CHANGE,
+            note_or_cc=CC_ANALOG_OUT,
+        )
+        resp = self.request_sysex(link, cfg, "pin_config", timeout=2.0)
+        ok = bool(
+            resp
+            and resp["pin"] == PIN_ANALOG_OUT
+            and resp["note_or_cc"] == CC_ANALOG_OUT
+        )
+        self.record(
+            f"SysEx SET_PIN_CONFIG pin {PIN_ANALOG_OUT} analog out <- CC {CC_ANALOG_OUT}",
+            ok,
+        )
 
         # Echo tests on the dedicated channel (multiple message types).
         self._run_echo_suite(link, transport="USB")
@@ -125,10 +172,10 @@ class Wizard:
         else:
             self.record("SysEx ADD_PEER (dongle)", False, "no dongle MAC provided")
 
-        # Physical buttons (INPUT_PULLUP, active low).
-        self._button_test(link, PIN_A, NOTE_A, transport="USB")
-        self._button_test(link, PIN_B, NOTE_B, transport="USB")
-        self._button_test(link, PIN_C, NOTE_C, transport="USB")
+        # Physical I/O.
+        self._digital_cc_test(link, PIN_DIGITAL_A, CC_DIGITAL_A, transport="USB")
+        self._digital_cc_test(link, PIN_DIGITAL_B, CC_DIGITAL_B, transport="USB")
+        self._analog_cc_test(link, PIN_ANALOG_IN, CC_ANALOG_IN, transport="USB")
 
     # --- phase 2: ESP-NOW ----------------------------------------------------
     def phase2(self, link: MidiLink) -> None:
@@ -139,9 +186,9 @@ class Wizard:
         # auto-discover the client before we rely on host -> client routing.
         self._run_echo_suite(link, transport="ESP-NOW", timeout=12.0)
 
-        self._button_test(link, PIN_A, NOTE_A, transport="ESP-NOW")
-        self._button_test(link, PIN_B, NOTE_B, transport="ESP-NOW")
-        self._button_test(link, PIN_C, NOTE_C, transport="ESP-NOW")
+        self._digital_cc_test(link, PIN_DIGITAL_A, CC_DIGITAL_A, transport="ESP-NOW")
+        self._digital_cc_test(link, PIN_DIGITAL_B, CC_DIGITAL_B, transport="ESP-NOW")
+        self._analog_cc_test(link, PIN_ANALOG_IN, CC_ANALOG_IN, transport="ESP-NOW")
 
     # --- shared checks -------------------------------------------------------
     def _run_echo_suite(self, link: MidiLink, transport: str, timeout: float = 3.0) -> None:
@@ -245,46 +292,101 @@ class Wizard:
                     )
                 )
 
-        # Non-echo channel: traffic on BUTTON_CHANNEL must not be mirrored back.
+        # Non-echo channel: traffic on IO_CHANNEL must not be mirrored back.
         link.flush()
         link.send(
-            mido.Message("note_on", channel=BUTTON_CHANNEL - 1, note=99, velocity=1)
+            mido.Message("note_on", channel=IO_CHANNEL - 1, note=99, velocity=1)
         )
         stray = link.wait_for(
             lambda m: m.type == "note_on" and m.note == 99,
             timeout=0.5,
         )
         self.record(
-            f"No echo on ch {BUTTON_CHANNEL} ({transport})",
+            f"No echo on ch {IO_CHANNEL} ({transport})",
             stray is None,
         )
         link.send(
             mido.Message(
-                "note_off", channel=BUTTON_CHANNEL - 1, note=99, velocity=0
+                "note_off", channel=IO_CHANNEL - 1, note=99, velocity=0
             )
         )
 
-    def _button_test(self, link: MidiLink, pin: int, note: int, transport: str) -> bool:
+    def _digital_cc_test(
+        self, link: MidiLink, pin: int, cc: int, transport: str
+    ) -> bool:
         print(f"\n  Press the button on pin {pin}  [Esc = skip]")
-        mido_ch = BUTTON_CHANNEL - 1
+        mido_ch = IO_CHANNEL - 1
         link.flush()
 
         def is_press(msg: mido.Message) -> bool:
+            # INPUT_PULLUP active-low → press sends max_midi_value (127).
             return (
-                msg.type == "note_on"
+                msg.type == "control_change"
                 and msg.channel == mido_ch
-                and msg.note == note
-                and msg.velocity > 0
+                and msg.control == cc
+                and msg.value > 0
             )
 
         got = link.wait_for(is_press, timeout=30.0, allow_esc=True)
         if got is CANCELLED:
             return self.record(
-                f"Button pin {pin} -> note {note} ({transport})",
+                f"Digital pin {pin} -> CC {cc} ({transport})",
                 False,
                 "skipped",
             )
-        return self.record(f"Button pin {pin} -> note {note} ({transport})", got is not None)
+        return self.record(
+            f"Digital pin {pin} -> CC {cc} ({transport})", got is not None
+        )
+
+    def _analog_cc_test(
+        self, link: MidiLink, pin: int, cc: int, transport: str
+    ) -> bool:
+        """Require exact endpoints and midpoint: 0, then 64, then 127."""
+        mido_ch = IO_CHANNEL - 1
+        steps = (
+            ("left (0)", 0),
+            ("center (64)", 64),
+            ("right (127)", 127),
+        )
+        all_ok = True
+
+        def log_cc(msg: mido.Message) -> None:
+            if (
+                msg.type == "control_change"
+                and msg.channel == mido_ch
+                and msg.control == cc
+            ):
+                print(f"    received CC {cc} value={msg.value}")
+
+        for label, want in steps:
+            print(
+                f"\n  Turn the potentiometer on pin {pin} to {label}  "
+                f"[Esc = skip]"
+            )
+            link.flush()
+
+            def is_exact(msg: mido.Message, want: int = want) -> bool:
+                return (
+                    msg.type == "control_change"
+                    and msg.channel == mido_ch
+                    and msg.control == cc
+                    and msg.value == want
+                )
+
+            got = link.wait_for(
+                is_exact, timeout=30.0, allow_esc=True, on_message=log_cc
+            )
+            name = f"Analog pin {pin} -> CC {cc} = {want} ({transport})"
+            if got is CANCELLED:
+                self.record(name, False, "skipped")
+                all_ok = False
+                continue
+            if got is None:
+                self.record(name, False, "timeout (no match)")
+                all_ok = False
+            else:
+                self.record(name, True, f"value={got.value}")
+        return all_ok
 
     # --- run -----------------------------------------------------------------
     def summary(self) -> int:
@@ -345,10 +447,14 @@ def main() -> int:
 
     print("=== ESP-NOW MIDI Test Wizard ===")
     print("Flash examples/client_test onto a USB-capable board (S2/S3, TinyUSB).")
-    print("Test jig wiring (INPUT_PULLUP, button to GND):")
-    print("  - Pin 16 -> note 60")
-    print("  - Pin 17 -> note 61")
-    print("  - Pin 9  -> note 62")
+    print("Test jig wiring:")
+    print(f"  - Pin {PIN_DIGITAL_A}: button to GND (INPUT_PULLUP) -> CC {CC_DIGITAL_A}")
+    print(f"  - Pin {PIN_DIGITAL_B}: button to GND (INPUT_PULLUP) -> CC {CC_DIGITAL_B}")
+    print(f"  - Pin {PIN_ANALOG_IN}: potentiometer (analog in) -> CC {CC_ANALOG_IN}")
+    print(
+        f"  - Pin {PIN_ANALOG_OUT}: PWM out <- CC {CC_ANALOG_OUT} "
+        f"(loopback from pin {PIN_DIGITAL_B})"
+    )
 
     wiz = Wizard()
     wiz.dongle_mac = resolve_dongle_mac(args.dongle_mac)
