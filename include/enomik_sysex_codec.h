@@ -303,12 +303,15 @@ namespace enomik
             return pkt;
         }
 
-        // Convert SysExPacket to midi_sysex_message
+        // Convert SysExPacket to midi_sysex_message (clamped to buffer capacity)
         static midi_sysex_message toMidiMessage(const SysExPacket &pkt)
         {
             midi_sysex_message msg;
-            msg.length = pkt.length;
-            memcpy(msg.data, pkt.data, pkt.length);
+            msg.length = pkt.length > midi_sysex_message::MAX_DATA_SIZE
+                             ? midi_sysex_message::MAX_DATA_SIZE
+                             : pkt.length;
+            if (msg.length > 0)
+                memcpy(msg.data, pkt.data, msg.length);
             return msg;
         }
     };

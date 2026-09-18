@@ -8,7 +8,7 @@ import espnow
 
 # Keep in sync with version.h
 VERSION_MAJOR = 0
-VERSION_MINOR = 18
+VERSION_MINOR = 19
 VERSION_PATCH = 0
 VERSION = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
 
@@ -46,6 +46,97 @@ MIDI_MIN_BEND = 0
 MIDI_MAX_BEND = 16383
 MAX_PEERS = 20
 ESP_NOW_MIDI_CHANNEL = 6
+
+# SysEx transport (matches include/esp_now_midi_sysex.h)
+SYSEX_MARKER = 0xF0
+SYSEX_VERSION = 1
+SYSEX_VERSION_SHIFT = 4
+SYSEX_FLAG_FIRST = 0x01
+SYSEX_FLAG_LAST = 0x02
+SYSEX_HEADER_SIZE = 6
+SYSEX_MAX_PAYLOAD = 240
+SYSEX_MAX_MESSAGE = 1024
+SYSEX_MAX_FRAME = SYSEX_HEADER_SIZE + SYSEX_MAX_PAYLOAD
+SYSEX_REASSEMBLY_TIMEOUT_MS = 100
+
+
+def _sysex_fragment_count(msg_len):
+    if msg_len <= 0:
+        return 0
+    return (msg_len + SYSEX_MAX_PAYLOAD - 1) // SYSEX_MAX_PAYLOAD
+
+
+def _sysex_fragment_payload_length(msg_len, seq):
+    offset = seq * SYSEX_MAX_PAYLOAD
+    if offset >= msg_len:
+        return 0
+    remaining = msg_len - offset
+    return SYSEX_MAX_PAYLOAD if remaining > SYSEX_MAX_PAYLOAD else remaining
+
+
+def _sysex_make_flags(first, last):
+    flags = SYSEX_VERSION << SYSEX_VERSION_SHIFT
+    if first:
+        flags |= SYSEX_FLAG_FIRST
+    if last:
+        flags |= SYSEX_FLAG_LAST
+    return flags
+
+
+def _sysex_encode_frame(seq, total, msg_len, payload):
+    payload_len = len(payload)
+    if payload_len == 0 or payload_len > SYSEX_MAX_PAYLOAD:
+        return None
+    if msg_len == 0 or msg_len > SYSEX_MAX_MESSAGE or total < 1 or seq >= total:
+        return None
+    if _sysex_fragment_count(msg_len) != total:
+        return None
+    if payload_len != _sysex_fragment_payload_length(msg_len, seq):
+        return None
+    frame = bytearray(SYSEX_HEADER_SIZE + payload_len)
+    frame[0] = SYSEX_MARKER
+    frame[1] = _sysex_make_flags(seq == 0, seq == total - 1)
+    frame[2] = seq
+    frame[3] = total
+    frame[4] = msg_len & 0xFF
+    frame[5] = (msg_len >> 8) & 0xFF
+    frame[SYSEX_HEADER_SIZE:] = payload
+    return bytes(frame)
+
+
+def _sysex_parse_frame(data):
+    if data is None or len(data) < SYSEX_HEADER_SIZE + 1 or len(data) > SYSEX_MAX_FRAME:
+        return None
+    if data[0] != SYSEX_MARKER:
+        return None
+    flags = data[1]
+    if ((flags >> SYSEX_VERSION_SHIFT) & 0x0F) != SYSEX_VERSION:
+        return None
+    seq = data[2]
+    total = data[3]
+    msg_len = data[4] | (data[5] << 8)
+    payload = data[SYSEX_HEADER_SIZE:]
+    payload_len = len(payload)
+    if total < 1 or seq >= total:
+        return None
+    if msg_len == 0 or msg_len > SYSEX_MAX_MESSAGE:
+        return None
+    if _sysex_fragment_count(msg_len) != total:
+        return None
+    first = (flags & SYSEX_FLAG_FIRST) != 0
+    last = (flags & SYSEX_FLAG_LAST) != 0
+    if first != (seq == 0) or last != (seq == total - 1):
+        return None
+    if payload_len == 0 or payload_len != _sysex_fragment_payload_length(msg_len, seq):
+        return None
+    return {
+        "flags": flags,
+        "seq": seq,
+        "total": total,
+        "msg_len": msg_len,
+        "payload": bytes(payload),
+        "last": last,
+    }
 
 
 class ESPNowMidi:
@@ -87,6 +178,9 @@ class ESPNowMidi:
         self._on_time_code_handler = None
         self._on_active_sensing_handler = None
         self._on_system_reset_handler = None
+        self._on_sysex_handler = None
+        # Single-sender reassembly (mac -> assembly state)
+        self._sysex_assembly = None
     
     def begin(self, reduce_power_at_cost_of_latency=False, auto_peer_discovery=True, channel=ESP_NOW_MIDI_CHANNEL):
         """
@@ -530,28 +624,75 @@ class ESPNowMidi:
         packet = self._create_packet(MIDI_SYSTEM_RESET, 0, 0, 0)
         return self.send_to_all_peers(packet)
     
-    def send_sysex(self, data, length):
+    def send_sysex(self, data, length=None):
         """
-        Send MIDI SysEx message
-        Matches C++ sendSysex
-        
+        Send MIDI SysEx message (fragmented if needed).
+        Matches C++ sendSysex wire format in esp_now_midi_sysex.h.
+
         Args:
-            data: list/bytes, SysEx data (max 128 bytes)
-            length: uint8_t, length of data
-        
+            data: list/bytes, complete SysEx (typically including F0..F7)
+            length: optional length; defaults to len(data)
+
         Returns:
-            bool: True if sent successfully
+            bool: True if all fragments sent successfully
         """
-        # Create sysex message structure matching C++ midi_sysex_message
-        # struct: data[128] + length byte at offset 128
-        length = min(length, 128)
-        sysex_data = bytearray(129)
-        for i in range(length):
-            sysex_data[i] = data[i]
-        sysex_data[128] = length
-        
-        return self.send_to_all_peers(bytes(sysex_data))
-    
+        if data is None:
+            return False
+        if length is None:
+            length = len(data)
+        if length <= 0 or length > SYSEX_MAX_MESSAGE:
+            return False
+
+        total = _sysex_fragment_count(length)
+        for seq in range(total):
+            offset = seq * SYSEX_MAX_PAYLOAD
+            payload_len = _sysex_fragment_payload_length(length, seq)
+            payload = bytes(data[offset:offset + payload_len])
+            frame = _sysex_encode_frame(seq, total, length, payload)
+            if frame is None:
+                return False
+            if not self.send_to_all_peers(frame):
+                return False
+        return True
+
+    def _feed_sysex_frame(self, mac, msg):
+        """Reassemble fragmented SysEx; return complete bytes or None."""
+        frame = _sysex_parse_frame(msg)
+        if frame is None:
+            return None
+
+        mac_key = bytes(mac) if mac is not None else b""
+        if frame["seq"] == 0:
+            self._sysex_assembly = {
+                "mac": mac_key,
+                "msg_len": frame["msg_len"],
+                "total": frame["total"],
+                "expected_seq": 0,
+                "buffer": bytearray(frame["msg_len"]),
+            }
+
+        asm = self._sysex_assembly
+        if asm is None or asm["mac"] != mac_key:
+            return None
+        if asm["msg_len"] != frame["msg_len"] or asm["total"] != frame["total"]:
+            return None
+        if frame["seq"] != asm["expected_seq"]:
+            return None
+
+        offset = frame["seq"] * SYSEX_MAX_PAYLOAD
+        payload = frame["payload"]
+        asm["buffer"][offset:offset + len(payload)] = payload
+        asm["expected_seq"] = frame["seq"] + 1
+
+        if not frame["last"]:
+            return None
+        if asm["expected_seq"] != asm["total"]:
+            return None
+
+        complete = bytes(asm["buffer"])
+        self._sysex_assembly = None
+        return complete
+
     def _parse_packet(self, data):
         """
         Parse received packet to internal message format
@@ -595,9 +736,11 @@ class ESPNowMidi:
         if self._auto_peer_discovery and mac not in self.peers:
             self.add_peer(mac)
         
-        # Handle SysEx separately (larger than 3 bytes)
+        # SysEx transport frames are always longer than short MIDI (1–3 bytes).
         if len(msg) > 3:
-            # TODO: Handle SysEx message if needed
+            complete = self._feed_sysex_frame(mac, msg)
+            if complete is not None and self._on_sysex_handler:
+                self._on_sysex_handler(complete, len(complete))
             return
         
         # Parse the packet
@@ -860,6 +1003,16 @@ class ESPNowMidi:
             callback: function()
         """
         self._on_system_reset_handler = callback
+
+    def set_handle_sysex(self, callback):
+        """
+        Set handler for complete SysEx messages after reassembly.
+        Matches C++ setHandleSysEx
+
+        Args:
+            callback: function(data, length) where data is bytes
+        """
+        self._on_sysex_handler = callback
     
     def has_peer(self, mac):
         """

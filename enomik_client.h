@@ -209,12 +209,21 @@ namespace enomik
         }
 
         // --- System Exclusive ---
+        /** USB SysEx → Enomik config IO + user callback. */
         static void handleSysExStatic(uint8_t *data, unsigned int length)
         {
             if (Client::instancePtr)
             {
-                // onSystemExclusive() already forwards to io + _onSysExHandler
                 Client::instancePtr->onSystemExclusive(data, length);
+            }
+        }
+
+        /** ESP-NOW SysEx → user callback only (never Enomik config IO). */
+        static void handleEspNowSysExStatic(uint8_t *data, uint16_t length)
+        {
+            if (Client::instancePtr && Client::instancePtr->_onSysExHandler)
+            {
+                Client::instancePtr->_onSysExHandler(data, length);
             }
         }
 
@@ -303,9 +312,9 @@ namespace enomik
                                         EspNowMidiLog::d("Sent other MIDI message");
                                 } });
 
-            // Forward SysEx responses (including GET_ALL_PEERS) via the handler send path
+            // Config SysEx replies stay USB-only (never over ESP-NOW).
             io.setOnSysExSendRequest([this](midi_sysex_message msg)
-                                     { this->sendSysEx(msg.data, msg.length); });
+                                     { this->sendSysExUsb(msg.data, msg.length); });
 
             io.setOnAddPeerRequest([this](uint8_t mac[]) -> AddPeerResult
                                    {
@@ -399,6 +408,7 @@ namespace enomik
             espnowMIDI.setHandleClock(handleClockStatic);
             espnowMIDI.setHandleSongPosition(handleSongPositionStatic);
             espnowMIDI.setHandleSongSelect(handleSongSelectStatic);
+            espnowMIDI.setHandleSysEx(handleEspNowSysExStatic);
 
 #ifdef HAS_USB_MIDI
             // --- Set handlers for USB MIDI ---
@@ -670,22 +680,38 @@ namespace enomik
             return err == ESP_OK;
         }
 
-        /** @brief Sends a complete SysEx buffer, including `F0` and `F7`.
+        /** @brief Sends SysEx to USB only (Enomik config replies). */
+        bool sendSysExUsb(const uint8_t *data, uint16_t length)
+        {
+#ifdef HAS_USB_MIDI
+            if (data == nullptr || length == 0)
+                return false;
+            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
+            {
+                CLIENT_USBMIDI.sendSysEx(length, data);
+                return true;
+            }
+#else
+            (void)data;
+            (void)length;
+#endif
+            return false;
+        }
+
+        /** @brief Sends SysEx over ESP-NOW (and USB if mounted).
          * @return `true` when the ESP-NOW send succeeds. */
         bool sendSysEx(const uint8_t *data, uint16_t length)
         {
-            auto err = espnowMIDI.sendSysex((uint8_t *)data, length);
+            if (data == nullptr || length == 0 || length > esp_now_midi_sysex::MAX_MESSAGE)
+                return false;
+            auto err = espnowMIDI.sendSysex(data, length);
 #ifdef HAS_USB_MIDI
             if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
             {
                 CLIENT_USBMIDI.sendSysEx(length, data);
             }
 #endif
-            if (err != ESP_OK)
-            {
-                return false; // ESP-NOW failed
-            }
-            return true;
+            return err == ESP_OK;
         }
         // --- Channel Voice ---
         void setHandleNoteOn(std::function<void(byte channel, byte note, byte velocity)> handler)
