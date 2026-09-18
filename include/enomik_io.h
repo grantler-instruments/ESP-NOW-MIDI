@@ -836,17 +836,12 @@ namespace enomik
 
         void savePowerSaveToPrefs(bool enabled)
         {
-            _preferences.begin("enomik", false);
-            _preferences.putUChar("pwr_save", enabled ? 1 : 0);
-            _preferences.end();
+            savePowerSavePreference(enabled);
         }
 
         bool loadPowerSaveFromPrefs()
         {
-            _preferences.begin("enomik", true);
-            const uint8_t value = _preferences.getUChar("pwr_save", 0);
-            _preferences.end();
-            return value != 0;
+            return loadPowerSavePreference();
         }
 
         std::vector<PinConfig> loadPinConfigsFromPrefs()
