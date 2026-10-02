@@ -365,6 +365,38 @@ namespace enomik
 #endif
         }
 
+        /**
+         * @brief Maximum age (ms) of a message waiting for the USB host.
+         *
+         * When the host stops reading for a while, messages older than this are
+         * dropped instead of being delivered late as a backlog. Release messages
+         * (Note Off, pedal off, All Notes Off, Stop, ...) are always delivered and
+         * the latest value of each CC / pitch bend / pressure / program is kept.
+         * Default `USB_MIDI_STALE_MS` (500). 0 disables dropping.
+         */
+        void setUsbStaleTimeout(uint32_t maxAgeMs)
+        {
+            _usbStaleMs = maxAgeMs;
+        }
+
+        /** @return Current stale timeout in milliseconds (0 = disabled). */
+        uint32_t getUsbStaleTimeout() const
+        {
+            return _usbStaleMs;
+        }
+
+        /** @return Messages to the USB host dropped as stale since boot. */
+        uint32_t getUsbStaleDropCount()
+        {
+            return _usbMidiQueue.staleDropCount();
+        }
+
+        /** @return Messages to the USB host dropped because the queue was full. */
+        uint32_t getUsbOverflowDropCount()
+        {
+            return _usbMidiQueue.overflowDropCount();
+        }
+
         /** @return true when USB is mounted and MIDI handlers are registered. */
         bool isUsbReady() const
         {
@@ -729,6 +761,8 @@ namespace enomik
         char _lastDrawnUsbStatus;
         unsigned long _lastDrawnSecond;
         UsbMidiQueue _usbMidiQueue;
+        uint32_t _usbStaleMs = USB_MIDI_STALE_MS;
+        uint32_t _lastStaleCheckMs = 0;
         MidiMessageHistory _messageHistory[DONGLE_MAX_HISTORY];
         int _messageIndex;
         uint8_t _baseMac[6];
@@ -923,12 +957,34 @@ namespace enomik
             return g_dongle_usb_midi.writePacket(packet);
         }
 
+        void dropStaleUsbMidi()
+        {
+            if (_usbStaleMs == 0)
+            {
+                return;
+            }
+            // Rate-limited: a stalled queue would otherwise be rescanned every loop.
+            const uint32_t now = millis();
+            if ((uint32_t)(now - _lastStaleCheckMs) < 20)
+            {
+                return;
+            }
+            _lastStaleCheckMs = now;
+            const uint16_t dropped = _usbMidiQueue.dropStale(now, _usbStaleMs);
+            if (dropped > 0)
+            {
+                EspNowMidiLog::d("USB host not reading: dropped %u stale message(s)", dropped);
+            }
+        }
+
         void drainUsbMidiQueue()
         {
             if (!TinyUSBDevice.mounted())
             {
                 return;
             }
+
+            dropStaleUsbMidi();
 
             if (TinyUSBDevice.suspended())
             {

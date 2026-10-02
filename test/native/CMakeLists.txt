@@ -21,6 +21,7 @@ add_executable(native_tests
   test_peer_mute_list.cpp
   test_peer_storage.cpp
   test_grantler_menu.cpp
+  test_usb_midi_queue.cpp
 )
 target_include_directories(native_tests PRIVATE
   "${LIB_ROOT}"
