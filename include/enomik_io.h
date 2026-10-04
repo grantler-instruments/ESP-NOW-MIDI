@@ -44,6 +44,8 @@ namespace enomik
     struct PinState
     {
         int lastValue = -1;
+        /** Last raw digital reading, used to time debounce stability. */
+        int lastRawValue = -1;
         unsigned long lastChangeTime = 0;
         unsigned long lastSendTime = 0;
         float smoothedValue = 0;
@@ -563,15 +565,25 @@ namespace enomik
         bool processDigitalInput(const PinConfig &config, PinState &state,
                                  unsigned long now, int &currentValue)
         {
-            currentValue = digitalRead(config.pin);
+            const int reading = digitalRead(config.pin);
 
-            if (currentValue != state.lastValue)
+            // Restart the stability window whenever the raw level flips.
+            if (reading != state.lastRawValue)
             {
+                state.lastRawValue = reading;
                 state.lastChangeTime = now;
-                return true;
             }
 
-            return false;
+            // First sample reports the initial state immediately; later
+            // changes must stay stable for DEBOUNCE_MS before being sent.
+            if (state.lastValue != -1 && now - state.lastChangeTime < DEBOUNCE_MS)
+                return false;
+
+            if (reading == state.lastValue)
+                return false;
+
+            currentValue = reading;
+            return true;
         }
 
         static int snapToEndpoints(int value, int minValue, int maxValue, int snap)
