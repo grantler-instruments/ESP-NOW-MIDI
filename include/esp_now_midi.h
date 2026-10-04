@@ -147,9 +147,11 @@ public:
     esp_wifi_set_channel(ESP_NOW_MIDI_CHANNEL, WIFI_SECOND_CHAN_NONE);
     setReducePowerAtCostOfLatency(reducePowerAtCostOfLatency);
 
+    // A repeated begin() starts empty; remove the old peers from the driver
+    // too, or adding them again fails with "already exists".
+    if (getPeersCount() > 0)
     {
-      EspNowMidiLock lock(_peersMux);
-      _peersCount = 0;
+      clearPeers();
     }
 
     // Register callbacks

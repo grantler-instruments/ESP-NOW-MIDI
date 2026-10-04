@@ -10,6 +10,7 @@
 - Core: auto peer discovery only adds senders of valid MIDI packets (`isMidiPacket()`), so foreign ESP-NOW traffic no longer fills the peer list.
 - Core: `MAX_PEERS` is defined once and can be overridden (e.g. `-DMAX_PEERS=10`) without redefinition warnings or mismatched peer, mute and storage lists.
 - `getPeer(index)` returning a pointer into the live peer list is deprecated (core and Dongle); use `getPeer(index, mac)` or `copyPeers()`. The Dongle gets `getPeer(index, mac)`; the Grantler dongle menu uses it.
+- Fix: calling `begin()` again emptied the peer list but left the peers registered in ESP-NOW, so adding them again failed. It now removes them from ESP-NOW too.
 - Fix: the ESP-NOW peer list is now safe to use from the loop task and the receive callback at the same time (auto-discovery, echo handlers). Before, concurrent access could corrupt the list or leave peers registered in ESP-NOW but missing from the list, so they stopped receiving until a reboot. New `getPeer(index, mac)` and `copyPeers()` return copies.
 - Fix: the dongle sent MIDI over ESP-NOW as its internal 7-byte struct (since the peer mute feature), which every receiver ignored as SysEx. It sends the standard 1-3 byte MIDI packet again.
 - Fix: receiving a 4-128 byte ESP-NOW packet read past the end of the receive buffer (copied 129 bytes regardless of length).

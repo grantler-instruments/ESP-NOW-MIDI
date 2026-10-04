@@ -58,6 +58,7 @@ struct StubEspNow
     std::vector<std::array<uint8_t, 6>> peers;
     std::vector<StubEspNowPacket> sent;
     bool record = true;
+    bool keepOnInit = false; // esp_now_init() reports "already initialized"
 };
 
 inline StubEspNow &stubEspNow()
@@ -91,6 +92,10 @@ inline int stubEspNowFind(const uint8_t *mac)
 inline esp_err_t esp_now_init()
 {
     std::lock_guard<std::mutex> lock(stubEspNow().mutex);
+    if (stubEspNow().keepOnInit)
+    {
+        return ESP_ERR_ESPNOW_EXIST;
+    }
     stubEspNow().peers.clear();
     stubEspNow().sent.clear();
     return ESP_OK;

@@ -596,3 +596,23 @@ TEST_CASE("auto-discovery ignores senders of foreign traffic", "[espnow][discove
     REQUIRE(rx.getPeersCount() == 1);
     REQUIRE(rx.hasPeer(mac));
 }
+
+TEST_CASE("begin() again keeps the driver and peer list in sync", "[espnow][peers]")
+{
+    esp_now_midi midi;
+    REQUIRE(midi.begin());
+    uint8_t mac[6];
+    macFor(mac, 1);
+    REQUIRE(midi.addPeer(mac));
+
+    stubEspNow().keepOnInit = true; // the driver is still running
+    const bool ok = midi.begin();
+    stubEspNow().keepOnInit = false;
+    REQUIRE(ok);
+    REQUIRE(midi.getPeersCount() == 0);
+    REQUIRE(stubEspNowPeerCount() == 0);
+
+    REQUIRE(midi.addPeer(mac));
+    REQUIRE(midi.hasPeer(mac));
+    REQUIRE(stubEspNowPeerCount() == 1);
+}
