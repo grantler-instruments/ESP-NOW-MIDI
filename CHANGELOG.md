@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0
 
 - Client: MIDI received over ESP-NOW is now handled in `loop()` instead of the ESP-NOW receive callback (WiFi task), so handlers and pin outputs no longer race with `loop()` (e.g. a SysEx pin configuration arriving while notes are received). **Behavior change:** handlers react as often as `loop()` is called; avoid long `delay()`s. `setDispatchInLoop(false)` restores the old immediate dispatch in the WiFi task.
 - Dongle: ESP-NOW receive (mute check, to-host filter, message history) is handled in `loop()`; the receive callback only queues.
