@@ -1105,7 +1105,7 @@ private:
     }
     return count;
   }
-  static esp_now_midi *_instance; // Static pointer to hold the instance
+  inline static esp_now_midi *_instance = nullptr; // Active instance for the C callbacks
   DataSentCallback userDataSentCallback = nullptr;
   bool _autoPeerDiscovery = true;
   bool _reducePowerAtCostOfLatency = false;
@@ -1130,5 +1130,3 @@ private:
   void (*onActiveSensingHandler)() = nullptr;
   void (*onSystemResetHandler)() = nullptr;
 };
-
-esp_now_midi *esp_now_midi::_instance = nullptr;
