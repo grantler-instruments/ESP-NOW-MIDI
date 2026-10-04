@@ -9,6 +9,7 @@
 #include "include/enomik_io.h"
 #include "include/PeerStorage.h"
 #include "include/MidiInbox.h"
+#include "include/UsbMidiPacket.h"
 #include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
@@ -89,6 +90,43 @@ namespace enomik
                 return;
             LoopbackScope scope(_loopbackDepth);
             dispatch();
+        }
+
+        // USB MIDI goes out as whole packets: a busy host drops a message
+        // cleanly instead of receiving part of it.
+        static bool writeUsbPacket(const uint8_t packet[4])
+        {
+#ifdef HAS_USB_MIDI
+            return TinyUSBDevice.mounted() && TinyUSBDevice.ready() && g_client_usb_midi.writePacket(packet);
+#else
+            (void)packet;
+            return false;
+#endif
+        }
+
+        static void sendToUsb(MidiStatus status, uint8_t channel = 0, uint8_t firstByte = 0, uint8_t secondByte = 0)
+        {
+            midi_message msg;
+            msg.channel = channel;
+            msg.status = status;
+            msg.firstByte = firstByte;
+            msg.secondByte = secondByte;
+            uint8_t packet[4];
+            if (toUsbMidiPacket(msg, packet))
+            {
+                writeUsbPacket(packet);
+            }
+        }
+
+        static void sendPitchBendToUsb(int value, uint8_t channel)
+        {
+            const int raw = (value < -8192 ? -8192 : (value > 8191 ? 8191 : value)) + 8192;
+            sendToUsb(MIDI_PITCH_BEND, channel, raw & 0x7F, raw >> 7);
+        }
+
+        static void sendSysExToUsb(const uint8_t *data, uint16_t length)
+        {
+            writeUsbMidiSysEx(data, length, writeUsbPacket);
         }
 
         void onSystemExclusive(uint8_t *data, unsigned int length)
@@ -571,13 +609,7 @@ namespace enomik
         bool sendNoteOn(byte note, byte velocity, byte channel)
         {
             auto err = espnowMIDI.sendNoteOn(note, velocity, channel);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-
-                CLIENT_USBMIDI.sendNoteOn(note, velocity, channel);
-            }
-#endif
+            sendToUsb(MIDI_NOTE_ON, channel, note, velocity);
             maybeLoopback([&]() { handleNoteOnStatic(channel, note, velocity); });
             return err == ESP_OK;
         }
@@ -587,12 +619,7 @@ namespace enomik
         bool sendNoteOff(byte note, byte velocity, byte channel)
         {
             auto err = espnowMIDI.sendNoteOff(note, velocity, channel);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendNoteOff(note, velocity, channel);
-            }
-#endif
+            sendToUsb(MIDI_NOTE_OFF, channel, note, velocity);
             maybeLoopback([&]() { handleNoteOffStatic(channel, note, velocity); });
             return err == ESP_OK;
         }
@@ -602,12 +629,7 @@ namespace enomik
         bool sendControlChange(byte control, byte value, byte channel)
         {
             auto err = espnowMIDI.sendControlChange(control, value, channel);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendControlChange(control, value, channel);
-            }
-#endif
+            sendToUsb(MIDI_CONTROL_CHANGE, channel, control, value);
             maybeLoopback([&]() { handleControlChangeStatic(channel, control, value); });
             return err == ESP_OK;
         }
@@ -617,12 +639,7 @@ namespace enomik
         bool sendProgramChange(byte program, byte channel)
         {
             auto err = espnowMIDI.sendProgramChange(program, channel);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendProgramChange(program, channel);
-            }
-#endif
+            sendToUsb(MIDI_PROGRAM_CHANGE, channel, program);
             maybeLoopback([&]() { handleProgramChangeStatic(channel, program); });
             return err == ESP_OK;
         }
@@ -632,12 +649,7 @@ namespace enomik
         bool sendAfterTouch(byte pressure, byte channel)
         {
             auto err = espnowMIDI.sendAfterTouch(pressure, channel);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendAfterTouch(pressure, channel);
-            }
-#endif
+            sendToUsb(MIDI_AFTERTOUCH, channel, pressure);
             maybeLoopback([&]() { handleAfterTouchChannelStatic(channel, pressure); });
             return err == ESP_OK;
         }
@@ -647,12 +659,7 @@ namespace enomik
         bool sendPolyAfterTouch(byte note, byte pressure, byte channel)
         {
             auto err = espnowMIDI.sendAfterTouchPoly(note, pressure, channel);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendAfterTouch(note, pressure, channel);
-            }
-#endif
+            sendToUsb(MIDI_POLY_AFTERTOUCH, channel, note, pressure);
             maybeLoopback([&]() { handleAfterTouchPolyStatic(channel, note, pressure); });
             return err == ESP_OK;
         }
@@ -666,12 +673,7 @@ namespace enomik
         bool sendPitchBend(int value, byte channel) // signed; center = 0
         {
             auto err = espnowMIDI.sendPitchBend(value, channel);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendPitchBend(value, channel);
-            }
-#endif
+            sendPitchBendToUsb(value, channel);
             maybeLoopback([&]() { handlePitchBendStatic(channel, value); });
             return err == ESP_OK;
         }
@@ -680,12 +682,7 @@ namespace enomik
         bool sendStart()
         {
             auto err = espnowMIDI.sendStart();
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendStart();
-            }
-#endif
+            sendToUsb(MIDI_START);
             maybeLoopback([&]() { handleStartStatic(); });
             return err == ESP_OK;
         }
@@ -694,12 +691,7 @@ namespace enomik
         bool sendStop()
         {
             auto err = espnowMIDI.sendStop();
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendStop();
-            }
-#endif
+            sendToUsb(MIDI_STOP);
             maybeLoopback([&]() { handleStopStatic(); });
             return err == ESP_OK;
         }
@@ -708,12 +700,7 @@ namespace enomik
         bool sendContinue()
         {
             auto err = espnowMIDI.sendContinue();
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendContinue();
-            }
-#endif
+            sendToUsb(MIDI_CONTINUE);
             maybeLoopback([&]() { handleContinueStatic(); });
             return err == ESP_OK;
         }
@@ -722,12 +709,7 @@ namespace enomik
         bool sendClock()
         {
             auto err = espnowMIDI.sendClock();
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendClock();
-            }
-#endif
+            sendToUsb(MIDI_TIME_CLOCK);
             maybeLoopback([&]() { handleClockStatic(); });
             return err == ESP_OK;
         }
@@ -736,12 +718,7 @@ namespace enomik
         bool sendSongPosition(uint16_t value)
         {
             auto err = espnowMIDI.sendSongPosition(value);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendSongPosition(value);
-            }
-#endif
+            sendToUsb(MIDI_SONG_POS_POINTER, 0, value & 0x7F, (value >> 7) & 0x7F);
             maybeLoopback([&]() { handleSongPositionStatic(value); });
             return err == ESP_OK;
         }
@@ -750,12 +727,7 @@ namespace enomik
         bool sendSongSelect(uint8_t value)
         {
             auto err = espnowMIDI.sendSongSelect(value);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendSongSelect(value);
-            }
-#endif
+            sendToUsb(MIDI_SONG_SELECT, 0, value);
             maybeLoopback([&]() { handleSongSelectStatic(value); });
             return err == ESP_OK;
         }
@@ -765,12 +737,7 @@ namespace enomik
         bool sendSysEx(const uint8_t *data, uint16_t length)
         {
             auto err = espnowMIDI.sendSysex((uint8_t *)data, length);
-#ifdef HAS_USB_MIDI
-            if (TinyUSBDevice.mounted() && TinyUSBDevice.ready())
-            {
-                CLIENT_USBMIDI.sendSysEx(length, data);
-            }
-#endif
+            sendSysExToUsb(data, length);
             if (err != ESP_OK)
             {
                 return false; // ESP-NOW failed

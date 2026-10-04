@@ -26,6 +26,7 @@ add_executable(native_tests
   test_espnow_wire_format.cpp
   test_midi_inbox.cpp
   test_client_dispatch.cpp
+  test_usb_midi_packet.cpp
 )
 target_include_directories(native_tests PRIVATE
   "${LIB_ROOT}"

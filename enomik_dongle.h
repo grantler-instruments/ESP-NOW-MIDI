@@ -7,6 +7,7 @@
 #include "include/UsbMidiQueue.h"
 #include "include/UsbStallWatchdog.h"
 #include "include/MidiInbox.h"
+#include "include/UsbMidiPacket.h"
 #include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
@@ -1045,82 +1046,11 @@ namespace enomik
 #ifdef HAS_USB_MIDI
         bool sendQueuedMidi(const midi_message &msg)
         {
-            const uint8_t ch = (msg.channel - 1) & 0x0F;
-            uint8_t packet[4] = {0, 0, 0, 0};
-
-            switch (msg.status)
+            uint8_t packet[4];
+            if (!toUsbMidiPacket(msg, packet))
             {
-            case MIDI_NOTE_ON:
-                packet[0] = 0x09;
-                packet[1] = MIDI_NOTE_ON | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_NOTE_OFF:
-                packet[0] = 0x08;
-                packet[1] = MIDI_NOTE_OFF | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_CONTROL_CHANGE:
-                packet[0] = 0x0B;
-                packet[1] = MIDI_CONTROL_CHANGE | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_PROGRAM_CHANGE:
-                packet[0] = 0x0C;
-                packet[1] = MIDI_PROGRAM_CHANGE | ch;
-                packet[2] = msg.firstByte;
-                break;
-            case MIDI_AFTERTOUCH:
-                packet[0] = 0x0D;
-                packet[1] = MIDI_AFTERTOUCH | ch;
-                packet[2] = msg.firstByte;
-                break;
-            case MIDI_POLY_AFTERTOUCH:
-                packet[0] = 0x0A;
-                packet[1] = MIDI_POLY_AFTERTOUCH | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_PITCH_BEND:
-                packet[0] = 0x0E;
-                packet[1] = MIDI_PITCH_BEND | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_START:
-                packet[0] = 0x0F;
-                packet[1] = MIDI_START;
-                break;
-            case MIDI_STOP:
-                packet[0] = 0x0F;
-                packet[1] = MIDI_STOP;
-                break;
-            case MIDI_CONTINUE:
-                packet[0] = 0x0F;
-                packet[1] = MIDI_CONTINUE;
-                break;
-            case MIDI_TIME_CLOCK:
-                packet[0] = 0x0F;
-                packet[1] = MIDI_TIME_CLOCK;
-                break;
-            case MIDI_SONG_POS_POINTER:
-                packet[0] = 0x03;
-                packet[1] = MIDI_SONG_POS_POINTER;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_SONG_SELECT:
-                packet[0] = 0x02;
-                packet[1] = MIDI_SONG_SELECT;
-                packet[2] = msg.firstByte;
-                break;
-            default:
-                return true;
+                return true; // nothing to send; drop it from the queue
             }
-
             const bool written = g_dongle_usb_midi.writePacket(packet);
             if (written)
             {
