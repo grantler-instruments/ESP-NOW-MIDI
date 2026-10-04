@@ -163,6 +163,8 @@ jobs:
           for sketch in examples/*/; do
             if [ -d "$sketch" ]; then
               sketch_name=$(basename "$sketch")
+              # Skip grouping folders that are not Arduino sketches.
+              [ -f "${sketch}${sketch_name}.ino" ] || continue
               echo "Building $sketch_name for ${{ matrix.board.name }}"
               if ! arduino-cli compile --fqbn ${{ matrix.board.fqbn }} "$sketch" --output-dir build/"$sketch_name"; then
                 echo "Failed to build $sketch_name for ${{ matrix.board.name }}"
