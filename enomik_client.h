@@ -590,6 +590,12 @@ namespace enomik
             return _inbox.droppedCount();
         }
 
+        /** @return ESP-NOW send counters (see esp_now_midi::getSendStats()). */
+        EspNowSendStats getSendStats() const
+        {
+            return espnowMIDI.getSendStats();
+        }
+
         /**
          * @brief Where ESP-NOW receive handlers run (default: in loop()).
          *

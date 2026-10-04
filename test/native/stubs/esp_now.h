@@ -59,6 +59,7 @@ struct StubEspNow
     std::vector<StubEspNowPacket> sent;
     bool record = true;
     bool keepOnInit = false; // esp_now_init() reports "already initialized"
+    void (*sendCb)(const wifi_tx_info_t *, esp_now_send_status_t) = nullptr;
 };
 
 inline StubEspNow &stubEspNow()
@@ -104,6 +105,10 @@ inline esp_err_t esp_now_init()
 inline esp_err_t esp_now_send(const uint8_t *dest, const uint8_t *data, size_t len)
 {
     std::lock_guard<std::mutex> lock(stubEspNow().mutex);
+    if (stubEspNowFind(dest) < 0)
+    {
+        return ESP_ERR_ESPNOW_NOT_FOUND;
+    }
     if (stubEspNow().record)
     {
         StubEspNowPacket p;
@@ -143,5 +148,19 @@ inline esp_err_t esp_now_del_peer(const uint8_t *mac)
     return ESP_OK;
 }
 
-inline esp_err_t esp_now_register_send_cb(void (*)(const wifi_tx_info_t *, esp_now_send_status_t)) { return ESP_OK; }
+inline esp_err_t esp_now_register_send_cb(void (*cb)(const wifi_tx_info_t *, esp_now_send_status_t))
+{
+    stubEspNow().sendCb = cb;
+    return ESP_OK;
+}
+
+// Reports a delivery result, as the driver does after each send.
+inline void stubEspNowReportSend(esp_now_send_status_t status)
+{
+    wifi_tx_info_t info{};
+    if (stubEspNow().sendCb)
+    {
+        stubEspNow().sendCb(&info, status);
+    }
+}
 inline esp_err_t esp_now_register_recv_cb(void (*)(const esp_now_recv_info_t *, const uint8_t *, int)) { return ESP_OK; }

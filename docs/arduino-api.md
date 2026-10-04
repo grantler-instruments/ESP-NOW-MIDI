@@ -11,7 +11,8 @@ There are three main ways to use the library:
 - [`esp_now_midi`](api/Classes/classesp__now__midi.md): low-level ESP-NOW MIDI
   transport. Initialize it, add peers, send MIDI messages, and register receive
   handlers. Its receive handlers run in the ESP-NOW receive callback (WiFi
-  task): keep them short.
+  task): keep them short. `getSendStats()` counts refused, sent and
+  acknowledged packets to tell why messages do not arrive.
 - [`enomik::Client`](api/Classes/classenomik_1_1_client.md): higher-level client
   that wraps ESP-NOW MIDI setup, peer storage, and a MIDI SysEx configuration
   interface for pin mapping and board setup. Received MIDI is handled in

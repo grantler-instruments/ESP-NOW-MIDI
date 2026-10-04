@@ -43,6 +43,16 @@ struct PeerInfo
   }
 };
 
+/** @brief ESP-NOW send counters since boot (see esp_now_midi::getSendStats()). */
+struct EspNowSendStats
+{
+  uint32_t sent = 0;         ///< Packets ESP-NOW accepted for sending.
+  uint32_t failed = 0;       ///< Sends ESP-NOW refused, or sends with no peers.
+  uint32_t delivered = 0;    ///< Packets the receiver acknowledged.
+  uint32_t notDelivered = 0; ///< Packets sent but not acknowledged.
+  esp_err_t lastError = ESP_OK; ///< Last refusal (`ESP_FAIL`: no peers).
+};
+
 /**
  * @brief Sends and receives MIDI messages over ESP-NOW.
  *
@@ -80,7 +90,16 @@ public:
    */
   static void SendCallbackAdapter(const wifi_tx_info_t *info, esp_now_send_status_t status)
   {
-    if (_instance && _instance->userDataSentCallback)
+    if (!_instance)
+    {
+      return;
+    }
+    {
+      EspNowMidiLock lock(_instance->_statsMux);
+      EspNowSendStats &stats = _instance->_stats;
+      ++(status == ESP_NOW_SEND_SUCCESS ? stats.delivered : stats.notDelivered);
+    }
+    if (_instance->userDataSentCallback)
     {
       _instance->userDataSentCallback(info, status);
     }
@@ -416,13 +435,14 @@ public:
     const int count = copyPeers(macs, MAX_PEERS);
     if (count == 0)
     {
+      countSend(ESP_FAIL);
       return ESP_FAIL;
     }
 
     esp_err_t result = ESP_OK;
     for (int i = 0; i < count; i++)
     {
-      const esp_err_t err = esp_now_send(macs[i], data, len);
+      const esp_err_t err = countSend(esp_now_send(macs[i], data, len));
       if (err != ESP_OK)
       {
         result = err; // Return last error if any
@@ -444,7 +464,7 @@ public:
     {
       return ESP_ERR_INVALID_ARG;
     }
-    return esp_now_send(macAddress, data, len);
+    return countSend(esp_now_send(macAddress, data, len));
   }
 
   /**
@@ -1143,7 +1163,36 @@ public:
     return _lastSenderValid ? _lastSenderMac : nullptr;
   }
 
+  /**
+   * @brief Send counters since boot, to tell why messages do not arrive:
+   * refused sends (`failed`, `lastError`), or sent but not acknowledged by the
+   * receiver (`notDelivered`, e.g. out of range or receiver off).
+   */
+  EspNowSendStats getSendStats() const
+  {
+    EspNowMidiLock lock(_statsMux);
+    return _stats;
+  }
+
 private:
+  EspNowSendStats _stats;         // Guarded by _statsMux
+  mutable portMUX_TYPE _statsMux = portMUX_INITIALIZER_UNLOCKED;
+
+  esp_err_t countSend(esp_err_t err)
+  {
+    EspNowMidiLock lock(_statsMux);
+    if (err == ESP_OK)
+    {
+      ++_stats.sent;
+    }
+    else
+    {
+      ++_stats.failed;
+      _stats.lastError = err;
+    }
+    return err;
+  }
+
   PeerInfo _peers[MAX_PEERS];     // Guarded by _peersMux
   int _peersCount = 0;            // Guarded by _peersMux
   mutable portMUX_TYPE _peersMux = portMUX_INITIALIZER_UNLOCKED;

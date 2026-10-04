@@ -176,12 +176,12 @@ TEST_CASE("dongle skips muted peers and sends to the others", "[espnow][wire]")
 
 TEST_CASE("dongle -> receiver round trip reaches the MIDI handlers", "[espnow][wire]")
 {
+    esp_now_midi receiver;
+    REQUIRE(receiver.begin()); // first: the stub driver is shared and begin() resets it
+    attachHandlers(receiver);
     enomik::Dongle dongle;
     REQUIRE(dongle.espnowMIDI.begin()); // as firmware does (initializes the peer list)
     REQUIRE(dongle.espnowMIDI.addPeer(kPeerA));
-    esp_now_midi receiver;
-    REQUIRE(receiver.begin());
-    attachHandlers(receiver);
 
     stubEspNowSent().clear();
     dongle.sendNoteOn(61, 77, 10);
@@ -615,4 +615,36 @@ TEST_CASE("begin() again keeps the driver and peer list in sync", "[espnow][peer
     REQUIRE(midi.addPeer(mac));
     REQUIRE(midi.hasPeer(mac));
     REQUIRE(stubEspNowPeerCount() == 1);
+}
+
+TEST_CASE("send stats count refused, sent and acknowledged packets", "[espnow][stats]")
+{
+    esp_now_midi midi;
+    REQUIRE(midi.begin());
+
+    REQUIRE(midi.sendNoteOn(60, 100, 1) == ESP_FAIL); // no peers yet
+    EspNowSendStats s = midi.getSendStats();
+    REQUIRE(s.sent == 0);
+    REQUIRE(s.failed == 1);
+    REQUIRE(s.lastError == ESP_FAIL);
+
+    uint8_t a[6], b[6];
+    macFor(a, 1);
+    macFor(b, 2);
+    REQUIRE(midi.addPeer(a));
+    REQUIRE(midi.addPeer(b));
+    REQUIRE(midi.sendNoteOn(60, 100, 1) == ESP_OK);
+    uint8_t stranger[6];
+    macFor(stranger, 3);
+    REQUIRE(midi.send(stranger, bytes({0x90, 60, 0}).data(), 3) == ESP_ERR_ESPNOW_NOT_FOUND);
+
+    stubEspNowReportSend(ESP_NOW_SEND_SUCCESS);
+    stubEspNowReportSend(ESP_NOW_SEND_FAIL);
+
+    s = midi.getSendStats();
+    REQUIRE(s.sent == 2);
+    REQUIRE(s.failed == 2);
+    REQUIRE(s.lastError == ESP_ERR_ESPNOW_NOT_FOUND);
+    REQUIRE(s.delivered == 1);
+    REQUIRE(s.notDelivered == 1);
 }
