@@ -160,18 +160,20 @@ jobs:
         run: |
           mkdir -p build
           failed=0
-          for sketch in examples/*/; do
-            if [ -d "$sketch" ]; then
-              sketch_name=$(basename "$sketch")
-              # Skip grouping folders that are not Arduino sketches.
-              [ -f "${sketch}${sketch_name}.ino" ] || continue
-              echo "Building $sketch_name for ${{ matrix.board.name }}"
-              if ! arduino-cli compile --fqbn ${{ matrix.board.fqbn }} "$sketch" --output-dir build/"$sketch_name"; then
-                echo "Failed to build $sketch_name for ${{ matrix.board.name }}"
-                failed=1
-              fi
+          while IFS= read -r -d '' ino; do
+            sketch=$(dirname "$ino")
+            sketch_name=$(basename "$sketch")
+            # Only the matching main file identifies a sketch; skip extra .ino tabs.
+            [ "$ino" = "$sketch/$sketch_name.ino" ] || continue
+            sketch_path=${sketch#examples/}
+            # Include parent folders so nested sketches get distinct build/artifact names.
+            sketch_id=${sketch_path//\//_}
+            echo "Building $sketch_path for ${{ matrix.board.name }}"
+            if ! arduino-cli compile --fqbn ${{ matrix.board.fqbn }} "$sketch" --output-dir "build/$sketch_id"; then
+              echo "Failed to build $sketch_path for ${{ matrix.board.name }}"
+              failed=1
             fi
-          done
+          done < <(find examples -type f -name '*.ino' -print0)
           exit $failed
           
       - name: Organize binaries for web embedding
