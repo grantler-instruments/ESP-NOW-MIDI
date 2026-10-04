@@ -8,13 +8,7 @@
 #include "freertos/FreeRTOS.h"
 #include "esp_timer.h"
 #else
-// Host / native tests: single-threaded no-op critical sections.
-#ifndef portMUX_INITIALIZER_UNLOCKED
-typedef int portMUX_TYPE;
-#define portMUX_INITIALIZER_UNLOCKED 0
-#define portENTER_CRITICAL(mux) ((void)(mux))
-#define portEXIT_CRITICAL(mux) ((void)(mux))
-#endif
+#include "./esp_now_midi_lock.h"
 #endif
 #include "./esp_now_midi_helpers.h"
 

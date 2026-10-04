@@ -578,14 +578,8 @@ namespace enomik
 
         bool removePeer(int index)
         {
-            const uint8_t *mac = espnowMIDI.getPeer(index);
-            if (!mac)
-            {
-                return false;
-            }
-            uint8_t copy[6];
-            memcpy(copy, mac, 6);
-            return removePeer(copy);
+            uint8_t mac[6];
+            return espnowMIDI.getPeer(index, mac) && removePeer(mac);
         }
 
         /**
@@ -663,7 +657,8 @@ namespace enomik
 
         bool setMuted(int index, bool muted)
         {
-            return setMuted(espnowMIDI.getPeer(index), muted);
+            uint8_t mac[6];
+            return espnowMIDI.getPeer(index, mac) && setMuted(mac, muted);
         }
 
         bool isMuted(const uint8_t mac[6]) const
@@ -673,7 +668,8 @@ namespace enomik
 
         bool isMuted(int index) const
         {
-            return isMuted(espnowMIDI.getPeer(index));
+            uint8_t mac[6];
+            return espnowMIDI.getPeer(index, mac) && isMuted(mac);
         }
 
         /**
@@ -957,7 +953,8 @@ namespace enomik
 
         esp_err_t sendToUnmutedPeers(const uint8_t *data, size_t len)
         {
-            const int n = espnowMIDI.getPeersCount();
+            uint8_t macs[MAX_PEERS][6];
+            const int n = espnowMIDI.copyPeers(macs, MAX_PEERS);
             if (n == 0)
             {
                 return ESP_FAIL;
@@ -965,12 +962,11 @@ namespace enomik
             esp_err_t result = ESP_OK;
             for (int i = 0; i < n; i++)
             {
-                const uint8_t *mac = espnowMIDI.getPeer(i);
-                if (!mac || isMuted(mac))
+                if (isMuted(macs[i]))
                 {
                     continue;
                 }
-                const esp_err_t err = espnowMIDI.send(mac, data, len);
+                const esp_err_t err = espnowMIDI.send(macs[i], data, len);
                 if (err != ESP_OK)
                 {
                     result = err;

@@ -15,6 +15,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include "./esp_now_midi_helpers.h"
+#include "./esp_now_midi_lock.h"
 #include "./esp_now_midi_log.h"
 #include "./esp_now_midi_wifi.h"
 
@@ -148,7 +149,10 @@ public:
     esp_wifi_set_channel(ESP_NOW_MIDI_CHANNEL, WIFI_SECOND_CHAN_NONE);
     setReducePowerAtCostOfLatency(reducePowerAtCostOfLatency);
 
-    _peersCount = 0;
+    {
+      EspNowMidiLock lock(_peersMux);
+      _peersCount = 0;
+    }
 
     // Register callbacks
     esp_now_register_send_cb(SendCallbackAdapter);
@@ -188,15 +192,26 @@ public:
     return _reducePowerAtCostOfLatency;
   }
 
+  /*
+   * Peer list: the loop task and the ESP-NOW receive callback (WiFi task) both
+   * read and change it. Every access to _peers/_peersCount happens inside a
+   * short critical section that only copies memory; ESP-NOW calls and logging
+   * run outside it, and senders work on a snapshot.
+   */
+
   /**
    * @brief Registers an ESP-NOW peer for MIDI transmission.
    * @param macAddress Six-byte Wi-Fi MAC address of the peer.
    * @return `true` when the peer was added to ESP-NOW and the local peer list;
-   * `false` when the peer limit is reached or ESP-NOW rejects it.
+   * `false` when it already exists, the peer limit is reached or ESP-NOW rejects it.
    */
   bool addPeer(const uint8_t macAddress[6])
   {
-    if (_peersCount >= MAX_PEERS)
+    if (!macAddress)
+    {
+      return false;
+    }
+    if (getPeersCount() >= MAX_PEERS)
     {
       EspNowMidiLog::w("Maximum number of peers reached");
       return false;
@@ -204,25 +219,41 @@ public:
 
     EspNowMidiLog::mac("Adding peer: ", macAddress);
 
-    // Create the peer info structure
     esp_now_peer_info_t peerInfo;
     memset(&peerInfo, 0, sizeof(peerInfo));
-    memcpy(peerInfo.peer_addr, macAddress, 6); // Always use exact size (6 bytes)
+    memcpy(peerInfo.peer_addr, macAddress, 6);
     peerInfo.channel = ESP_NOW_MIDI_CHANNEL;
     peerInfo.encrypt = false;
 
-    // Add the peer to ESP-NOW
     if (esp_now_add_peer(&peerInfo) != ESP_OK)
     {
       EspNowMidiLog::e("Failed to add peer");
       return false;
     }
 
-    // Store the peer in our array AFTER successful ESP-NOW registration
-    memcpy(_peers[_peersCount].mac, macAddress, 6);
-    _peers[_peersCount].packed_mac = PeerInfo::packMac(macAddress);
-    _peersCount++;
-    EspNowMidiLog::i("Peer added successfully. Total peers: %d", _peersCount);
+    // ESP-NOW accepted the MAC; another task may have filled the list meanwhile.
+    int count;
+    {
+      EspNowMidiLock lock(_peersMux);
+      count = _peersCount;
+      if (count < MAX_PEERS)
+      {
+        memcpy(_peers[count].mac, macAddress, 6);
+        _peers[count].packed_mac = PeerInfo::packMac(macAddress);
+        count = ++_peersCount;
+      }
+      else
+      {
+        count = -1;
+      }
+    }
+    if (count < 0)
+    {
+      esp_now_del_peer(macAddress);
+      EspNowMidiLog::w("Maximum number of peers reached");
+      return false;
+    }
+    EspNowMidiLog::i("Peer added successfully. Total peers: %d", count);
     return true;
   }
 
@@ -231,23 +262,27 @@ public:
   {
     EspNowMidiLog::i("Clearing all peers from ESP-NOW...");
 
-    // Remove all peers from ESP-NOW
-    for (int i = 0; i < _peersCount; i++)
+    uint8_t macs[MAX_PEERS][6];
+    int count;
     {
-      esp_err_t result = esp_now_del_peer(_peers[i].mac);
+      EspNowMidiLock lock(_peersMux);
+      count = copyPeersLocked(macs, MAX_PEERS);
+      memset(_peers, 0, sizeof(_peers));
+      _peersCount = 0;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+      const esp_err_t result = esp_now_del_peer(macs[i]);
       if (result == ESP_OK)
       {
-        EspNowMidiLog::mac("Removed peer: ", _peers[i].mac);
+        EspNowMidiLog::mac("Removed peer: ", macs[i]);
       }
       else
       {
         EspNowMidiLog::e("Failed to remove peer, error: %d", result);
       }
     }
-
-    // Clear the internal peer list
-    memset(_peers, 0, sizeof(_peers));
-    _peersCount = 0;
 
     EspNowMidiLog::i("All peers cleared");
   }
@@ -258,21 +293,56 @@ public:
    */
   int getPeersCount() const
   {
+    EspNowMidiLock lock(_peersMux);
     return _peersCount;
   }
 
   /**
    * @brief Gets the MAC address of a registered peer.
+   *
+   * The pointer refers to the live list: use it from the loop task only, and
+   * not across a call that removes peers. Prefer getPeer(int, uint8_t[6]).
+   *
    * @param index Peer index in `[0, getPeersCount())`.
    * @return Pointer to the 6-byte MAC, or `nullptr` when @p index is out of range.
    */
   const uint8_t *getPeer(int index) const
   {
+    EspNowMidiLock lock(_peersMux);
     if (index < 0 || index >= _peersCount)
     {
       return nullptr;
     }
     return _peers[index].mac;
+  }
+
+  /**
+   * @brief Copies the MAC address of a registered peer.
+   * @param index Peer index in `[0, getPeersCount())`.
+   * @param out Receives the 6-byte MAC.
+   * @return `false` when @p index is out of range.
+   */
+  bool getPeer(int index, uint8_t out[6]) const
+  {
+    EspNowMidiLock lock(_peersMux);
+    if (!out || index < 0 || index >= _peersCount)
+    {
+      return false;
+    }
+    memcpy(out, _peers[index].mac, 6);
+    return true;
+  }
+
+  /**
+   * @brief Copies all registered peer MACs (a consistent snapshot).
+   * @param out Receives up to @p max MACs.
+   * @param max Capacity of @p out.
+   * @return Number of MACs copied.
+   */
+  int copyPeers(uint8_t out[][6], int max) const
+  {
+    EspNowMidiLock lock(_peersMux);
+    return copyPeersLocked(out, max);
   }
 
   /**
@@ -282,40 +352,32 @@ public:
    */
   bool removePeer(const uint8_t macAddress[6])
   {
-    if (!macAddress)
+    if (!macAddress || !hasPeer(macAddress))
     {
       return false;
     }
 
-    int index = -1;
-    const uint64_t packed = PeerInfo::packMac(macAddress);
-    for (int i = 0; i < _peersCount; i++)
-    {
-      if (_peers[i].packed_mac == packed)
-      {
-        index = i;
-        break;
-      }
-    }
-    if (index < 0)
-    {
-      return false;
-    }
-
-    const esp_err_t result = esp_now_del_peer(_peers[index].mac);
+    const esp_err_t result = esp_now_del_peer(macAddress);
     if (result != ESP_OK)
     {
       EspNowMidiLog::e("Failed to remove peer, error: %d", result);
       return false;
     }
 
-    EspNowMidiLog::mac("Removed peer: ", macAddress);
-    for (int i = index; i < _peersCount - 1; i++)
     {
-      _peers[i] = _peers[i + 1];
+      EspNowMidiLock lock(_peersMux);
+      const int index = indexOfLocked(PeerInfo::packMac(macAddress));
+      if (index >= 0)
+      {
+        for (int i = index; i < _peersCount - 1; i++)
+        {
+          _peers[i] = _peers[i + 1];
+        }
+        _peersCount--;
+        memset(&_peers[_peersCount], 0, sizeof(_peers[_peersCount]));
+      }
     }
-    _peersCount--;
-    memset(&_peers[_peersCount], 0, sizeof(_peers[_peersCount]));
+    EspNowMidiLog::mac("Removed peer: ", macAddress);
     return true;
   }
 
@@ -326,23 +388,20 @@ public:
    */
   bool removePeer(int index)
   {
-    if (index < 0 || index >= _peersCount)
-    {
-      return false;
-    }
     uint8_t mac[6];
-    memcpy(mac, _peers[index].mac, 6);
-    return removePeer(mac);
+    return getPeer(index, mac) && removePeer(mac);
   }
 
   /** @brief Logs every registered peer MAC address. */
   void printPeers() const
   {
+    uint8_t macs[MAX_PEERS][6];
+    const int count = copyPeers(macs, MAX_PEERS);
     EspNowMidiLog::i("=== Registered ESP-NOW Peers ===");
-    for (int i = 0; i < _peersCount; i++)
+    for (int i = 0; i < count; i++)
     {
       char macBuf[EspNowMidiLog::MAC_STR_LEN];
-      EspNowMidiLog::formatMac(macBuf, sizeof(macBuf), _peers[i].mac);
+      EspNowMidiLog::formatMac(macBuf, sizeof(macBuf), macs[i]);
       EspNowMidiLog::i("Peer %d: %s", i, macBuf);
     }
     EspNowMidiLog::i("================================");
@@ -357,16 +416,17 @@ public:
    */
   esp_err_t sendToAllPeers(const uint8_t *data, size_t len)
   {
-    esp_err_t result = ESP_OK;
-
-    if (_peersCount == 0)
+    uint8_t macs[MAX_PEERS][6];
+    const int count = copyPeers(macs, MAX_PEERS);
+    if (count == 0)
     {
       return ESP_FAIL;
     }
 
-    for (int i = 0; i < _peersCount; i++)
+    esp_err_t result = ESP_OK;
+    for (int i = 0; i < count; i++)
     {
-      esp_err_t err = esp_now_send(_peers[i].mac, data, len);
+      const esp_err_t err = esp_now_send(macs[i], data, len);
       if (err != ESP_OK)
       {
         result = err; // Return last error if any
@@ -1002,13 +1062,12 @@ public:
    */
   bool hasPeer(const uint8_t mac[6]) const
   {
-    uint64_t packed = PeerInfo::packMac(mac);
-    for (int i = 0; i < _peersCount; i++)
+    if (!mac)
     {
-      if (_peers[i].packed_mac == packed)
-        return true;
+      return false;
     }
-    return false;
+    EspNowMidiLock lock(_peersMux);
+    return indexOfLocked(PeerInfo::packMac(mac)) >= 0;
   }
 
   /**
@@ -1021,8 +1080,31 @@ public:
   }
 
 private:
-  PeerInfo _peers[MAX_PEERS];     // Array to store peer info with optimized MAC storage
-  int _peersCount;                // Current number of peers
+  PeerInfo _peers[MAX_PEERS];     // Guarded by _peersMux
+  int _peersCount = 0;            // Guarded by _peersMux
+  mutable portMUX_TYPE _peersMux = portMUX_INITIALIZER_UNLOCKED;
+
+  int indexOfLocked(uint64_t packed) const
+  {
+    for (int i = 0; i < _peersCount; i++)
+    {
+      if (_peers[i].packed_mac == packed)
+      {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  int copyPeersLocked(uint8_t out[][6], int max) const
+  {
+    const int count = max <= 0 ? 0 : (_peersCount < max ? _peersCount : max);
+    for (int i = 0; i < count; i++)
+    {
+      memcpy(out[i], _peers[i].mac, 6);
+    }
+    return count;
+  }
   static esp_now_midi *_instance; // Static pointer to hold the instance
   DataSentCallback userDataSentCallback = nullptr;
   bool _autoPeerDiscovery = true;

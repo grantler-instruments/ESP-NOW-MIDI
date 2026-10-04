@@ -7,8 +7,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 #include "arduino_stubs.h"
@@ -264,4 +266,135 @@ TEST_CASE("receive tolerates empty and null packets", "[espnow][receive]")
     uint8_t one = 0x90;
     rx.OnDataRecv(kSender, &one, -1);
     REQUIRE(g_rx.noteOns == 0);
+}
+
+// --- Peer list -------------------------------------------------------------
+
+namespace {
+
+void macFor(uint8_t out[6], int n)
+{
+    const uint8_t base[6] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
+    memcpy(out, base, 6);
+    out[4] = static_cast<uint8_t>(n >> 8);
+    out[5] = static_cast<uint8_t>(n);
+}
+
+} // namespace
+
+TEST_CASE("peer list: add, duplicate, remove keeps order", "[espnow][peers]")
+{
+    esp_now_midi midi;
+    REQUIRE(midi.begin());
+    uint8_t a[6], b[6], c[6];
+    macFor(a, 1);
+    macFor(b, 2);
+    macFor(c, 3);
+
+    REQUIRE(midi.addPeer(a));
+    REQUIRE(midi.addPeer(b));
+    REQUIRE(midi.addPeer(c));
+    REQUIRE_FALSE(midi.addPeer(b));
+    REQUIRE(midi.getPeersCount() == 3);
+
+    REQUIRE(midi.removePeer(b));
+    REQUIRE_FALSE(midi.removePeer(b));
+    uint8_t out[6];
+    REQUIRE(midi.getPeer(0, out));
+    REQUIRE(memcmp(out, a, 6) == 0);
+    REQUIRE(midi.getPeer(1, out));
+    REQUIRE(memcmp(out, c, 6) == 0);
+    REQUIRE_FALSE(midi.getPeer(2, out));
+    REQUIRE(stubEspNowPeerCount() == 2);
+
+    REQUIRE(midi.removePeer(0));
+    REQUIRE(midi.getPeersCount() == 1);
+    midi.clearPeers();
+    REQUIRE(midi.getPeersCount() == 0);
+    REQUIRE(stubEspNowPeerCount() == 0);
+}
+
+TEST_CASE("peer list: full list rejects more and leaks no registration", "[espnow][peers]")
+{
+    esp_now_midi midi;
+    REQUIRE(midi.begin());
+    uint8_t mac[6];
+    for (int i = 0; i < MAX_PEERS; ++i)
+    {
+        macFor(mac, i);
+        REQUIRE(midi.addPeer(mac));
+    }
+    macFor(mac, 999);
+    REQUIRE_FALSE(midi.addPeer(mac));
+    REQUIRE(midi.getPeersCount() == MAX_PEERS);
+    REQUIRE(stubEspNowPeerCount() == MAX_PEERS);
+
+    uint8_t macs[MAX_PEERS][6];
+    REQUIRE(midi.copyPeers(macs, 5) == 5);
+    REQUIRE(midi.copyPeers(macs, -1) == 0);
+    REQUIRE(midi.copyPeers(macs, MAX_PEERS) == MAX_PEERS);
+}
+
+TEST_CASE("peer list: auto-discovery adds a sender exactly once", "[espnow][peers]")
+{
+    esp_now_midi midi;
+    REQUIRE(midi.begin()); // auto discovery on by default
+    uint8_t sender[6];
+    macFor(sender, 42);
+    const uint8_t clock = 0xF8;
+    midi.OnDataRecv(sender, &clock, 1);
+    midi.OnDataRecv(sender, &clock, 1);
+    REQUIRE(midi.getPeersCount() == 1);
+    REQUIRE(midi.hasPeer(sender));
+}
+
+TEST_CASE("peer list: concurrent use from the WiFi task and the loop task", "[espnow][peers][threads]")
+{
+    // Thread "wifi" acts like the receive callback: auto-discovery plus a
+    // handler that echoes to all peers. The main thread acts like loop():
+    // adds, removes, clears and sends. Run under ThreadSanitizer to catch races.
+    esp_now_midi midi;
+    REQUIRE(midi.begin());
+    stubEspNow().record = false;
+    const uint8_t note[3] = {0x90, 60, 100};
+
+    std::thread wifi([&]() {
+        uint8_t sender[6];
+        for (int i = 0; i < 4000; ++i)
+        {
+            macFor(sender, i % 40);
+            midi.OnDataRecv(sender, note, 3);
+            midi.sendToAllPeers(note, 3);
+        }
+    });
+
+    uint8_t mac[6];
+    for (int i = 0; i < 4000; ++i)
+    {
+        macFor(mac, 100 + i % 10);
+        midi.addPeer(mac);
+        midi.sendToAllPeers(note, 3);
+        macFor(mac, (i * 7) % 40);
+        midi.removePeer(mac);
+        if (i % 500 == 0)
+        {
+            midi.clearPeers();
+        }
+    }
+    wifi.join();
+    stubEspNow().record = true;
+
+    // The list stays consistent: within bounds, no duplicates, and exactly
+    // the peers the ESP-NOW driver has registered.
+    uint8_t macs[MAX_PEERS][6];
+    const int count = midi.copyPeers(macs, MAX_PEERS);
+    REQUIRE(count == midi.getPeersCount());
+    REQUIRE(static_cast<size_t>(count) == stubEspNowPeerCount());
+    for (int i = 0; i < count; ++i)
+    {
+        for (int j = i + 1; j < count; ++j)
+        {
+            REQUIRE(memcmp(macs[i], macs[j], 6) != 0);
+        }
+    }
 }
