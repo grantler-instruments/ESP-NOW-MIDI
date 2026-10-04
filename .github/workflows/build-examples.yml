@@ -256,7 +256,7 @@ jobs:
           git clone https://x-access-token:${PAT}@github.com/grantler-instruments/enomik-app.git enomik-app
           mkdir -p "enomik-app/app/public/firmware/${FOLDER}"
           for board in lolin_s2_mini esp32s2 esp32s3; do
-            for sketch in client dongle print_mac; do
+            for sketch in client dongle print_mac grantler_instruments_dongle; do
               cp all-binaries/${board}_${sketch}_*.ino.bin "enomik-app/app/public/firmware/${FOLDER}/"
             done
           done
