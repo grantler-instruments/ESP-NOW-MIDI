@@ -7,6 +7,7 @@
 - Core: `setHandleMessage()` delivers every received message with its sender MAC, before the per-type handlers.
 - Hello MIDI example: sends on a `millis()` timer instead of `delay()`, so received MIDI is handled right away; fixed its inverted send-error check.
 - Core: `esp_now_midi.h` can be included from several source files (no duplicate `_instance` definition).
+- Core: auto peer discovery only adds senders of valid MIDI packets (`isMidiPacket()`), so foreign ESP-NOW traffic no longer fills the peer list.
 - Fix: the ESP-NOW peer list is now safe to use from the loop task and the receive callback at the same time (auto-discovery, echo handlers). Before, concurrent access could corrupt the list or leave peers registered in ESP-NOW but missing from the list, so they stopped receiving until a reboot. New `getPeer(index, mac)` and `copyPeers()` return copies.
 - Fix: the dongle sent MIDI over ESP-NOW as its internal 7-byte struct (since the peer mute feature), which every receiver ignored as SysEx. It sends the standard 1-3 byte MIDI packet again.
 - Fix: receiving a 4-128 byte ESP-NOW packet read past the end of the receive buffer (copied 129 bytes regardless of length).

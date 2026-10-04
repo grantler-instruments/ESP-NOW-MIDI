@@ -527,3 +527,72 @@ TEST_CASE("dongle receive runs concurrently with loop without races", "[espnow][
     dongle.processReceived();
     REQUIRE(g_toHostCalls > 1);
 }
+
+// --- Auto-discovery --------------------------------------------------------
+
+TEST_CASE("isMidiPacket accepts what the library sends", "[espnow][discovery]")
+{
+    REQUIRE(esp_now_midi::isMidiPacket(bytes({0x90, 60, 100}).data(), 3));
+    REQUIRE(esp_now_midi::isMidiPacket(bytes({0xC3, 5}).data(), 2));
+    REQUIRE(esp_now_midi::isMidiPacket(bytes({0xF8}).data(), 1));
+    REQUIRE(esp_now_midi::isMidiPacket(bytes({0xF2, 0x2C, 0x02}).data(), 3));
+
+    std::vector<uint8_t> sysex(sizeof(midi_sysex_message), 0);
+    sysex[0] = 0xF0;
+    sysex.back() = 10;
+    REQUIRE(esp_now_midi::isMidiPacket(sysex.data(), static_cast<int>(sysex.size())));
+
+    // Everything a real sender would produce: dongle, core send API.
+    enomik::Dongle dongle;
+    REQUIRE(dongle.espnowMIDI.begin());
+    REQUIRE(dongle.espnowMIDI.addPeer(kPeerA));
+    stubEspNowSent().clear();
+    dongle.sendNoteOn(60, 100, 1);
+    dongle.sendProgramChange(3, 2);
+    dongle.sendPitchBend(-2000, 3);
+    dongle.sendClock();
+    dongle.sendSongSelect(4);
+    for (const auto &p : stubEspNowSent())
+    {
+        REQUIRE(esp_now_midi::isMidiPacket(p.data.data(), static_cast<int>(p.data.size())));
+    }
+}
+
+TEST_CASE("isMidiPacket rejects foreign or broken payloads", "[espnow][discovery]")
+{
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(nullptr, 3));
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(bytes({0x90}).data(), 0));
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(bytes({0x40, 60, 100}).data(), 3)); // no status byte
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(bytes({0x90, 60}).data(), 2));      // too short for note on
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(bytes({0xC0, 5, 0}).data(), 3));    // too long for program change
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(bytes({0x90, 60, 0x80}).data(), 3)); // data byte with bit 7
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(bytes({0xF4, 1, 2}).data(), 3));    // undefined status
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(bytes({0xF0, 1, 2}).data(), 3));    // bare sysex start
+
+    std::vector<uint8_t> junk(7, 0x55);
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(junk.data(), 7));
+    std::vector<uint8_t> sysex(sizeof(midi_sysex_message), 0);
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(sysex.data(), static_cast<int>(sysex.size()))); // length 0
+    std::vector<uint8_t> big(250, 0x90);
+    REQUIRE_FALSE(esp_now_midi::isMidiPacket(big.data(), 250));
+}
+
+TEST_CASE("auto-discovery ignores senders of foreign traffic", "[espnow][discovery]")
+{
+    esp_now_midi rx;
+    REQUIRE(rx.begin());
+    uint8_t mac[6];
+    std::vector<uint8_t> junk(24, 0xAB);
+    for (int i = 0; i < 40; ++i)
+    {
+        macFor(mac, 500 + i);
+        rx.OnDataRecv(mac, junk.data(), static_cast<int>(junk.size()));
+        rx.OnDataRecv(mac, bytes({0x12, 0x34}).data(), 2);
+    }
+    REQUIRE(rx.getPeersCount() == 0);
+
+    macFor(mac, 1);
+    rx.OnDataRecv(mac, bytes({0x90, 60, 100}).data(), 3);
+    REQUIRE(rx.getPeersCount() == 1);
+    REQUIRE(rx.hasPeer(mac));
+}

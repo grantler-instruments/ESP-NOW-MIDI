@@ -107,8 +107,8 @@ public:
    *
    * @param reducePowerAtCostOfLatency Enable modem sleep and lower transmit
    * power to save energy; disabled by default for lower latency.
-   * @param autoPeerDiscovery Add an unknown message sender as a peer when it
-   * first sends data.
+   * @param autoPeerDiscovery Add an unknown sender as a peer when it first
+   * sends a valid MIDI packet (see isMidiPacket()).
    * @param callback Optional callback invoked after each ESP-NOW send.
    * @param manageWifi When `true` (default), bring up Wi-Fi STA via the
    * Arduino or ESP-IDF backend. When `false`, the application must already
@@ -808,13 +808,13 @@ public:
       memcpy(_lastSenderMac, mac, 6);
       _lastSenderValid = true;
     }
-    if (_autoPeerDiscovery && !hasPeer(mac))
-    {
-      addPeer(mac);
-    }
     if (!incomingData || len <= 0)
     {
       return;
+    }
+    if (_autoPeerDiscovery && isMidiPacket(incomingData, len) && !hasPeer(mac))
+    {
+      addPeer(mac);
     }
     // Handle SysEx separately (larger than 3 bytes)
     if (static_cast<size_t>(len) > sizeof(midi_message_packet))
@@ -1087,6 +1087,55 @@ public:
     }
     EspNowMidiLock lock(_peersMux);
     return indexOfLocked(PeerInfo::packMac(mac)) >= 0;
+  }
+
+  /**
+   * @brief Checks whether an ESP-NOW payload is a packet this library sends.
+   *
+   * Either a 1-3 byte MIDI message whose length matches its status byte, or a
+   * 129-byte SysEx frame (`midi_sysex_message`) with a valid length.
+   */
+  static bool isMidiPacket(const uint8_t *data, int len)
+  {
+    if (!data || len <= 0)
+    {
+      return false;
+    }
+    if (len == static_cast<int>(sizeof(midi_sysex_message)))
+    {
+      const uint8_t length = data[len - 1];
+      return length > 0 && length < sizeof(midi_sysex_message);
+    }
+    if (len > static_cast<int>(sizeof(midi_message_packet)) || data[0] < 0x80)
+    {
+      return false;
+    }
+    switch (data[0])
+    {
+    case MIDI_SYSEX:
+    case SYSEX_END:
+    case 0xF4:
+    case 0xF5:
+    case 0xF9:
+    case 0xFD:
+      return false; // not a complete message, or undefined
+    default:
+      break;
+    }
+    midi_message_packet packet{};
+    memcpy(&packet, data, len);
+    if (packet.getDataSize() != len)
+    {
+      return false;
+    }
+    for (int i = 1; i < len; i++)
+    {
+      if (data[i] & 0x80)
+      {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
