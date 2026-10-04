@@ -23,10 +23,12 @@ add_executable(native_tests
   test_grantler_menu.cpp
   test_usb_midi_queue.cpp
   test_usb_stall_watchdog.cpp
+  test_espnow_wire_format.cpp
 )
 target_include_directories(native_tests PRIVATE
   "${LIB_ROOT}"
   "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
 )
 target_link_libraries(native_tests PRIVATE Catch2::Catch2WithMain)
 

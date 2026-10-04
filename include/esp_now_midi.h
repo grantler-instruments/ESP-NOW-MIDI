@@ -752,11 +752,22 @@ public:
     {
       addPeer(mac);
     }
-    // Handle SysEx separately (larger than 3 bytes)
-    if (len > sizeof(midi_message_packet))
+    if (!incomingData || len <= 0)
     {
+      return;
+    }
+    // Handle SysEx separately (larger than 3 bytes)
+    if (static_cast<size_t>(len) > sizeof(midi_message_packet))
+    {
+      // Copy only the bytes that arrived: the radio buffer is exactly `len`
+      // bytes long, so reading sizeof(midi_sysex_message) would run past it.
       midi_sysex_message sysexMessage;
-      memcpy(&sysexMessage, incomingData, sizeof(midi_sysex_message));
+      memset(&sysexMessage, 0, sizeof(sysexMessage));
+      const size_t copyLen = static_cast<size_t>(len) < sizeof(sysexMessage)
+                                 ? static_cast<size_t>(len)
+                                 : sizeof(sysexMessage);
+      memcpy(&sysexMessage, incomingData, copyLen);
+      (void)sysexMessage;
       // TODO: Handle SysEx message if needed
       return;
     }

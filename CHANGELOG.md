@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix: the dongle sent MIDI over ESP-NOW as its internal 7-byte struct (since the peer mute feature), which every receiver ignored as SysEx. It sends the standard 1-3 byte MIDI packet again.
+- Fix: receiving a 4-128 byte ESP-NOW packet read past the end of the receive buffer (copied 129 bytes regardless of length).
 - Dongle: USB watchdog (default on). When the computer stops taking MIDI from the dongle while messages are waiting, the dongle re-attaches USB like a cable replug: when USB is suspended and the computer refuses remote wakeup (at most once per suspend), or when the MIDI IN endpoint is not read for 500 ms although the computer read from the dongle before and is not sending MIDI itself. Backs off 30 s doubling to 10 min if a re-attach did not help. Remote wakeup is now sent at most once per second instead of on every loop. `setUsbWatchdogMode(Off|Observe|Recover)`, `usbWatchdogConfig()`, `getUsbHealthStats()`, `getUsbHealthStatsPrevious()` (saved to flash only after a USB incident). Grantler dongle: new read-only USB menu page; `ENOMIK_USB_FAULT_INJECT` test flag.
 - Dongle: drop stale USB MIDI messages when the host stops reading (`USB_MIDI_STALE_MS`, default 500 ms, `setUsbStaleTimeout()`); release messages and the latest CC/pitch bend/pressure/program values are always delivered. A full queue now evicts the oldest droppable message instead of the newest. New drop counters `getUsbStaleDropCount()` / `getUsbOverflowDropCount()`.
 

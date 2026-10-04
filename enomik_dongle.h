@@ -981,7 +981,11 @@ namespace enomik
 
         esp_err_t sendMidiToUnmutedPeers(const midi_message &msg)
         {
-            return sendToUnmutedPeers(reinterpret_cast<const uint8_t *>(&msg), sizeof(msg));
+            // Wire format = the 1-3 byte MIDI packet the core sends and parses,
+            // never the internal midi_message struct (7 bytes on ESP32, which
+            // receivers would treat as SysEx and ignore).
+            const midi_message_packet packet = midi_message_packet::fromMessage(msg);
+            return sendToUnmutedPeers(reinterpret_cast<const uint8_t *>(&packet), packet.getDataSize());
         }
 
         void readMacAddress()
