@@ -6,6 +6,13 @@ uint8_t peerMacAddress[6] = { 0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62 };
 enomik::Client _client;
 byte channel = 1;
 
+// Heartbeat: the onboard LED (GPIO 15 on the LOLIN S2 Mini) is on while a
+// round of messages is sent and off during the pause, so it flashes about
+// every 2.6 s. If it stops flashing (stuck on or off), the loop has hung.
+#ifdef LED_BUILTIN
+#define HEARTBEAT_LED LED_BUILTIN
+#endif
+
 
 void onNoteOn(byte channel, byte note, byte velocity) {
   Serial.printf("Note On - Channel: %d, Note: %d, Velocity: %d\n", channel, note, velocity);
@@ -47,6 +54,9 @@ void onClock() {
 
 void setup() {
   Serial.begin(115200);
+#ifdef HEARTBEAT_LED
+  pinMode(HEARTBEAT_LED, OUTPUT);
+#endif
   _client.begin();
   _client.addPeer(peerMacAddress);
   // all of these midi handlers are optional, depends on the usecase, very often you just wanna send data and not receive
@@ -65,6 +75,9 @@ void setup() {
 }
 
 void loop() {
+#ifdef HEARTBEAT_LED
+  digitalWrite(HEARTBEAT_LED, HIGH);
+#endif
   _client.loop();
   bool success = _client.sendNoteOn(60, 127, 1);
 
@@ -84,5 +97,8 @@ void loop() {
   delay(100);
   success = _client.sendPitchBend(8191, channel);
 
+#ifdef HEARTBEAT_LED
+  digitalWrite(HEARTBEAT_LED, LOW);
+#endif
   delay(2000);
 }
