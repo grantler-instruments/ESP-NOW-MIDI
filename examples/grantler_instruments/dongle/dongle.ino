@@ -21,6 +21,40 @@ AceButton _btnSelect;
 
 void handleEvent(AceButton*, uint8_t, uint8_t);
 
+#ifdef ENOMIK_USB_FAULT_INJECT
+void printUsbHealth();
+void handleUsbFaultCommands();
+
+void printUsbHealth() {
+  const enomik::UsbHealthStats& st = _dongle.getUsbHealthStats();
+  Serial.printf("usb: reattaches=%lu recoveries=%lu stalls=%lu maxBusy=%lums "
+                "suspends=%lu wake=%lu/%lu refused maxSuspend=%lums\n",
+                (unsigned long)st.reattaches, (unsigned long)st.recoveries,
+                (unsigned long)st.stalls, (unsigned long)st.longestBusyMs,
+                (unsigned long)st.suspends, (unsigned long)st.wakeupsRefused,
+                (unsigned long)st.wakeupsTried, (unsigned long)st.longestSuspendMs);
+}
+
+void handleUsbFaultCommands() {
+  using Fault = enomik::Dongle::UsbFault;
+  while (Serial.available() > 0) {
+    const int c = Serial.read();
+    if (c == 's') {
+      _dongle.injectUsbFault(Fault::StuckEndpoint);
+      Serial.println("fault: stuck endpoint - now press a client button");
+    } else if (c == 'u') {
+      _dongle.injectUsbFault(Fault::Suspended);
+      Serial.println("fault: suspended, wakeup refused - now press a client button");
+    } else if (c == 'n') {
+      _dongle.injectUsbFault(Fault::None);
+      Serial.println("fault: none");
+    } else if (c == 'p') {
+      printUsbHealth();
+    }
+  }
+}
+#endif
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -83,6 +117,9 @@ void setup() {
 }
 
 void loop() {
+#ifdef ENOMIK_USB_FAULT_INJECT
+  handleUsbFaultCommands();
+#endif
   _btnCursor.check();
   _btnSelect.check();
 #if HAS_DISPLAY == 1

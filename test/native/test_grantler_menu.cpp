@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstring>
+#include <string>
 
 #include "arduino_stubs.h"
 #include "examples/grantler_instruments/dongle/Menu.h"
@@ -113,6 +114,23 @@ struct FakeDongle
 
     bool isPowerSave() const { return powerSave; }
     void setPowerSave(bool enabled) { powerSave = enabled; }
+
+    enomik::UsbHealthStats usbStats;
+    enomik::UsbHealthStats usbPrev;
+    bool usbPrevValid = false;
+    enomik::UsbWatchdogMode usbMode = enomik::UsbWatchdogMode::Recover;
+
+    const enomik::UsbHealthStats &getUsbHealthStats() const { return usbStats; }
+    bool getUsbHealthStatsPrevious(enomik::UsbHealthStats &out) const
+    {
+        if (!usbPrevValid)
+        {
+            return false;
+        }
+        out = usbPrev;
+        return true;
+    }
+    enomik::UsbWatchdogMode getUsbWatchdogMode() const { return usbMode; }
 
     bool hasPeer(const uint8_t mac[6]) const
     {
@@ -466,4 +484,61 @@ TEST_CASE("settings Back and long-press return to the Settings row", "[grantler]
     menu.onLongPress();
     REQUIRE(menu.page() == TestMenu::Page::Menu);
     REQUIRE(menu.cursor() == 2);
+}
+
+TEST_CASE("USB page shows health counters and Back returns to its menu row", "[grantler][menu]")
+{
+    FakeDongle dongle;
+    dongle.usbStats.reattaches = 3;
+    dongle.usbStats.recoveries = 2;
+    dongle.usbStats.stalls = 4;
+    dongle.usbStats.longestBusyMs = 12;
+    dongle.usbStats.suspends = 5;
+    dongle.usbStats.wakeupsTried = 6;
+    dongle.usbStats.wakeupsRefused = 1;
+    dongle.usbStats.longestSuspendMs = 42000;
+    TestMenu menu(dongle);
+
+    openMenu(menu);
+    menu.onCursor();
+    menu.onCursor();
+    menu.onCursor();
+    REQUIRE(TestMenu::kEntries[menu.cursor()].page == TestMenu::Page::Usb);
+    menu.onEnter();
+    REQUIRE(menu.page() == TestMenu::Page::Usb);
+    REQUIRE(std::string(menu.title()) == "USB");
+    REQUIRE(menu.listCount() == TestMenu::kUsbCount);
+    REQUIRE(std::string(menu.listLabel(0)) == "Back");
+    REQUIRE(std::string(menu.listLabel(1)) == "Mode Recover");
+    REQUIRE(std::string(menu.listLabel(2)) == "Recovered 2/3");
+    REQUIRE(std::string(menu.listLabel(3)) == "Stalls 4");
+    REQUIRE(std::string(menu.listLabel(4)) == "Max busy 12ms");
+    REQUIRE(std::string(menu.listLabel(5)) == "Suspends 5");
+    REQUIRE(std::string(menu.listLabel(6)) == "Wake no 1/6");
+    REQUIRE(std::string(menu.listLabel(7)) == "Max susp 42s");
+    REQUIRE(std::string(menu.listLabel(8)) == "Prev: none");
+
+    dongle.usbPrevValid = true;
+    dongle.usbPrev.reattaches = 7;
+    dongle.usbPrev.recoveries = 6;
+    dongle.usbPrev.stalls = 8;
+    dongle.usbPrev.wakeupsRefused = 2;
+    REQUIRE(std::string(menu.listLabel(8)) == "Prev R6/7 S8 W2");
+
+    // Scrolls to the last row and wraps back to Back.
+    for (int i = 0; i < 8; ++i)
+    {
+        menu.onCursor();
+    }
+    REQUIRE(menu.cursor() == 8);
+    REQUIRE(menu.scroll() == 8 - TestMenu::kVisibleRows + 1);
+    menu.onEnter(); // read-only row: nothing happens
+    REQUIRE(menu.page() == TestMenu::Page::Usb);
+    menu.onCursor();
+    REQUIRE(menu.cursor() == 0);
+    REQUIRE(menu.scroll() == 0);
+
+    menu.onLongPress();
+    REQUIRE(menu.page() == TestMenu::Page::Menu);
+    REQUIRE(TestMenu::kEntries[menu.cursor()].page == TestMenu::Page::Usb);
 }

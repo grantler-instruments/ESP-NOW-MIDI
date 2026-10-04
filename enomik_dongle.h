@@ -5,6 +5,7 @@
 #include "include/PeerMuteList.h"
 #include "include/MidiMessageHistory.h"
 #include "include/UsbMidiQueue.h"
+#include "include/UsbStallWatchdog.h"
 #include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
@@ -39,6 +40,12 @@ MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, g_dongle_usb_midi, DONGLE_USBMIDI);
 TinyUsbRawMidiClass g_dongle_usb_midi;
 TinyUsbMidiClass DONGLE_USBMIDI;
 #endif
+
+// Used by the USB watchdog. Weak references: if a TinyUSB build lacks either
+// symbol, the pointer is null and the watchdog falls back to queue-based
+// detection instead of failing to link.
+extern "C" bool usbd_edpt_busy(uint8_t rhport, uint8_t ep_addr) __attribute__((weak));
+extern "C" uint8_t const *tud_descriptor_configuration_cb(uint8_t index) __attribute__((weak));
 #endif
 
 namespace enomik
@@ -217,6 +224,8 @@ namespace enomik
             readMacAddress();
             EspNowMidiLog::i("Mac: %s", macToString(_baseMac).c_str());
 
+            loadUsbHealthPrevious();
+
             espnowMIDI.setHandleNoteOn(handleNoteOnStatic);
             espnowMIDI.setHandleNoteOff(handleNoteOffStatic);
             espnowMIDI.setHandleControlChange(handleControlChangeStatic);
@@ -304,7 +313,15 @@ namespace enomik
             {
                 EspNowMidiLog::i("USB disconnected");
                 _usbMidiInitialized = false;
-                _usbMidiQueue.clear();
+                if (_usbWatchdog.isRecovering(now))
+                {
+                    // Our own re-attach: keep what is waiting for the host.
+                    _usbClearDeferred = true;
+                }
+                else
+                {
+                    _usbMidiQueue.clear();
+                }
             }
 
             if (!_usbMidiInitialized && TinyUSBDevice.mounted())
@@ -338,6 +355,7 @@ namespace enomik
                 drainUsbMidiQueue();
             }
 
+            serviceUsbWatchdog(now);
             logUsbState(now);
             updateDisplay(now);
 #endif
@@ -396,6 +414,88 @@ namespace enomik
         {
             return _usbMidiQueue.overflowDropCount();
         }
+
+        /**
+         * @brief Sets what the USB watchdog may do (default: Recover).
+         *
+         * The watchdog notices when the computer stops taking MIDI from the
+         * dongle while messages are waiting, and recovers by re-attaching USB,
+         * like unplugging and replugging the cable:
+         * - USB suspended and the computer refuses remote wakeup (at most once
+         *   per suspend; see UsbWatchdogConfig::recoverFromSuspend), or
+         * - the MIDI IN endpoint not read for 500 ms, but only if the computer
+         *   did read from the dongle earlier in this connection and is not
+         *   sending MIDI itself (a computer with no app listening is left alone).
+         * It backs off (30 s doubling to 10 min) when a re-attach did not get
+         * data through. `Observe` only counts, `Off` disables re-attaching.
+         */
+        void setUsbWatchdogMode(UsbWatchdogMode mode)
+        {
+            _usbWatchdog.setMode(mode);
+        }
+
+        /** @return Current USB watchdog mode. */
+        UsbWatchdogMode getUsbWatchdogMode() const
+        {
+            return _usbWatchdog.mode();
+        }
+
+        /** @brief Timing of the USB watchdog; adjust before or after begin(). */
+        UsbWatchdogConfig &usbWatchdogConfig()
+        {
+            return _usbWatchdog.config();
+        }
+
+        /** @return USB health counters since boot. */
+        const UsbHealthStats &getUsbHealthStats() const
+        {
+            return _usbWatchdog.stats();
+        }
+
+        /**
+         * @brief USB health counters of the last earlier session that had a USB
+         * incident (refused wakeup or re-attach), saved to flash.
+         * @return false when none was saved.
+         */
+        bool getUsbHealthStatsPrevious(UsbHealthStats &out) const
+        {
+            if (!_usbPrevStatsValid)
+            {
+                return false;
+            }
+            out = _usbPrevStats;
+            return true;
+        }
+
+        /** @return Value that changes whenever a USB health counter changes. */
+        uint32_t usbHealthSignature() const
+        {
+            const UsbHealthStats &st = _usbWatchdog.stats();
+            return st.suspends * 1u + st.longestSuspendMs / 1000u * 3u + st.wakeupsTried * 5u +
+                   st.wakeupsRefused * 7u + st.stalls * 11u + st.longestBusyMs * 13u +
+                   st.reattaches * 17u + st.recoveries * 19u + static_cast<uint32_t>(_usbWatchdog.mode()) * 23u;
+        }
+
+#ifdef ENOMIK_USB_FAULT_INJECT
+        /** @brief Test-only USB faults (build with ENOMIK_USB_FAULT_INJECT). */
+        enum class UsbFault : uint8_t
+        {
+            None,
+            StuckEndpoint, ///< Pretend the host stopped reading the MIDI IN endpoint.
+            Suspended,     ///< Pretend USB is suspended and remote wakeup is refused.
+        };
+
+        /** @brief Simulates a USB fault; a watchdog re-attach clears it, like a real replug. */
+        void injectUsbFault(UsbFault fault)
+        {
+            _usbFault = fault;
+        }
+
+        UsbFault getUsbFault() const
+        {
+            return _usbFault;
+        }
+#endif
 
         /** @return true when USB is mounted and MIDI handlers are registered. */
         bool isUsbReady() const
@@ -763,6 +863,23 @@ namespace enomik
         UsbMidiQueue _usbMidiQueue;
         uint32_t _usbStaleMs = USB_MIDI_STALE_MS;
         uint32_t _lastStaleCheckMs = 0;
+        UsbStallWatchdog _usbWatchdog;
+        bool _usbAgingPaused = false;
+        bool _usbClearDeferred = false;
+        bool _usbWrote = false;
+        bool _usbLastWriteFailed = false;
+        bool _usbEpLookupDone = false;
+        uint8_t _usbMidiInEp = 0;
+        bool _usbDetachedByWatchdog = false;
+        uint32_t _usbDetachedAt = 0;
+        UsbHealthStats _usbPrevStats;
+        bool _usbPrevStatsValid = false;
+        uint32_t _usbSavedIncidents = 0;
+        bool _usbStatsSavedOnce = false;
+        uint32_t _usbStatsSavedAt = 0;
+#ifdef ENOMIK_USB_FAULT_INJECT
+        UsbFault _usbFault = UsbFault::None;
+#endif
         MidiMessageHistory _messageHistory[DONGLE_MAX_HISTORY];
         int _messageIndex;
         uint8_t _baseMac[6];
@@ -815,6 +932,7 @@ namespace enomik
         /** USB host → ESP-NOW. Runs fromHost filter, then history + send. */
         void bridgeFromHost(midi_message &msg, bool addHistory = true)
         {
+            _usbWatchdog.noteHostRx(millis());
             if (_fromHostFilter && !_fromHostFilter(msg))
             {
                 return;
@@ -954,17 +1072,34 @@ namespace enomik
                 return true;
             }
 
-            return g_dongle_usb_midi.writePacket(packet);
+            const bool written = g_dongle_usb_midi.writePacket(packet);
+            if (written)
+            {
+                _usbWrote = true;
+            }
+            return written;
         }
 
         void dropStaleUsbMidi()
         {
+            const uint32_t now = millis();
+            // While the watchdog re-attaches USB, waiting messages must not age
+            // out; afterwards they get a fresh stale window.
+            if (_usbWatchdog.isRecovering(now))
+            {
+                _usbAgingPaused = true;
+                return;
+            }
+            if (_usbAgingPaused)
+            {
+                _usbAgingPaused = false;
+                _usbMidiQueue.refreshTimestamps(now);
+            }
             if (_usbStaleMs == 0)
             {
                 return;
             }
             // Rate-limited: a stalled queue would otherwise be rescanned every loop.
-            const uint32_t now = millis();
             if ((uint32_t)(now - _lastStaleCheckMs) < 20)
             {
                 return;
@@ -986,12 +1121,10 @@ namespace enomik
 
             dropStaleUsbMidi();
 
+            // Remote wakeup while suspended is requested by the USB watchdog
+            // (rate-limited) instead of on every loop.
             if (TinyUSBDevice.suspended())
             {
-                if (_usbMidiQueue.hasPending())
-                {
-                    TinyUSBDevice.remoteWakeup();
-                }
                 return;
             }
 
@@ -1000,15 +1133,200 @@ namespace enomik
                 return;
             }
 
+#ifdef ENOMIK_USB_FAULT_INJECT
+            if (_usbFault != UsbFault::None)
+            {
+                return; // simulated: nothing reaches the host
+            }
+#endif
+
             midi_message msg;
             while (_usbMidiQueue.peek(msg))
             {
                 if (!sendQueuedMidi(msg))
                 {
-                    break;
+                    _usbLastWriteFailed = true;
+                    return;
                 }
                 _usbMidiQueue.consumeHead();
             }
+            _usbLastWriteFailed = false;
+        }
+
+        /** @return true while data handed to USB has not been read by the host. */
+        bool usbTxBlocked()
+        {
+#ifdef ENOMIK_USB_FAULT_INJECT
+            if (_usbFault == UsbFault::StuckEndpoint)
+            {
+                return _usbMidiQueue.hasPending();
+            }
+#endif
+            if (!_usbEpLookupDone && TinyUSBDevice.mounted())
+            {
+                _usbEpLookupDone = true;
+                if (tud_descriptor_configuration_cb && usbd_edpt_busy)
+                {
+                    _usbMidiInEp = findMidiInEndpoint(tud_descriptor_configuration_cb(0));
+                }
+                if (_usbMidiInEp)
+                {
+                    EspNowMidiLog::i("USB watchdog: MIDI IN endpoint 0x%02X", _usbMidiInEp);
+                }
+                else
+                {
+                    EspNowMidiLog::w("USB watchdog: MIDI IN endpoint unknown, using queue fallback");
+                }
+            }
+            if (_usbMidiInEp && usbd_edpt_busy)
+            {
+                return usbd_edpt_busy(0, _usbMidiInEp);
+            }
+            // Fallback: only a full TinyUSB buffer is visible.
+            return _usbMidiQueue.hasPending() && _usbLastWriteFailed;
+        }
+
+        void serviceUsbWatchdog(uint32_t now)
+        {
+            UsbWatchdogInputs in;
+            in.now = now;
+            in.mounted = TinyUSBDevice.mounted();
+            in.suspended = TinyUSBDevice.suspended();
+            in.pending = _usbMidiQueue.hasPending();
+            in.txBlocked = usbTxBlocked();
+            in.endpointKnown = _usbMidiInEp != 0 && usbd_edpt_busy != nullptr;
+            in.wrote = _usbWrote;
+            _usbWrote = false;
+#ifdef ENOMIK_USB_FAULT_INJECT
+            if (_usbFault == UsbFault::Suspended && in.mounted)
+            {
+                in.suspended = true;
+            }
+            if (_usbFault == UsbFault::StuckEndpoint)
+            {
+                in.endpointKnown = true;
+            }
+#endif
+
+            switch (_usbWatchdog.tick(in))
+            {
+            case UsbWatchdogAction::RemoteWakeup:
+            {
+                bool accepted = false;
+#ifdef ENOMIK_USB_FAULT_INJECT
+                if (_usbFault == UsbFault::Suspended)
+                {
+                    _usbWatchdog.noteWakeupResult(false);
+                    break;
+                }
+#endif
+                accepted = tud_remote_wakeup();
+                // false can also mean the host resumed the bus just now: only
+                // a refusal while still suspended counts.
+                _usbWatchdog.noteWakeupResult(accepted || !TinyUSBDevice.suspended());
+                EspNowMidiLog::i("USB suspended with MIDI waiting: remote wakeup %s",
+                                 accepted ? "sent" : "not allowed by host");
+                break;
+            }
+            case UsbWatchdogAction::Detach:
+                EspNowMidiLog::w("USB host stopped taking MIDI: re-attaching USB");
+                TinyUSBDevice.detach();
+                _usbDetachedByWatchdog = true;
+                _usbDetachedAt = now;
+#ifdef ENOMIK_USB_FAULT_INJECT
+                _usbFault = UsbFault::None; // a replug fixes the simulated fault
+#endif
+                break;
+            case UsbWatchdogAction::Attach:
+                TinyUSBDevice.attach();
+                _usbDetachedByWatchdog = false;
+                EspNowMidiLog::i("USB re-attached");
+                break;
+            default:
+                break;
+            }
+
+            // Failsafe: never stay detached, whatever happens above.
+            if (_usbDetachedByWatchdog && (uint32_t)(now - _usbDetachedAt) > 2000)
+            {
+                TinyUSBDevice.attach();
+                _usbDetachedByWatchdog = false;
+                EspNowMidiLog::e("USB watchdog: forced re-attach");
+            }
+
+            // A disconnect during our recovery kept the queue; if USB did not
+            // come back by the end of the recovery window, clear it as usual.
+            if (_usbClearDeferred && !_usbWatchdog.isRecovering(now))
+            {
+                _usbClearDeferred = false;
+                if (!TinyUSBDevice.mounted())
+                {
+                    _usbMidiQueue.clear();
+                }
+            }
+
+            saveUsbHealthIfNeeded(now);
+        }
+
+        static constexpr uint32_t kUsbStatsMagic = 0x55534231; // "USB1"
+
+        struct StoredUsbHealth
+        {
+            uint32_t magic;
+            UsbHealthStats stats;
+        };
+
+        // Stalls alone are not saved: a host with no app reading the input
+        // stalls on every message without anything being wrong.
+        static uint32_t usbIncidents(const UsbHealthStats &st)
+        {
+            return st.wakeupsRefused + st.reattaches + st.recoveries;
+        }
+
+        void loadUsbHealthPrevious()
+        {
+            Preferences prefs;
+            if (!prefs.begin("enomik", true))
+            {
+                return;
+            }
+            StoredUsbHealth stored{};
+            const size_t n = prefs.getBytes("usb_health", &stored, sizeof(stored));
+            prefs.end();
+            if (n == sizeof(stored) && stored.magic == kUsbStatsMagic)
+            {
+                _usbPrevStats = stored.stats;
+                _usbPrevStatsValid = true;
+            }
+        }
+
+        // Writes only after a USB incident, at most once a minute, and not
+        // during a recovery (re-enumeration): normal operation causes no flash
+        // writes.
+        void saveUsbHealthIfNeeded(uint32_t now)
+        {
+            const UsbHealthStats &st = _usbWatchdog.stats();
+            const uint32_t incidents = usbIncidents(st);
+            if (incidents == _usbSavedIncidents || _usbWatchdog.isRecovering(now))
+            {
+                return;
+            }
+            if (_usbStatsSavedOnce && (uint32_t)(now - _usbStatsSavedAt) < 60000)
+            {
+                return;
+            }
+            StoredUsbHealth stored{};
+            stored.magic = kUsbStatsMagic;
+            stored.stats = st;
+            Preferences prefs;
+            if (prefs.begin("enomik", false))
+            {
+                prefs.putBytes("usb_health", &stored, sizeof(stored));
+                prefs.end();
+            }
+            _usbSavedIncidents = incidents;
+            _usbStatsSavedOnce = true;
+            _usbStatsSavedAt = now;
         }
 
         void logUsbState(unsigned long now)

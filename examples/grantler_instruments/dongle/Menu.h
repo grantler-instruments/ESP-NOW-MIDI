@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstring>
 #include "./config.h"
+#include "include/UsbStallWatchdog.h"
 
 #ifndef MAX_PEERS
 #define MAX_PEERS 20
@@ -33,6 +34,7 @@ public:
     AddPeer,
     PeerContext,
     Settings,
+    Usb,
   };
 
   enum PeerContextItem : uint8_t {
@@ -56,11 +58,13 @@ public:
     {"Close", Page::Status},
     {"Peers", Page::Peers},
     {"Settings", Page::Settings},
+    {"USB", Page::Usb},
   };
   static constexpr int kEntryCount = sizeof(kEntries) / sizeof(kEntries[0]);
   static constexpr int kVisibleRows = 6;
   static constexpr int kPeerContextCount = 4;
   static constexpr int kSettingsCount = 2;
+  static constexpr int kUsbCount = 9;
 
   explicit Menu(DongleT& dongle) : dongle_(dongle) {}
 
@@ -77,6 +81,9 @@ public:
     }
     if (page_ == Page::Settings) {
       return "SETTINGS";
+    }
+    if (page_ == Page::Usb) {
+      return "USB";
     }
     if (page_ == Page::AddPeer) {
       return editing_ ? "Edit peer" : "Add peer";
@@ -104,6 +111,9 @@ public:
     if (page_ == Page::Settings) {
       return kSettingsCount;
     }
+    if (page_ == Page::Usb) {
+      return kUsbCount;
+    }
     if (page_ == Page::PeerContext) {
       return kPeerContextCount;
     }
@@ -122,6 +132,9 @@ public:
     }
     if (page_ == Page::Settings) {
       return settingsLabel(index);
+    }
+    if (page_ == Page::Usb) {
+      return usbLabel(index);
     }
     if (page_ == Page::PeerContext) {
       return peerContextLabel(index);
@@ -171,6 +184,54 @@ public:
     return "";
   }
 
+  /** Read-only USB health rows (see enomik::UsbHealthStats). */
+  const char* usbLabel(int index) const {
+    static char line[64];
+    const enomik::UsbHealthStats& st = dongle_.getUsbHealthStats();
+    switch (index) {
+      case 0:
+        return "Back";
+      case 1: {
+        const enomik::UsbWatchdogMode mode = dongle_.getUsbWatchdogMode();
+        return mode == enomik::UsbWatchdogMode::Recover   ? "Mode Recover"
+               : mode == enomik::UsbWatchdogMode::Observe ? "Mode Observe"
+                                                          : "Mode Off";
+      }
+      case 2:
+        snprintf(line, sizeof(line), "Recovered %lu/%lu", (unsigned long)st.recoveries,
+                 (unsigned long)st.reattaches);
+        return line;
+      case 3:
+        snprintf(line, sizeof(line), "Stalls %lu", (unsigned long)st.stalls);
+        return line;
+      case 4:
+        snprintf(line, sizeof(line), "Max busy %lums", (unsigned long)st.longestBusyMs);
+        return line;
+      case 5:
+        snprintf(line, sizeof(line), "Suspends %lu", (unsigned long)st.suspends);
+        return line;
+      case 6:
+        snprintf(line, sizeof(line), "Wake no %lu/%lu", (unsigned long)st.wakeupsRefused,
+                 (unsigned long)st.wakeupsTried);
+        return line;
+      case 7:
+        snprintf(line, sizeof(line), "Max susp %lus", (unsigned long)(st.longestSuspendMs / 1000));
+        return line;
+      case 8: {
+        enomik::UsbHealthStats prev;
+        if (!dongle_.getUsbHealthStatsPrevious(prev)) {
+          return "Prev: none";
+        }
+        snprintf(line, sizeof(line), "Prev R%lu/%lu S%lu W%lu", (unsigned long)prev.recoveries,
+                 (unsigned long)prev.reattaches, (unsigned long)prev.stalls,
+                 (unsigned long)prev.wakeupsRefused);
+        return line;
+      }
+      default:
+        return "";
+    }
+  }
+
   static int peerListCount(int peerCount) { return 2 + peerCount; }
 
   void syncPeerList(int peerCount) {
@@ -197,7 +258,7 @@ public:
       return;
     }
     cursor_ = (cursor_ + 1) % n;
-    if (page_ == Page::Peers) {
+    if (page_ == Page::Peers || page_ == Page::Usb) {
       ensureVisible(n);
     }
   }
@@ -253,6 +314,8 @@ public:
       goTo(Page::Menu, indexOfPage(Page::Peers));
     } else if (page_ == Page::Settings) {
       goTo(Page::Menu, indexOfPage(Page::Settings));
+    } else if (page_ == Page::Usb) {
+      goTo(Page::Menu, indexOfPage(Page::Usb));
     } else if (page_ == Page::Menu) {
       goTo(Page::Status, 0);
     }

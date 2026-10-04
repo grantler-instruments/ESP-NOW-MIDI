@@ -222,6 +222,24 @@ public:
     return dropped;
   }
 
+  /**
+   * @brief Marks every queued entry as enqueued at @p now.
+   *
+   * Used after a USB recovery, during which aging was paused, so messages that
+   * waited for the host are not dropped as stale the moment it is back.
+   */
+  void refreshTimestamps(uint32_t now) {
+    portENTER_CRITICAL(&_mux);
+    const uint16_t n = sizeLocked();
+    for (uint16_t k = 0; k < n; ++k) {
+      _items[at(k)].timeMs = now;
+    }
+    if (_pendingClock) {
+      _clockTimeMs = now;
+    }
+    portEXIT_CRITICAL(&_mux);
+  }
+
   void clear() {
     portENTER_CRITICAL(&_mux);
     _head = 0;

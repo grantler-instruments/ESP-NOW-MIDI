@@ -18,6 +18,11 @@ There are three main ways to use the library:
   (ESP32-S2/S3). Call `begin()` / `loop()`. Optional status UI via
   `enomik::Dongle::Display` and `setDisplay()`. Optional
   `setToHostFilter` / `setFromHostFilter` to drop or remap bridged messages.
+  USB robustness is built in: messages the computer has not read within
+  500 ms are dropped instead of arriving late (`setUsbStaleTimeout()`; Note
+  Offs and latest controller values are always delivered), and a USB watchdog
+  re-attaches USB when the computer stops taking MIDI, e.g. Windows USB
+  selective suspend (`setUsbWatchdogMode()`, `getUsbHealthStats()`).
 
 For most application sketches that should integrate with the Enomik tools, start
 with `enomik::Client`. Use `enomik::Dongle` for the USB host bridge. Use plain

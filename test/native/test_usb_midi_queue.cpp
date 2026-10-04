@@ -239,3 +239,14 @@ TEST_CASE("UsbMidiQueue clear resets pending entries", "[dongle][usbqueue]")
     REQUIRE_FALSE(q.hasPending());
     REQUIRE(q.pendingCount() == 0);
 }
+
+TEST_CASE("UsbMidiQueue refreshTimestamps makes waiting messages fresh", "[dongle][usbqueue]")
+{
+    enomik::UsbMidiQueue q;
+    q.enqueue(noteOn(60), 0);
+    q.enqueueClock(0);
+    q.refreshTimestamps(5000);
+    REQUIRE(q.dropStale(5400, 500) == 0);
+    REQUIRE(q.pendingCount() == 2);
+    REQUIRE(q.dropStale(5600, 500) == 2);
+}
