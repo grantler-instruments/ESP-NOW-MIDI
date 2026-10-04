@@ -74,31 +74,39 @@ void setup() {
   // _client.setHandleClock(onClock);
 }
 
-void loop() {
-#ifdef HEARTBEAT_LED
-  digitalWrite(HEARTBEAT_LED, HIGH);
-#endif
-  _client.loop();
-  bool success = _client.sendNoteOn(60, 127, 1);
+// One message every 100 ms, then a 2 s pause. No delay(): _client.loop() keeps
+// running, so received MIDI is handled right away.
+const unsigned long kStepMs = 100;
+const unsigned long kPauseMs = 2000;
+const int kSteps = 7;
+int _step = 0;
+unsigned long _nextStepMs = 0;
 
-  if (success != ESP_OK) {
+bool sendStep(int step) {
+  switch (step) {
+    case 0: return _client.sendNoteOn(60, 127, channel);
+    case 1: return _client.sendNoteOff(60, 0, channel);
+    case 2: return _client.sendControlChange(1, 127, channel);
+    case 3: return _client.sendControlChange(1, 0, channel);
+    case 4: return _client.sendPitchBend(-8192, channel);
+    case 5: return _client.sendPitchBend(0, channel);
+    default: return _client.sendPitchBend(8191, channel);
+  }
+}
+
+void loop() {
+  _client.loop();
+
+  const unsigned long now = millis();
+  if ((long)(now - _nextStepMs) < 0) {
+    return;
+  }
+#ifdef HEARTBEAT_LED
+  digitalWrite(HEARTBEAT_LED, _step < kSteps - 1 ? HIGH : LOW);
+#endif
+  if (!sendStep(_step)) {
     Serial.println("Error sending the data");
   }
-  delay(100);
-  success = _client.sendNoteOff(60, 0, channel);
-  delay(100);
-  success = _client.sendControlChange(1, 127, channel);
-  delay(100);
-  success = _client.sendControlChange(1, 0, channel);
-  delay(100);
-  success = _client.sendPitchBend(-8192, channel);
-  delay(100);
-  success = _client.sendPitchBend(0, channel);
-  delay(100);
-  success = _client.sendPitchBend(8191, channel);
-
-#ifdef HEARTBEAT_LED
-  digitalWrite(HEARTBEAT_LED, LOW);
-#endif
-  delay(2000);
+  _step = (_step + 1) % kSteps;
+  _nextStepMs = now + (_step == 0 ? kPauseMs : kStepMs);
 }

@@ -838,6 +838,11 @@ public:
     memcpy(&packet, incomingData, len); // Copy only received bytes
     midi_message message = packet.toMessage();
 
+    if (onMessageHandler)
+    {
+      onMessageHandler(mac, message);
+    }
+
     switch (message.status)
     {
     case MIDI_NOTE_ON:
@@ -1056,6 +1061,20 @@ public:
   }
 
   /**
+   * @brief Registers one handler for every received MIDI message.
+   *
+   * Receives the decoded message and the sender MAC, before the per-type
+   * `setHandle*` handlers. Runs in the ESP-NOW receive callback (WiFi task):
+   * keep it short, e.g. hand the message to the loop task.
+   *
+   * @param callback Handler, or `nullptr` to remove it.
+   */
+  void setHandleMessage(void (*callback)(const uint8_t *mac, const midi_message &message))
+  {
+    onMessageHandler = callback;
+  }
+
+  /**
    * @brief Checks whether a MAC address is registered as a peer.
    * @param mac Six-byte Wi-Fi MAC address to look up.
    * @return `true` when the peer is registered.
@@ -1129,4 +1148,5 @@ private:
   void (*onTimeCodeHandler)(byte value) = nullptr;
   void (*onActiveSensingHandler)() = nullptr;
   void (*onSystemResetHandler)() = nullptr;
+  void (*onMessageHandler)(const uint8_t *mac, const midi_message &message) = nullptr;
 };

@@ -10,10 +10,13 @@ There are three main ways to use the library:
 
 - [`esp_now_midi`](api/Classes/classesp__now__midi.md): low-level ESP-NOW MIDI
   transport. Initialize it, add peers, send MIDI messages, and register receive
-  handlers.
+  handlers. Its receive handlers run in the ESP-NOW receive callback (WiFi
+  task): keep them short.
 - [`enomik::Client`](api/Classes/classenomik_1_1_client.md): higher-level client
   that wraps ESP-NOW MIDI setup, peer storage, and a MIDI SysEx configuration
-  interface for pin mapping and board setup.
+  interface for pin mapping and board setup. Received MIDI is handled in
+  `loop()`, so call it often and avoid long `delay()`s
+  (`setDispatchInLoop(false)` handles it immediately in the WiFi task instead).
 - `enomik::Dongle`: USB MIDI ↔ ESP-NOW bridge for a host-connected board
   (ESP32-S2/S3). Call `begin()` / `loop()`. Optional status UI via
   `enomik::Dongle::Display` and `setDisplay()`. Optional

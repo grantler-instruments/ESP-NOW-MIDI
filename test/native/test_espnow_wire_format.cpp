@@ -398,3 +398,132 @@ TEST_CASE("peer list: concurrent use from the WiFi task and the loop task", "[es
         }
     }
 }
+
+// --- Receive dispatch ------------------------------------------------------
+
+namespace {
+
+int g_messageCalls = 0;
+int g_noteOnCalls = 0;
+midi_message g_lastMessage{};
+uint8_t g_lastMac[6] = {0};
+
+} // namespace
+
+TEST_CASE("setHandleMessage receives every message with its sender", "[espnow][receive]")
+{
+    esp_now_midi rx;
+    REQUIRE(rx.begin());
+    g_messageCalls = 0;
+    g_noteOnCalls = 0;
+    rx.setHandleNoteOn([](byte, byte, byte) { g_noteOnCalls++; });
+    rx.setHandleMessage([](const uint8_t *mac, const midi_message &msg) {
+        g_messageCalls++;
+        g_lastMessage = msg;
+        memcpy(g_lastMac, mac, 6);
+    });
+
+    deliver(rx, bytes({0x91, 64, 90}));
+    REQUIRE(g_messageCalls == 1);
+    REQUIRE(g_noteOnCalls == 1); // per-type handlers still run
+    REQUIRE(static_cast<int>(g_lastMessage.status) == MIDI_NOTE_ON);
+    REQUIRE(g_lastMessage.channel == 2);
+    REQUIRE(g_lastMessage.firstByte == 64);
+    REQUIRE(memcmp(g_lastMac, kSender, 6) == 0);
+
+    rx.setHandleMessage(nullptr);
+    deliver(rx, bytes({0x91, 64, 90}));
+    REQUIRE(g_messageCalls == 1);
+    REQUIRE(g_noteOnCalls == 2);
+}
+
+namespace {
+
+std::atomic<int> g_toHostCalls{0};
+
+} // namespace
+
+TEST_CASE("dongle handles received MIDI in loop, not in the receive callback", "[espnow][dongle]")
+{
+    enomik::Dongle dongle;
+    REQUIRE(dongle.espnowMIDI.begin());
+    g_toHostCalls = 0;
+    dongle.setToHostFilter([](midi_message &) {
+        g_toHostCalls++;
+        return true;
+    });
+
+    deliver(dongle.espnowMIDI, bytes({0x90, 60, 100}));
+    REQUIRE(g_toHostCalls == 0); // only queued in the callback
+    dongle.processReceived();
+    REQUIRE(g_toHostCalls == 1);
+
+    // Messages the dongle never bridged to USB stay ignored.
+    deliver(dongle.espnowMIDI, bytes({0xFE})); // active sensing
+    dongle.processReceived();
+    REQUIRE(g_toHostCalls == 1);
+}
+
+TEST_CASE("dongle drops messages from muted senders", "[espnow][dongle]")
+{
+    enomik::Dongle dongle;
+    REQUIRE(dongle.espnowMIDI.begin());
+    g_toHostCalls = 0;
+    dongle.setToHostFilter([](midi_message &) {
+        g_toHostCalls++;
+        return true;
+    });
+
+    deliver(dongle.espnowMIDI, bytes({0xF8})); // auto-discovers kSender
+    dongle.processReceived();
+    REQUIRE(g_toHostCalls == 1);
+
+    REQUIRE(dongle.setMuted(kSender, true));
+    deliver(dongle.espnowMIDI, bytes({0x90, 60, 100}));
+    dongle.processReceived();
+    REQUIRE(g_toHostCalls == 1);
+
+    REQUIRE(dongle.setMuted(kSender, false));
+    deliver(dongle.espnowMIDI, bytes({0x90, 60, 100}));
+    dongle.processReceived();
+    REQUIRE(g_toHostCalls == 2);
+}
+
+TEST_CASE("dongle receive runs concurrently with loop without races", "[espnow][dongle][threads]")
+{
+    // "wifi" thread = ESP-NOW receive callback; main thread = loop() that
+    // processes messages and toggles mutes like the menu does.
+    enomik::Dongle dongle;
+    REQUIRE(dongle.espnowMIDI.begin());
+    g_toHostCalls = 0;
+    dongle.setToHostFilter([](midi_message &) {
+        g_toHostCalls++;
+        return true;
+    });
+    deliver(dongle.espnowMIDI, bytes({0xF8})); // register kSender as peer
+    dongle.processReceived();
+
+    std::atomic<bool> stop{false};
+    std::atomic<bool> receiving{false};
+    std::thread wifi([&]() {
+        const uint8_t pkt[3] = {0x90, 60, 100};
+        while (!stop)
+        {
+            dongle.espnowMIDI.OnDataRecv(kSender, pkt, 3);
+            receiving = true;
+        }
+    });
+    while (!receiving)
+    {
+        std::this_thread::yield();
+    }
+    for (int i = 0; i < 200000; ++i)
+    {
+        dongle.setMuted(kSender, (i & 1) != 0);
+        dongle.processReceived();
+    }
+    stop = true;
+    wifi.join();
+    dongle.processReceived();
+    REQUIRE(g_toHostCalls > 1);
+}

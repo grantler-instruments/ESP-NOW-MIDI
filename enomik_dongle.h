@@ -6,6 +6,7 @@
 #include "include/MidiMessageHistory.h"
 #include "include/UsbMidiQueue.h"
 #include "include/UsbStallWatchdog.h"
+#include "include/MidiInbox.h"
 #include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
@@ -126,6 +127,7 @@ namespace enomik
             memset(_baseMac, 0, sizeof(_baseMac));
             memset(_messageHistory, 0, sizeof(_messageHistory));
             instancePtr = this;
+            espnowMIDI.setHandleMessage(onEspNowMessageStatic);
         }
 
         /**
@@ -226,19 +228,6 @@ namespace enomik
 
             loadUsbHealthPrevious();
 
-            espnowMIDI.setHandleNoteOn(handleNoteOnStatic);
-            espnowMIDI.setHandleNoteOff(handleNoteOffStatic);
-            espnowMIDI.setHandleControlChange(handleControlChangeStatic);
-            espnowMIDI.setHandleProgramChange(handleProgramChangeStatic);
-            espnowMIDI.setHandlePitchBend(handlePitchBendStatic);
-            espnowMIDI.setHandleAfterTouchChannel(handleAfterTouchChannelStatic);
-            espnowMIDI.setHandleAfterTouchPoly(handleAfterTouchPolyStatic);
-            espnowMIDI.setHandleStart(handleStartStatic);
-            espnowMIDI.setHandleStop(handleStopStatic);
-            espnowMIDI.setHandleContinue(handleContinueStatic);
-            espnowMIDI.setHandleClock(handleClockStatic);
-            espnowMIDI.setHandleSongPosition(handleSongPositionStatic);
-            espnowMIDI.setHandleSongSelect(handleSongSelectStatic);
 
             if (!peerStorage.begin())
             {
@@ -348,6 +337,8 @@ namespace enomik
                 _usbMidiInitialized = true;
                 EspNowMidiLog::i("USB MIDI ready!");
             }
+
+            processReceived();
 
             if (_usbMidiInitialized)
             {
@@ -496,6 +487,28 @@ namespace enomik
             return _usbFault;
         }
 #endif
+
+        /**
+         * @brief Handles MIDI received over ESP-NOW (mute, filter, history, USB queue).
+         *
+         * Called by loop(). Received messages wait in an inbox until then, so all
+         * of this runs in the loop task, not in the ESP-NOW receive callback.
+         */
+        void processReceived()
+        {
+            midi_message msg;
+            uint8_t from[6];
+            for (int i = 0; i < MIDI_INBOX_SIZE && _inbox.pop(msg, from); ++i)
+            {
+                bridgeToHost(msg, from);
+            }
+        }
+
+        /** @return ESP-NOW messages dropped because loop() fell behind (since boot). */
+        uint32_t getReceiveDropCount() const
+        {
+            return _inbox.droppedCount();
+        }
 
         /** @return true when USB is mounted and MIDI handlers are registered. */
         bool isUsbReady() const
@@ -860,6 +873,7 @@ namespace enomik
         uint32_t _usbStaleMs = USB_MIDI_STALE_MS;
         uint32_t _lastStaleCheckMs = 0;
         UsbStallWatchdog _usbWatchdog;
+        MidiInbox _inbox;
         bool _usbAgingPaused = false;
         bool _usbClearDeferred = false;
         bool _usbWrote = false;
@@ -906,13 +920,14 @@ namespace enomik
         }
 
         /** ESP-NOW → USB host. Drops muted senders, then toHost filter, then queues. */
-        void bridgeToHost(midi_message &msg, bool addHistory = true)
+        void bridgeToHost(midi_message &msg, const uint8_t from[6])
         {
-            const uint8_t *from = espnowMIDI.lastSenderMac();
-            if (from && isMuted(from))
+            if (!isBridgedToHost(msg.status) || isMuted(from))
             {
                 return;
             }
+            msg.firstByte &= 0x7F;
+            msg.secondByte &= 0x7F;
             if (_toHostFilter && !_toHostFilter(msg))
             {
                 return;
@@ -922,7 +937,30 @@ namespace enomik
                 _usbMidiQueue.enqueueClock();
                 return;
             }
-            queueToUsb(msg, addHistory);
+            queueToUsb(msg, msg.status != MIDI_SONG_POS_POINTER);
+        }
+
+        static bool isBridgedToHost(MidiStatus status)
+        {
+            switch (status)
+            {
+            case MIDI_NOTE_ON:
+            case MIDI_NOTE_OFF:
+            case MIDI_CONTROL_CHANGE:
+            case MIDI_PROGRAM_CHANGE:
+            case MIDI_PITCH_BEND:
+            case MIDI_AFTERTOUCH:
+            case MIDI_POLY_AFTERTOUCH:
+            case MIDI_START:
+            case MIDI_STOP:
+            case MIDI_CONTINUE:
+            case MIDI_TIME_CLOCK:
+            case MIDI_SONG_POS_POINTER:
+            case MIDI_SONG_SELECT:
+                return true;
+            default:
+                return false;
+            }
         }
 
         /** USB host → ESP-NOW. Runs fromHost filter, then history + send. */
@@ -1390,161 +1428,13 @@ namespace enomik
 
         // --- ESP-NOW → USB host ---
 
-        static void handleNoteOnStatic(byte channel, byte note, byte velocity)
+        // Runs in the ESP-NOW receive callback (WiFi task): only hand over.
+        static void onEspNowMessageStatic(const uint8_t *mac, const midi_message &msg)
         {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_NOTE_ON;
-            msg.channel = channel;
-            msg.firstByte = note;
-            msg.secondByte = velocity;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleNoteOffStatic(byte channel, byte note, byte velocity)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_NOTE_OFF;
-            msg.channel = channel;
-            msg.firstByte = note;
-            msg.secondByte = velocity;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleControlChangeStatic(byte channel, byte control, byte value)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_CONTROL_CHANGE;
-            msg.channel = channel;
-            msg.firstByte = control;
-            msg.secondByte = value;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleProgramChangeStatic(byte channel, byte program)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_PROGRAM_CHANGE;
-            msg.channel = channel;
-            msg.firstByte = program;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleAfterTouchChannelStatic(byte channel, byte pressure)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_AFTERTOUCH;
-            msg.channel = channel;
-            msg.firstByte = pressure;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleAfterTouchPolyStatic(byte channel, byte note, byte pressure)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_POLY_AFTERTOUCH;
-            msg.channel = channel;
-            msg.firstByte = note;
-            msg.secondByte = pressure;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handlePitchBendStatic(byte channel, int value)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_PITCH_BEND;
-            msg.channel = channel;
-            const int unsignedValue = value + 8192;
-            msg.firstByte = unsignedValue & 0x7F;
-            msg.secondByte = (unsignedValue >> 7) & 0x7F;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleStartStatic()
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_START;
-            msg.channel = 0;
-            msg.firstByte = 0;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleStopStatic()
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_STOP;
-            msg.channel = 0;
-            msg.firstByte = 0;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleContinueStatic()
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_CONTINUE;
-            msg.channel = 0;
-            msg.firstByte = 0;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleClockStatic()
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_TIME_CLOCK;
-            msg.channel = 0;
-            msg.firstByte = 0;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg, false);
-        }
-
-        static void handleSongPositionStatic(uint16_t value)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_SONG_POS_POINTER;
-            msg.channel = 0;
-            msg.firstByte = value & 0x7F;
-            msg.secondByte = (value >> 7) & 0x7F;
-            instancePtr->bridgeToHost(msg, false);
-        }
-
-        static void handleSongSelectStatic(byte value)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_SONG_SELECT;
-            msg.channel = 0;
-            msg.firstByte = value;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
+            if (instancePtr)
+            {
+                instancePtr->_inbox.push(msg, mac);
+            }
         }
 
         // --- USB host → ESP-NOW ---

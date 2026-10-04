@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Client: MIDI received over ESP-NOW is now handled in `loop()` instead of the ESP-NOW receive callback (WiFi task), so handlers and pin outputs no longer race with `loop()` (e.g. a SysEx pin configuration arriving while notes are received). **Behavior change:** handlers react as often as `loop()` is called; avoid long `delay()`s. `setDispatchInLoop(false)` restores the old immediate dispatch in the WiFi task.
+- Dongle: ESP-NOW receive (mute check, to-host filter, message history) is handled in `loop()`; the receive callback only queues.
+- Core: `setHandleMessage()` delivers every received message with its sender MAC, before the per-type handlers.
+- Hello MIDI example: sends on a `millis()` timer instead of `delay()`, so received MIDI is handled right away; fixed its inverted send-error check.
 - Core: `esp_now_midi.h` can be included from several source files (no duplicate `_instance` definition).
 - Fix: the ESP-NOW peer list is now safe to use from the loop task and the receive callback at the same time (auto-discovery, echo handlers). Before, concurrent access could corrupt the list or leave peers registered in ESP-NOW but missing from the list, so they stopped receiving until a reboot. New `getPeer(index, mac)` and `copyPeers()` return copies.
 - Fix: the dongle sent MIDI over ESP-NOW as its internal 7-byte struct (since the peer mute feature), which every receiver ignored as SysEx. It sends the standard 1-3 byte MIDI packet again.

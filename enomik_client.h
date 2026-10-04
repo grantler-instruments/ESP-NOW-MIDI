@@ -8,6 +8,7 @@
 #endif
 #include "include/enomik_io.h"
 #include "include/PeerStorage.h"
+#include "include/MidiInbox.h"
 #include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
@@ -69,6 +70,8 @@ namespace enomik
         // (e.g. client_echo handlers) still go over the wire but must not
         // re-enter loopback, or send → handler → send recurses forever.
         int _loopbackDepth = 0;
+        MidiInbox _inbox;
+        bool _dispatchInLoop = true;
 
         struct LoopbackScope
         {
@@ -208,6 +211,68 @@ namespace enomik
                 Client::instancePtr->_onSongSelectHandler(songNumber);
         }
 
+        // --- ESP-NOW receive ---
+
+        // Runs in the ESP-NOW receive callback (WiFi task).
+        static void onEspNowMessageStatic(const uint8_t *mac, const midi_message &msg)
+        {
+            if (!Client::instancePtr)
+                return;
+            if (Client::instancePtr->_dispatchInLoop)
+                Client::instancePtr->_inbox.push(msg, mac);
+            else
+                dispatch(msg);
+        }
+
+        static void dispatch(const midi_message &msg)
+        {
+            const int value14 = (msg.secondByte << 7) | msg.firstByte; // pitch bend, song position
+            switch (msg.status)
+            {
+            case MIDI_NOTE_ON:
+                handleNoteOnStatic(msg.channel, msg.firstByte, msg.secondByte);
+                break;
+            case MIDI_NOTE_OFF:
+                handleNoteOffStatic(msg.channel, msg.firstByte, msg.secondByte);
+                break;
+            case MIDI_CONTROL_CHANGE:
+                handleControlChangeStatic(msg.channel, msg.firstByte, msg.secondByte);
+                break;
+            case MIDI_PROGRAM_CHANGE:
+                handleProgramChangeStatic(msg.channel, msg.firstByte);
+                break;
+            case MIDI_AFTERTOUCH:
+                handleAfterTouchChannelStatic(msg.channel, msg.firstByte);
+                break;
+            case MIDI_POLY_AFTERTOUCH:
+                handleAfterTouchPolyStatic(msg.channel, msg.firstByte, msg.secondByte);
+                break;
+            case MIDI_PITCH_BEND:
+                handlePitchBendStatic(msg.channel, value14 - 8192);
+                break;
+            case MIDI_START:
+                handleStartStatic();
+                break;
+            case MIDI_STOP:
+                handleStopStatic();
+                break;
+            case MIDI_CONTINUE:
+                handleContinueStatic();
+                break;
+            case MIDI_TIME_CLOCK:
+                handleClockStatic();
+                break;
+            case MIDI_SONG_POS_POINTER:
+                handleSongPositionStatic(static_cast<uint16_t>(value14));
+                break;
+            case MIDI_SONG_SELECT:
+                handleSongSelectStatic(msg.firstByte);
+                break;
+            default:
+                break;
+            }
+        }
+
         // --- System Exclusive ---
         static void handleSysExStatic(uint8_t *data, unsigned int length)
         {
@@ -227,6 +292,7 @@ namespace enomik
         Client() : isInitialized(false)
         {
             instancePtr = this;
+            espnowMIDI.setHandleMessage(onEspNowMessageStatic);
         }
 
         /**
@@ -386,19 +452,6 @@ namespace enomik
             }
 
             // --- Set handlers for ESP-NOW ---
-            espnowMIDI.setHandleNoteOn(handleNoteOnStatic);
-            espnowMIDI.setHandleNoteOff(handleNoteOffStatic);
-            espnowMIDI.setHandleControlChange(handleControlChangeStatic);
-            espnowMIDI.setHandleProgramChange(handleProgramChangeStatic);
-            espnowMIDI.setHandleAfterTouchChannel(handleAfterTouchChannelStatic);
-            espnowMIDI.setHandleAfterTouchPoly(handleAfterTouchPolyStatic);
-            espnowMIDI.setHandlePitchBend(handlePitchBendStatic);
-            espnowMIDI.setHandleStart(handleStartStatic);
-            espnowMIDI.setHandleStop(handleStopStatic);
-            espnowMIDI.setHandleContinue(handleContinueStatic);
-            espnowMIDI.setHandleClock(handleClockStatic);
-            espnowMIDI.setHandleSongPosition(handleSongPositionStatic);
-            espnowMIDI.setHandleSongSelect(handleSongSelectStatic);
 
 #ifdef HAS_USB_MIDI
             // --- Set handlers for USB MIDI ---
@@ -473,7 +526,44 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             CLIENT_USBMIDI.read();
 #endif
+            processReceived();
             io.loop();
+        }
+
+        /**
+         * @brief Runs the handlers for MIDI received over ESP-NOW. Called by loop().
+         *
+         * Received messages wait in an inbox until then, so handlers run in the
+         * loop task and react as often as loop() is called.
+         */
+        void processReceived()
+        {
+            midi_message msg;
+            uint8_t from[6]; // sender, unused here
+            for (int i = 0; i < MIDI_INBOX_SIZE && _inbox.pop(msg, from); ++i)
+            {
+                dispatch(msg);
+            }
+        }
+
+        /** @return ESP-NOW messages dropped because loop() fell behind (since boot). */
+        uint32_t getReceiveDropCount() const
+        {
+            return _inbox.droppedCount();
+        }
+
+        /**
+         * @brief Where ESP-NOW receive handlers run (default: in loop()).
+         *
+         * `false` runs them immediately in the ESP-NOW receive callback (WiFi
+         * task, on dual-core chips in parallel to loop()). Lower latency while
+         * loop() blocks, but handlers then must not touch data that loop() uses,
+         * and the pin configuration must not change while MIDI arrives.
+         * Call before begin().
+         */
+        void setDispatchInLoop(bool enabled)
+        {
+            _dispatchInLoop = enabled;
         }
 
         /** @brief Sends Note On over ESP-NOW and USB when available.
