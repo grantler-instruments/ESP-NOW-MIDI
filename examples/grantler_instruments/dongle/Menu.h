@@ -289,9 +289,7 @@ public:
     if (page_ == Page::Peers) {
       const int peerCount = dongle_.getPeersCount();
       if (cursor_ > 0 && cursor_ < peerListCount(peerCount) - 1) {
-        const uint8_t* mac = dongle_.getPeer(cursor_ - 1);
-        if (mac) {
-          memcpy(contextMac_, mac, 6);
+        if (dongle_.getPeer(cursor_ - 1, contextMac_)) {
           savedCursor_ = cursor_;
           goTo(Page::PeerContext, 0);
         }
@@ -389,8 +387,8 @@ private:
     if (index >= count - 1) {
       return "Add peer";
     }
-    const uint8_t* mac = dongle_.getPeer(index - 1);
-    if (!mac) {
+    uint8_t mac[6];
+    if (!dongle_.getPeer(index - 1, mac)) {
       return "";
     }
     static char line[20];
@@ -405,8 +403,8 @@ private:
   int peerRowForMac(const uint8_t mac[6]) const {
     const int n = dongle_.getPeersCount();
     for (int i = 0; i < n; ++i) {
-      const uint8_t* peer = dongle_.getPeer(i);
-      if (peer && memcmp(peer, mac, 6) == 0) {
+      uint8_t peer[6];
+      if (dongle_.getPeer(i, peer) && memcmp(peer, mac, 6) == 0) {
         return i + 1;
       }
     }

@@ -22,13 +22,14 @@ struct FakeDongle
 
     int getPeersCount() const { return count; }
 
-    const uint8_t *getPeer(int index) const
+    bool getPeer(int index, uint8_t mac[6]) const
     {
         if (index < 0 || index >= count)
         {
-            return nullptr;
+            return false;
         }
-        return peers[index];
+        memcpy(mac, peers[index], 6);
+        return true;
     }
 
     bool addPeer(const uint8_t mac[6])

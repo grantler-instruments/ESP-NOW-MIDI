@@ -534,13 +534,24 @@ namespace enomik
         }
 
         /**
-         * @brief Gets the MAC address of a registered peer.
+         * @brief Copies the MAC address of a registered peer.
          * @param index Peer index in `[0, getPeersCount())`.
-         * @return Pointer to the 6-byte MAC, or `nullptr` when @p index is out of range.
+         * @param mac Receives the 6-byte MAC.
+         * @return `false` when @p index is out of range.
          */
+        bool getPeer(int index, uint8_t mac[6]) const
+        {
+            return espnowMIDI.getPeer(index, mac);
+        }
+
+        /** @deprecated Use getPeer(index, mac). */
+        [[deprecated("use getPeer(index, mac)")]]
         const uint8_t *getPeer(int index) const
         {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
             return espnowMIDI.getPeer(index);
+#pragma GCC diagnostic pop
         }
 
         /** @brief Force the next loop() to refresh the display (e.g. after UI input). */

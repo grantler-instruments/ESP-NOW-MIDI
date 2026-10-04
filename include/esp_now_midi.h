@@ -296,14 +296,10 @@ public:
   }
 
   /**
-   * @brief Gets the MAC address of a registered peer.
-   *
-   * The pointer refers to the live list: use it from the loop task only, and
-   * not across a call that removes peers. Prefer getPeer(int, uint8_t[6]).
-   *
-   * @param index Peer index in `[0, getPeersCount())`.
-   * @return Pointer to the 6-byte MAC, or `nullptr` when @p index is out of range.
+   * @deprecated The pointer refers to the live list and can change under a
+   * concurrent add or remove. Use getPeer(int, uint8_t[6]) or copyPeers().
    */
+  [[deprecated("use getPeer(index, mac) or copyPeers()")]]
   const uint8_t *getPeer(int index) const
   {
     EspNowMidiLock lock(_peersMux);
