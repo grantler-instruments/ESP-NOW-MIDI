@@ -18,6 +18,7 @@ add_executable(native_tests
   test_midi_packet.cpp
   test_enomik_sysex.cpp
   test_enomik_sysex_handler.cpp
+  test_esp_now_midi_sysex.cpp
   test_peer_mute_list.cpp
   test_peer_storage.cpp
   test_grantler_menu.cpp

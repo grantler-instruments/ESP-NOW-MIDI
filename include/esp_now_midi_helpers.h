@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 
 enum MidiStatus
@@ -141,10 +142,12 @@ struct midi_message_packet
     }
 } __attribute__((packed));
 
+/** Buffer for complete SysEx (USB/config path). Not the ESP-NOW air frame. */
 struct midi_sysex_message
 {
-    uint8_t data[128];
-    uint8_t length;
+    static constexpr size_t MAX_DATA_SIZE = 256;
+    uint8_t data[MAX_DATA_SIZE];
+    uint16_t length;
 } __attribute__((packed));
 
 struct midi_mpe_message

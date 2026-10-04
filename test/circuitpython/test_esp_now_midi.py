@@ -20,6 +20,9 @@ from esp_now_midi import (  # noqa: E402
     MIDI_PROGRAM_CHANGE,
     MIDI_START,
     MIDI_TIME_CLOCK,
+    SYSEX_HEADER_SIZE,
+    SYSEX_MAX_MESSAGE,
+    SYSEX_MAX_PAYLOAD,
     VERSION,
     get_version,
 )
@@ -111,6 +114,41 @@ class TestLibraryApi(unittest.TestCase):
 
         midi.e.remove_peer.assert_called_once_with(peer)
         self.assertEqual(midi.peers, [])
+
+
+class TestSysExTransport(unittest.TestCase):
+    def setUp(self):
+        self.midi = ESPNowMidi()
+        self.midi.e = MagicMock()
+        self.peer = b"\x01\x02\x03\x04\x05\x06"
+        self.midi.peers = [self.peer]
+        self.received = []
+        self.midi.set_handle_sysex(lambda data, length: self.received.append((data, length)))
+
+    def test_send_sysex_single_fragment(self):
+        payload = bytes([0xF0, 0x7D, 0x01, 0xF7])
+        self.assertTrue(self.midi.send_sysex(payload))
+        self.midi.e.send.assert_called_once()
+        frame = self.midi.e.send.call_args[0][1]
+        self.assertEqual(frame[0], 0xF0)
+        self.assertEqual(len(frame), SYSEX_HEADER_SIZE + len(payload))
+        self.assertEqual(bytes(frame[SYSEX_HEADER_SIZE:]), payload)
+
+    def test_send_and_recv_multi_fragment(self):
+        payload = bytes([(i * 3) & 0xFF for i in range(SYSEX_MAX_PAYLOAD + 1)])
+        self.assertTrue(self.midi.send_sysex(payload))
+        self.assertEqual(self.midi.e.send.call_count, 2)
+
+        for call in self.midi.e.send.call_args_list:
+            frame = call[0][1]
+            self.midi._on_data_recv(self.peer, frame)
+
+        self.assertEqual(len(self.received), 1)
+        self.assertEqual(self.received[0][1], len(payload))
+        self.assertEqual(self.received[0][0], payload)
+
+    def test_reject_oversized(self):
+        self.assertFalse(self.midi.send_sysex(bytes(SYSEX_MAX_MESSAGE + 1)))
 
 
 if __name__ == "__main__":
