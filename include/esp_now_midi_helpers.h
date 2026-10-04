@@ -1,6 +1,11 @@
 #pragma once
 #include <cstdint>
 
+#ifndef MAX_PEERS
+/** Maximum number of ESP-NOW peers. Override before including the library. */
+#define MAX_PEERS 20
+#endif
+
 enum MidiStatus
 {
     MIDI_UNKNOWN = 0x00,

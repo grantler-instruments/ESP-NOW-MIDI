@@ -3,8 +3,6 @@
  * @brief ESP-NOW transport and MIDI message API.
  */
 #pragma once
-/** Maximum number of ESP-NOW peers tracked by an instance. */
-#define MAX_PEERS 20
 #ifndef ESP_NOW_MIDI_CHANNEL
 /** Wi-Fi channel used by ESP-NOW MIDI peers. Override before including this header. */
 #define ESP_NOW_MIDI_CHANNEL 6

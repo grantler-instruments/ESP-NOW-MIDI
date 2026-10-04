@@ -11,10 +11,10 @@
 
 #include <cstdint>
 #include <cstring>
+#include "./esp_now_midi_helpers.h"
 #include "./esp_now_midi_log.h"
 
 #define MAC_ADDRESS_SIZE 6
-#define MAX_PEERS 20
 
 namespace enomik {
 
