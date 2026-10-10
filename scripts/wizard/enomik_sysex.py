@@ -18,7 +18,7 @@ from __future__ import annotations
 
 # Keep these in sync with version.h
 PROTOCOL_MAJOR = 0
-PROTOCOL_MINOR = 18
+PROTOCOL_MINOR = 19
 
 MANUFACTURER_ID = 0x7D
 
