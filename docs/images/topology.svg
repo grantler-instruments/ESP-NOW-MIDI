@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 600" role="img" aria-labelledby="title desc">
+  <title id="title">ESP-NOW MIDI network topology</title>
+  <desc id="desc">Two MIDI hosts each connect to an ESP-NOW MIDI dongle. Both dongles wirelessly connect to four ESP32-S2 Mini boards.</desc>
+  <style>
+    .label { fill: #000; font: 600 25px system-ui, sans-serif; letter-spacing: .5px; }
+    .small-label { fill: #e5a3bd; font: 600 22px system-ui, sans-serif; letter-spacing: 1px; }
+    .outline { fill: none; stroke: #000; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+    .wireless { fill: none; stroke: #e5a3bd; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 12 12; }
+    .board { fill: #fff; stroke: #000; stroke-width: 4; }
+    .detail { fill: none; stroke: #000; stroke-width: 3; stroke-linejoin: round; }
+    .pin { fill: #e5a3bd; }
+    @media (prefers-color-scheme: dark) {
+      .label { fill: #e6edf3; }
+      .outline, .detail { stroke: #e6edf3; }
+      .board { fill: #0d1117; stroke: #e6edf3; }
+    }
+  </style>
+
+  <g aria-label="MIDI host laptop">
+    <rect class="outline" x="105" y="218" width="258" height="150" rx="10"/>
+    <path class="outline" d="M78 400h312l-32-32H110zM204 400h60"/>
+    <text class="label" x="234" y="462" text-anchor="middle">MIDI HOST</text>
+  </g>
+
+  <g aria-label="Bidirectional MIDI connection">
+    <path d="M432 320h177" stroke="#e5a3bd" stroke-width="5"/>
+    <path d="m432 320 18-11v22zM609 320l-18-11v22z" fill="#e5a3bd"/>
+    <text class="small-label" x="520" y="290" text-anchor="middle">MIDI</text>
+  </g>
+
+  <g aria-label="ESP-NOW MIDI dongle">
+    <rect class="board" x="628" y="227" width="103" height="160" rx="14"/>
+    <path class="detail" d="M648 227v-38h63v38M650 279h60v73h-60z"/>
+    <circle class="pin" cx="680" cy="362" r="5"/>
+    <text class="label" x="680" y="440" text-anchor="middle">ESP-NOW</text>
+    <text class="label" x="680" y="473" text-anchor="middle">MIDI DONGLE</text>
+  </g>
+
+  <text class="small-label" x="866" y="138" text-anchor="middle">ESP-NOW</text>
+  <path class="wireless" d="M731 320H846M846 320 950 135M846 320 1120 235M846 320 1120 395M846 320 950 495M846 320 1400 307"/>
+  <circle cx="846" cy="320" r="9" fill="#e5a3bd"/>
+
+  <defs>
+    <g id="board">
+      <rect class="board" width="135" height="70" rx="8"/>
+      <rect class="detail" x="14" y="22" width="20" height="27"/>
+      <rect class="detail" x="56" y="18" width="31" height="34"/>
+      <path class="detail" d="M111 17v36l12-7V24z"/>
+      <g class="pin">
+        <circle cx="10" cy="10" r="3"/><circle cx="25" cy="10" r="3"/><circle cx="40" cy="10" r="3"/><circle cx="55" cy="10" r="3"/><circle cx="70" cy="10" r="3"/><circle cx="85" cy="10" r="3"/><circle cx="100" cy="10" r="3"/>
+        <circle cx="10" cy="60" r="3"/><circle cx="25" cy="60" r="3"/><circle cx="40" cy="60" r="3"/><circle cx="55" cy="60" r="3"/><circle cx="70" cy="60" r="3"/><circle cx="85" cy="60" r="3"/><circle cx="100" cy="60" r="3"/>
+      </g>
+    </g>
+  </defs>
+  <g aria-label="Four ESP32-S2 Mini boards">
+    <use href="#board" x="950" y="100"/>
+    <use href="#board" x="1120" y="200"/>
+    <use href="#board" x="1120" y="360"/>
+    <use href="#board" x="950" y="460"/>
+  </g>
+
+  <g aria-label="Second ESP-NOW MIDI dongle">
+    <rect class="board" x="1400" y="227" width="103" height="160" rx="14"/>
+    <path class="detail" d="M1420 227v-38h63v38M1422 279h60v73h-60z"/>
+    <circle class="pin" cx="1452" cy="362" r="5"/>
+    <text class="label" x="1452" y="440" text-anchor="middle">ESP-NOW</text>
+    <text class="label" x="1452" y="473" text-anchor="middle">MIDI DONGLE</text>
+  </g>
+
+  <g aria-label="Second bidirectional MIDI connection">
+    <path d="M1530 320h118" stroke="#e5a3bd" stroke-width="5"/>
+    <path d="m1530 320 18-11v22zM1648 320l-18-11v22z" fill="#e5a3bd"/>
+    <text class="small-label" x="1589" y="290" text-anchor="middle">MIDI</text>
+  </g>
+
+  <g aria-label="Second MIDI host laptop">
+    <rect class="outline" x="1670" y="218" width="258" height="150" rx="10"/>
+    <path class="outline" d="M1643 400h312l-32-32h-248zM1769 400h60"/>
+    <text class="label" x="1799" y="462" text-anchor="middle">MIDI HOST 2</text>
+  </g>
+</svg>
