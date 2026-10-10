@@ -82,8 +82,7 @@ void setup() {
   buttonConfig->setClickDelay(BTN_LONG_PRESS_MS);
 
   // Optional: hard-add a known peer (or wait for auto-discovery)
-  // uint8_t clientMac[6] = { 0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62 };
-  // _dongle.addPeer(clientMac);
+
 
   // --- Bridge filters (optional) -----------------------------------------
   // midi_message fields: status, channel (1-16), firstByte, secondByte
@@ -114,6 +113,8 @@ void setup() {
   // _dongle.setFromHostFilter(nullptr);
 
   _dongle.begin();
+    uint8_t clientMac[6] = { 0x84, 0xF7, 0x03, 0xF0, 0x80, 0x14 };
+  _dongle.addPeer(clientMac);
 }
 
 void loop() {
