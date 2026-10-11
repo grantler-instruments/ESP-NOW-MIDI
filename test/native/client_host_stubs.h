@@ -35,6 +35,19 @@ inline long map(long x, long inMin, long inMax, long outMin, long outMax)
 template <typename T>
 T constrain(T x, T lo, T hi) { return x < lo ? lo : (x > hi ? hi : x); }
 
+// Byte blobs survive across Preferences instances (a "reboot") only while
+// stubPrefsPersist() is true; other tests keep the empty-NVS default.
+inline bool &stubPrefsPersist()
+{
+    static bool persist = false;
+    return persist;
+}
+inline std::map<std::string, std::string> &stubPrefsBlobs()
+{
+    static std::map<std::string, std::string> blobs;
+    return blobs;
+}
+
 namespace enomik
 {
 class Preferences
@@ -43,8 +56,23 @@ public:
     bool begin(const char *, bool = false) { return true; }
     void end() {}
     void clear() {}
-    size_t putBytes(const char *, const void *, size_t len) { return len; }
-    size_t getBytes(const char *, void *, size_t) { return 0; }
+    size_t putBytes(const char *key, const void *value, size_t len)
+    {
+        if (stubPrefsPersist())
+            stubPrefsBlobs()[key] = std::string(static_cast<const char *>(value), len);
+        return len;
+    }
+    // Like Arduino Preferences: 0 when the stored blob is larger than maxLen.
+    size_t getBytes(const char *key, void *buf, size_t maxLen)
+    {
+        if (!stubPrefsPersist())
+            return 0;
+        auto it = stubPrefsBlobs().find(key);
+        if (it == stubPrefsBlobs().end() || it->second.size() > maxLen)
+            return 0;
+        memcpy(buf, it->second.data(), it->second.size());
+        return it->second.size();
+    }
     size_t putUInt(const char *, uint32_t) { return 4; }
     uint32_t getUInt(const char *, uint32_t d = 0) { return d; }
     size_t putUChar(const char *, uint8_t) { return 1; }

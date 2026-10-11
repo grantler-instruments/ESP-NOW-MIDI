@@ -989,7 +989,7 @@ namespace enomik
             if (sameFirmware)
             {
                 char buf[MAX_NAME_LENGTH + 1] = {};
-                _preferences.getBytes("name", buf, MAX_NAME_LENGTH);
+                _preferences.getBytes("name", buf, sizeof(buf));
                 copyName(_nameOverride, buf);
             }
             else

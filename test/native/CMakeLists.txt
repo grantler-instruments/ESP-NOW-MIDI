@@ -27,6 +27,7 @@ add_executable(native_tests
   test_midi_inbox.cpp
   test_client_dispatch.cpp
   test_io_pitch_bend.cpp
+  test_io_name.cpp
   test_usb_midi_packet.cpp
 )
 target_include_directories(native_tests PRIVATE
