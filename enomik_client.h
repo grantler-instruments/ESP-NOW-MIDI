@@ -237,7 +237,7 @@ namespace enomik
         }
 
         // --- System Common ---
-        static void handleSongPositionStatic(uint16_t songPosition)
+        static void handleSongPositionStatic(unsigned int songPosition)
         {
             if (Client::instancePtr && Client::instancePtr->_onSongPositionHandler)
                 Client::instancePtr->_onSongPositionHandler(songPosition);
@@ -507,6 +507,7 @@ namespace enomik
             CLIENT_USBMIDI.setHandleStop(handleStopStatic);
             CLIENT_USBMIDI.setHandleContinue(handleContinueStatic);
             CLIENT_USBMIDI.setHandleClock(handleClockStatic);
+            CLIENT_USBMIDI.setHandleSongPosition(handleSongPositionStatic);
             CLIENT_USBMIDI.setHandleSongSelect(handleSongSelectStatic);
 #endif
 

@@ -10,15 +10,16 @@ Do not run wizard.py directly unless that venv is already active.
 Phase 1 - the client board connected directly via USB MIDI
 Phase 2 - the client reached wirelessly through the dongle
 
-Each step prints an instruction, performs an automatic check, and reports
-PASS / FAIL. The process exits non-zero if any step fails.
+Each step performs an automatic check and reports PASS / FAIL. Inputs are
+tested with fake values from the firmware, then with real buttons and a
+potentiometer (Esc skips a step). The process exits non-zero if any step fails.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable
+import time
 
 try:
     import mido
@@ -32,25 +33,67 @@ except ImportError:
     )
     sys.exit(1)
 
+import cases as tc
 import enomik_sysex as sx
+from cases import (
+    CC_ANALOG_IN,
+    CC_ANALOG_OUT,
+    CC_DIGITAL_A,
+    CC_DIGITAL_B,
+    ECHO_CHANNEL,
+    IO_CHANNEL,
+    NOTE_PIN_NOTE,
+    PIN_ANALOG_IN,
+    PIN_ANALOG_OUT,
+    PIN_BEND,
+    PIN_DIGITAL_A,
+    PIN_DIGITAL_B,
+    PIN_NOTE,
+)
 from midi_io import CANCELLED, MidiLink, find_link
-
-TEST_CHANNEL = 10  # enomik (1-based) channel used for echo
-IO_CHANNEL = 1
-PIN_DIGITAL_A, CC_DIGITAL_A = 16, 16
-PIN_DIGITAL_B, CC_DIGITAL_B = 17, 17
-PIN_ANALOG_IN, CC_ANALOG_IN = 10, 10
-PIN_ANALOG_OUT, CC_ANALOG_OUT = 21, 17  # listens to CC 17 (loopback from pin 17)
-ECHO_NOTE = 64
 
 PASS = "PASS"
 FAIL = "FAIL"
 
+# (description, build_set_pin_config arguments)
+PIN_CONFIGS = [
+    (
+        f"pin {PIN_DIGITAL_A} digital -> CC {CC_DIGITAL_A}",
+        dict(pin=PIN_DIGITAL_A, mode=sx.MODE_INPUT_PULLUP, midi_type=sx.MIDI_CONTROL_CHANGE, note_or_cc=CC_DIGITAL_A),
+    ),
+    (
+        f"pin {PIN_DIGITAL_B} digital -> CC {CC_DIGITAL_B}",
+        dict(pin=PIN_DIGITAL_B, mode=sx.MODE_INPUT_PULLUP, midi_type=sx.MIDI_CONTROL_CHANGE, note_or_cc=CC_DIGITAL_B),
+    ),
+    (
+        f"pin {PIN_ANALOG_IN} analog in -> CC {CC_ANALOG_IN}",
+        dict(pin=PIN_ANALOG_IN, mode=sx.MODE_ANALOG_INPUT, midi_type=sx.MIDI_CONTROL_CHANGE, note_or_cc=CC_ANALOG_IN),
+    ),
+    (
+        f"pin {PIN_ANALOG_OUT} analog out <- CC {CC_ANALOG_OUT}",
+        dict(pin=PIN_ANALOG_OUT, mode=sx.MODE_ANALOG_OUTPUT, midi_type=sx.MIDI_CONTROL_CHANGE, note_or_cc=CC_ANALOG_OUT),
+    ),
+    (
+        f"pin {PIN_NOTE} digital -> note {NOTE_PIN_NOTE}",
+        dict(pin=PIN_NOTE, mode=sx.MODE_INPUT_PULLUP, midi_type=sx.MIDI_NOTE_ON, note_or_cc=NOTE_PIN_NOTE),
+    ),
+    (
+        f"pin {PIN_BEND} analog in -> pitch bend",
+        dict(pin=PIN_BEND, mode=sx.MODE_ANALOG_INPUT, midi_type=sx.MIDI_PITCH_BEND, note_or_cc=0),
+    ),
+]
+
+UNUSED_PIN = 47
+UNUSED_COMMAND = 0x3E
+BURST_VELOCITY = 99
+
 
 class Wizard:
-    def __init__(self) -> None:
+    def __init__(self, io_mode: str = "both", burst: int = 100) -> None:
         self.results: list[tuple[str, bool]] = []
         self.dongle_mac: list[int] | None = None
+        self.io_mode = io_mode
+        self.burst = burst
 
     # --- output helpers ------------------------------------------------------
     def record(self, name: str, ok: bool, detail: str = "") -> bool:
@@ -70,23 +113,66 @@ class Wizard:
     def prompt(text: str) -> None:
         input(f"\n>>> {text} (press Enter to continue) ")
 
-    # --- sysex helpers -------------------------------------------------------
     @staticmethod
-    def send_sysex(link: MidiLink, data: list[int]) -> None:
-        link.send(mido.Message("sysex", data=data))
+    def send(link: MidiLink, type_: str, fields: dict) -> None:
+        link.send(mido.Message(type_, **fields))
 
-    def request_sysex(self, link: MidiLink, data: list[int], want_cmd: str, timeout: float = 2.0):
+    @staticmethod
+    def drain(link: MidiLink, seconds: float) -> None:
+        """Let in-flight messages arrive, then drop them."""
+        link.wait_for(lambda m: False, timeout=seconds)
         link.flush()
-        self.send_sysex(link, data)
+
+    # --- sysex helpers -------------------------------------------------------
+    def request(self, link: MidiLink, data: list[int], accept, timeout: float = 2.0):
+        """Send SysEx and return the first parsed reply accepted by `accept`."""
+        link.flush()
+        link.send(mido.Message("sysex", data=data))
 
         def is_match(msg: mido.Message) -> bool:
             if msg.type != "sysex":
                 return False
             parsed = sx.parse(list(msg.data))
-            return bool(parsed and parsed.get("cmd") == want_cmd)
+            return bool(parsed and accept(parsed))
 
         msg = link.wait_for(is_match, timeout=timeout)
         return sx.parse(list(msg.data)) if msg else None
+
+    def request_sysex(self, link: MidiLink, data: list[int], want_cmd: str, timeout: float = 2.0):
+        return self.request(link, data, lambda p: p.get("cmd") == want_cmd, timeout)
+
+    def request_error(self, link: MidiLink, data: list[int], failed_request: int, timeout: float = 2.0):
+        return self.request(
+            link,
+            data,
+            lambda p: p.get("cmd") == "error" and p.get("failed_request") == failed_request,
+            timeout,
+        )
+
+    def collect_stream(self, link: MidiLink, data: list[int], end_cmd: str, timeout: float = 3.0):
+        """Send a streaming request; return every parsed reply up to `end_cmd`, or None on timeout."""
+        items: list[dict] = []
+
+        def on_message(msg: mido.Message) -> None:
+            if msg.type == "sysex":
+                parsed = sx.parse(list(msg.data))
+                if parsed:
+                    items.append(parsed)
+
+        link.flush()
+        link.send(mido.Message("sysex", data=data))
+        done = link.wait_for(
+            lambda m: bool(items) and items[-1].get("cmd") == end_cmd,
+            timeout=timeout,
+            on_message=on_message,
+        )
+        return items[:-1] if done else None
+
+    def check_error(self, link: MidiLink, name: str, data: list[int], failed_request: int, want: int) -> bool:
+        resp = self.request_error(link, data, failed_request)
+        got = resp["error"] if resp else "no response"
+        ok = bool(resp and resp["error_code"] == want)
+        return self.record(f"SysEx error {name} -> {sx.ERROR_NAMES[want]}", ok, "" if ok else f"got {got}")
 
     # --- phase 1: USB --------------------------------------------------------
     def phase1(self, link: MidiLink) -> None:
@@ -95,221 +181,272 @@ class Wizard:
         # Clean slate so the run is reproducible.
         self.request_sysex(link, sx.build_reset(), "reset", timeout=2.0)
 
-        # GET_MAC proves SysEx works in both directions and gives us the MAC.
-        mac_resp = self.request_sysex(link, sx.build_get_mac(), "get_mac", timeout=2.0)
-        if mac_resp:
-            self.record("SysEx GET_MAC round-trip", True, sx.mac_to_string(mac_resp["mac"]))
-        else:
-            self.record("SysEx GET_MAC round-trip", False, "no response")
+        self._sysex_basics(link)
+        if self.io_mode in ("virtual", "both"):
+            self._prime_fake_inputs(link)
+        self._configure_pins(link)
+        self._sysex_errors(link)
+
+        self._echo(link, tc.channel_voice_cases(), "USB")
+        self._no_echo_on_io_channel(link, "USB")
+        self._echo(link, tc.system_cases(), "USB")
+        self._burst_test(link, "USB", spacing=0.002, max_loss=0.0)
+
+        self._pair_with_dongle(link)
+        self._api_sends(link, "USB")
+        self._io_tests(link, "USB")
+
+    def _sysex_basics(self, link: MidiLink) -> None:
+        resp = self.request_sysex(link, sx.build_get_version(), "version")
+        ok = bool(resp and resp["major"] == sx.PROTOCOL_MAJOR and resp["minor"] == sx.PROTOCOL_MINOR)
+        detail = f"{resp['major']}.{resp['minor']}.{resp['patch']}" if resp else "no response"
+        self.record("SysEx GET_VERSION matches the wizard", ok, detail)
+
+        # GET_MAC proves SysEx works in both directions.
+        resp = self.request_sysex(link, sx.build_get_mac(), "get_mac")
+        self.record("SysEx GET_MAC round-trip", bool(resp), sx.mac_to_string(resp["mac"]) if resp else "no response")
 
         # MIDI loopback: outgoing Client MIDI is fed back to receive handlers
-        # (so pin 17 → CC 17 drives analog out pin 21 without a host round-trip).
-        resp = self.request_sysex(
-            link, sx.build_set_midi_loopback(True), "midi_loopback", timeout=2.0
-        )
-        ok = bool(resp and resp.get("enabled") is True)
-        self.record("SysEx SET_MIDI_LOOPBACK on", ok)
+        # (so pin 17 -> CC 17 drives analog out pin 21 without a host round-trip).
+        resp = self.request_sysex(link, sx.build_set_midi_loopback(True), "midi_loopback")
+        self.record("SysEx SET_MIDI_LOOPBACK on", bool(resp and resp["enabled"]))
+        resp = self.request_sysex(link, sx.build_get_midi_loopback(), "midi_loopback")
+        self.record("SysEx GET_MIDI_LOOPBACK", bool(resp and resp["enabled"]))
 
-        # Digital buttons (INPUT_PULLUP, active low) → CC.
-        for pin, cc in ((PIN_DIGITAL_A, CC_DIGITAL_A), (PIN_DIGITAL_B, CC_DIGITAL_B)):
-            cfg = sx.build_set_pin_config(
-                pin=pin,
-                mode=sx.MODE_INPUT_PULLUP,
-                channel=IO_CHANNEL,
-                midi_type=sx.MIDI_CONTROL_CHANGE,
-                note_or_cc=cc,
+        for enabled in (True, False):
+            resp = self.request_sysex(link, sx.build_set_power_save(enabled), "power_save")
+            self.record(f"SysEx SET_POWER_SAVE {'on' if enabled else 'off'}", bool(resp and resp["enabled"] == enabled))
+            resp = self.request_sysex(link, sx.build_get_power_save(), "power_save")
+            self.record(f"SysEx GET_POWER_SAVE {'on' if enabled else 'off'}", bool(resp and resp["enabled"] == enabled))
+
+        resp = self.request_sysex(link, sx.build_set_name("wizard"), "name")
+        self.record("SysEx SET_NAME", bool(resp and resp["name"] == "wizard"), resp["name"] if resp else "")
+        resp = self.request_sysex(link, sx.build_get_name(), "name")
+        self.record("SysEx GET_NAME", bool(resp and resp["name"] == "wizard"), resp["name"] if resp else "")
+        resp = self.request_sysex(link, sx.build_set_name(""), "name")
+        self.record(
+            "SysEx SET_NAME empty restores the default",
+            bool(resp and resp["name"] and resp["name"] != "wizard"),
+            resp["name"] if resp else "",
+        )
+
+    def _configure_pins(self, link: MidiLink) -> None:
+        for name, args in PIN_CONFIGS:
+            resp = self.request_sysex(
+                link, sx.build_set_pin_config(channel=IO_CHANNEL, **args), "pin_config"
             )
-            resp = self.request_sysex(link, cfg, "pin_config", timeout=2.0)
-            ok = bool(resp and resp["pin"] == pin and resp["note_or_cc"] == cc)
-            self.record(f"SysEx SET_PIN_CONFIG pin {pin} digital -> CC {cc}", ok)
+            ok = bool(
+                resp
+                and resp["pin"] == args["pin"]
+                and resp["mode"] == args["mode"]
+                and resp["channel"] == IO_CHANNEL
+                and resp["midi_type"] == args["midi_type"]
+                and resp["note_or_cc"] == args["note_or_cc"]
+            )
+            self.record(f"SysEx SET_PIN_CONFIG {name}", ok)
 
-        # Potentiometer → CC 10.
-        cfg = sx.build_set_pin_config(
-            pin=PIN_ANALOG_IN,
-            mode=sx.MODE_ANALOG_INPUT,
-            channel=IO_CHANNEL,
-            midi_type=sx.MIDI_CONTROL_CHANGE,
-            note_or_cc=CC_ANALOG_IN,
-        )
-        resp = self.request_sysex(link, cfg, "pin_config", timeout=2.0)
-        ok = bool(
-            resp
-            and resp["pin"] == PIN_ANALOG_IN
-            and resp["note_or_cc"] == CC_ANALOG_IN
-        )
-        self.record(
-            f"SysEx SET_PIN_CONFIG pin {PIN_ANALOG_IN} analog in -> CC {CC_ANALOG_IN}",
-            ok,
-        )
+        resp = self.request_sysex(link, sx.build_get_pin_config(PIN_ANALOG_IN), "pin_config")
+        ok = bool(resp and resp["pin"] == PIN_ANALOG_IN and resp["note_or_cc"] == CC_ANALOG_IN)
+        self.record(f"SysEx GET_PIN_CONFIG pin {PIN_ANALOG_IN}", ok)
 
-        # PWM out listens to CC 17 (same CC as digital pin 17; driven via loopback).
-        cfg = sx.build_set_pin_config(
-            pin=PIN_ANALOG_OUT,
-            mode=sx.MODE_ANALOG_OUTPUT,
-            channel=IO_CHANNEL,
-            midi_type=sx.MIDI_CONTROL_CHANGE,
-            note_or_cc=CC_ANALOG_OUT,
+        items = self.collect_stream(link, sx.build_get_all_pin_configs(), "pin_config_stream_end")
+        pins = sorted(i["pin"] for i in items or [] if i.get("cmd") == "pin_config")
+        want = sorted(args["pin"] for _, args in PIN_CONFIGS)
+        self.record("SysEx GET_ALL_PIN_CONFIGS", pins == want, f"pins {pins}")
+
+    def _sysex_errors(self, link: MidiLink) -> None:
+        self.check_error(
+            link, "unknown command", sx.build_raw(UNUSED_COMMAND), UNUSED_COMMAND, sx.ERR_UNKNOWN_COMMAND
         )
-        resp = self.request_sysex(link, cfg, "pin_config", timeout=2.0)
-        ok = bool(
-            resp
-            and resp["pin"] == PIN_ANALOG_OUT
-            and resp["note_or_cc"] == CC_ANALOG_OUT
+        self.check_error(
+            link,
+            "wrong protocol major",
+            sx.build_raw(sx.CMD_GET_VERSION, major=sx.PROTOCOL_MAJOR + 1),
+            sx.CMD_GET_VERSION,
+            sx.ERR_BAD_VERSION,
         )
-        self.record(
-            f"SysEx SET_PIN_CONFIG pin {PIN_ANALOG_OUT} analog out <- CC {CC_ANALOG_OUT}",
-            ok,
+        self.check_error(
+            link, "unconfigured pin", sx.build_get_pin_config(UNUSED_PIN), sx.CMD_GET_PIN_CONFIG, sx.ERR_PIN_NOT_FOUND
+        )
+        self.check_error(
+            link, "short MAC", sx.build_raw(sx.CMD_ADD_PEER, [1, 2, 3]), sx.CMD_ADD_PEER, sx.ERR_DECODE_FAILED
         )
 
-        # Echo tests on the dedicated channel (multiple message types).
-        self._run_echo_suite(link, transport="USB")
-
-        # Pair with the dongle for Phase 2 (persisted on the client).
-        if self.dongle_mac:
-            resp = self.request_sysex(link, sx.build_add_peer(self.dongle_mac), "add_peer_ok", timeout=2.0)
-            ok = bool(resp)
-            self.record("SysEx ADD_PEER (dongle)", ok, sx.mac_to_string(self.dongle_mac))
-        else:
+    def _pair_with_dongle(self, link: MidiLink) -> None:
+        """Store the dongle as a peer (persisted on the client for Phase 2)."""
+        if not self.dongle_mac:
             self.record("SysEx ADD_PEER (dongle)", False, "no dongle MAC provided")
+            return
 
-        # Physical I/O.
-        self._digital_cc_test(link, PIN_DIGITAL_A, CC_DIGITAL_A, transport="USB")
-        self._digital_cc_test(link, PIN_DIGITAL_B, CC_DIGITAL_B, transport="USB")
-        self._analog_cc_test(link, PIN_ANALOG_IN, CC_ANALOG_IN, transport="USB")
+        mac_text = sx.mac_to_string(self.dongle_mac)
+        resp = self.request_sysex(link, sx.build_add_peer(self.dongle_mac), "add_peer_ok")
+        self.record("SysEx ADD_PEER (dongle)", bool(resp), mac_text)
+
+        self.check_error(
+            link, "duplicate ADD_PEER", sx.build_add_peer(self.dongle_mac), sx.CMD_ADD_PEER, sx.ERR_PEER_ALREADY_EXISTS
+        )
+
+        resp = self.request_sysex(link, sx.build_get_peer(0), "peer_entry")
+        self.record("SysEx GET_PEER 0", bool(resp and resp["mac"] == self.dongle_mac), mac_text)
+
+        items = self.collect_stream(link, sx.build_get_all_peers(), "peer_stream_end")
+        macs = [i["mac"] for i in items or [] if i.get("cmd") == "peer_entry"]
+        self.record("SysEx GET_ALL_PEERS", self.dongle_mac in macs, f"{len(macs)} peer(s)")
+
+        items = self.collect_stream(link, sx.build_get_config(), "get_config_ok")
+        kinds = {i.get("cmd") for i in items or []}
+        pins = sum(1 for i in items or [] if i.get("cmd") == "pin_config")
+        ok = (
+            items is not None
+            and pins == len(PIN_CONFIGS)
+            and {"peer_entry", "midi_loopback", "power_save", "name"} <= kinds
+        )
+        self.record("SysEx GET_CONFIG stream", ok, f"{pins} pins, {sorted(kinds)}")
 
     # --- phase 2: ESP-NOW ----------------------------------------------------
     def phase2(self, link: MidiLink) -> None:
         self.section("Phase 2 - Client via ESP-NOW (through dongle)")
-        print("  (the dongle bridges channel MIDI only - SysEx is USB-only)")
+        print("  (SysEx configuration is not bridged by the dongle, so it runs in Phase 1 only)")
 
-        # Give the periodic handshake a couple of cycles to let the dongle
-        # auto-discover the client before we rely on host -> client routing.
-        self._run_echo_suite(link, transport="ESP-NOW", timeout=12.0)
+        # The first echo waits for a couple of handshake cycles, so the dongle
+        # can auto-discover the client before host -> client routing is used.
+        self._echo(link, tc.channel_voice_cases(), "ESP-NOW", first_timeout=12.0)
+        self._no_echo_on_io_channel(link, "ESP-NOW")
+        self._echo(link, tc.system_cases(), "ESP-NOW")
+        self._burst_test(link, "ESP-NOW", spacing=0.005, max_loss=0.05)
+        self._api_sends(link, "ESP-NOW")
+        self._io_tests(link, "ESP-NOW")
 
-        self._digital_cc_test(link, PIN_DIGITAL_A, CC_DIGITAL_A, transport="ESP-NOW")
-        self._digital_cc_test(link, PIN_DIGITAL_B, CC_DIGITAL_B, transport="ESP-NOW")
-        self._analog_cc_test(link, PIN_ANALOG_IN, CC_ANALOG_IN, transport="ESP-NOW")
-
-    # --- shared checks -------------------------------------------------------
-    def _run_echo_suite(self, link: MidiLink, transport: str, timeout: float = 3.0) -> None:
-        """Run channel-voice echo checks on TEST_CHANNEL only."""
-        mido_ch = TEST_CHANNEL - 1
-        link.flush()
-
-        cases: list[tuple[str, mido.Message, Callable[[mido.Message], bool]]] = [
-            (
-                "note on/off",
-                mido.Message("note_on", channel=mido_ch, note=ECHO_NOTE, velocity=100),
-                lambda m: (
-                    m.type == "note_on"
-                    and m.channel == mido_ch
-                    and m.note == ECHO_NOTE
-                    and m.velocity == 100
-                ),
-            ),
-            (
-                "control change",
-                mido.Message("control_change", channel=mido_ch, control=7, value=42),
-                lambda m: (
-                    m.type == "control_change"
-                    and m.channel == mido_ch
-                    and m.control == 7
-                    and m.value == 42
-                ),
-            ),
-            (
-                "program change",
-                mido.Message("program_change", channel=mido_ch, program=5),
-                lambda m: (
-                    m.type == "program_change"
-                    and m.channel == mido_ch
-                    and m.program == 5
-                ),
-            ),
-            (
-                "pitch bend center",
-                mido.Message("pitchwheel", channel=mido_ch, pitch=0),
-                lambda m: (
-                    m.type == "pitchwheel"
-                    and m.channel == mido_ch
-                    and abs(m.pitch) <= 1
-                ),
-            ),
-            (
-                "pitch bend up",
-                mido.Message("pitchwheel", channel=mido_ch, pitch=1000),
-                lambda m: (
-                    m.type == "pitchwheel"
-                    and m.channel == mido_ch
-                    and abs(m.pitch - 1000) <= 1
-                ),
-            ),
-            (
-                "pitch bend down",
-                mido.Message("pitchwheel", channel=mido_ch, pitch=-1000),
-                lambda m: (
-                    m.type == "pitchwheel"
-                    and m.channel == mido_ch
-                    and abs(m.pitch + 1000) <= 1
-                ),
-            ),
-            (
-                "channel aftertouch",
-                mido.Message("aftertouch", channel=mido_ch, value=64),
-                lambda m: (
-                    m.type == "aftertouch"
-                    and m.channel == mido_ch
-                    and m.value == 64
-                ),
-            ),
-            (
-                "poly aftertouch",
-                mido.Message(
-                    "polytouch", channel=mido_ch, note=ECHO_NOTE, value=80
-                ),
-                lambda m: (
-                    m.type == "polytouch"
-                    and m.channel == mido_ch
-                    and m.note == ECHO_NOTE
-                    and m.value == 80
-                ),
-            ),
-        ]
-
-        for name, outgoing, predicate in cases:
+    # --- echo ------------------------------------------------------------------
+    def _echo(
+        self,
+        link: MidiLink,
+        echo_cases: list[tc.MidiCase],
+        transport: str,
+        timeout: float = 3.0,
+        first_timeout: float | None = None,
+    ) -> None:
+        for i, case in enumerate(echo_cases):
             link.flush()
-            link.send(outgoing)
-            got = link.wait_for(predicate, timeout=timeout)
-            self.record(
-                f"Echo {name} ch {TEST_CHANNEL} ({transport})",
-                got is not None,
-            )
-            # Release note-based messages so later tests start clean.
-            if outgoing.type == "note_on":
-                link.send(
-                    mido.Message(
-                        "note_off", channel=mido_ch, note=ECHO_NOTE, velocity=0
-                    )
-                )
+            self.send(link, case.type, case.message_kwargs())
+            wait = first_timeout if i == 0 and first_timeout else timeout
+            got = link.wait_for(case.matches, timeout=wait)
+            self.record(f"Echo {case.name} ({transport})", got is not None)
+            # Release notes so later tests start clean.
+            if case.type == "note_on":
+                self.send(link, "note_off", {"channel": case.channel - 1, "note": case.fields["note"], "velocity": 0})
 
-        # Non-echo channel: traffic on IO_CHANNEL must not be mirrored back.
+    def _no_echo_on_io_channel(self, link: MidiLink, transport: str) -> None:
+        """Traffic on IO_CHANNEL must not be mirrored back."""
         link.flush()
-        link.send(
-            mido.Message("note_on", channel=IO_CHANNEL - 1, note=99, velocity=1)
-        )
-        stray = link.wait_for(
-            lambda m: m.type == "note_on" and m.note == 99,
-            timeout=0.5,
-        )
-        self.record(
-            f"No echo on ch {IO_CHANNEL} ({transport})",
-            stray is None,
-        )
-        link.send(
-            mido.Message(
-                "note_off", channel=IO_CHANNEL - 1, note=99, velocity=0
+        self.send(link, "note_on", {"channel": IO_CHANNEL - 1, "note": 99, "velocity": 1})
+        stray = link.wait_for(lambda m: m.type == "note_on" and m.note == 99, timeout=0.5)
+        self.record(f"No echo on ch {IO_CHANNEL} ({transport})", stray is None)
+        self.send(link, "note_off", {"channel": IO_CHANNEL - 1, "note": 99, "velocity": 0})
+
+    def _burst_test(self, link: MidiLink, transport: str, spacing: float, max_loss: float) -> None:
+        """Send notes back to back and check how many echoes return, and how fast."""
+        if self.burst <= 0:
+            return
+        channel = ECHO_CHANNEL - 1
+        sent: dict[int, float] = {}
+        received: dict[int, float] = {}
+
+        def on_message(msg: mido.Message) -> None:
+            if (
+                msg.type == "note_on"
+                and msg.channel == channel
+                and msg.velocity == BURST_VELOCITY
+                and msg.note in sent
+                and msg.note not in received
+            ):
+                received[msg.note] = time.monotonic()
+
+        link.flush()
+        for note in tc.burst_notes(self.burst):
+            sent[note] = time.monotonic()
+            self.send(link, "note_on", {"channel": channel, "note": note, "velocity": BURST_VELOCITY})
+            link.wait_for(lambda m: False, timeout=spacing, on_message=on_message)
+        if len(received) < len(sent):
+            link.wait_for(lambda m: len(received) == len(sent), timeout=3.0, on_message=on_message)
+
+        for note in sent:
+            self.send(link, "note_off", {"channel": channel, "note": note, "velocity": 0})
+        self.drain(link, 0.5)
+
+        stats = tc.burst_stats(sent, received)
+        detail = f"{stats['received']}/{stats['sent']} echoed"
+        if stats["avg_ms"] is not None:
+            detail += f", round trip avg {stats['avg_ms']:.1f} ms, p95 {stats['p95_ms']:.1f} ms, max {stats['max_ms']:.1f} ms"
+        self.record(f"Burst of {self.burst} notes ({transport})", stats["loss"] <= max_loss, detail)
+
+    # --- API sends -------------------------------------------------------------
+    def _api_sends(self, link: MidiLink, transport: str) -> None:
+        """Have the client call each enomik::Client send function and check what arrives."""
+        for index, case in enumerate(tc.API_CASES):
+            if case.usb_only and transport != "USB":
+                continue
+            self._expect_after(link, f"API {case.name} ({transport})", tc.api_trigger(index), case.matches)
+        self.drain(link, 0.3)
+
+    # --- inputs ----------------------------------------------------------------
+    def _io_tests(self, link: MidiLink, transport: str) -> None:
+        if self.io_mode in ("virtual", "both"):
+            self._virtual_io(link, transport)
+        if self.io_mode in ("physical", "both"):
+            self.send(link, *tc.fake_clear())  # read the real pins again
+            self._digital_cc_test(link, PIN_DIGITAL_A, CC_DIGITAL_A, transport=transport)
+            self._digital_cc_test(link, PIN_DIGITAL_B, CC_DIGITAL_B, transport=transport)
+            self._analog_cc_test(link, PIN_ANALOG_IN, CC_ANALOG_IN, transport=transport)
+
+    def _prime_fake_inputs(self, link: MidiLink) -> None:
+        """Release fake buttons and set fake analog inputs to 0, then drop what they sent."""
+        for pin in (PIN_DIGITAL_A, PIN_DIGITAL_B, PIN_NOTE):
+            self.send(link, *tc.fake_release(pin))
+        for pin in (PIN_ANALOG_IN, PIN_BEND):
+            self.send(link, *tc.fake_analog(pin, 0))
+        self.drain(link, 0.5)
+
+    def _expect_after(self, link: MidiLink, name: str, fake: tuple[str, dict], predicate, timeout: float = 3.0) -> bool:
+        link.flush()
+        self.send(link, *fake)
+        return self.record(name, link.wait_for(predicate, timeout=timeout) is not None)
+
+    def _virtual_io(self, link: MidiLink, transport: str) -> None:
+        self._prime_fake_inputs(link)
+
+        for pin, cc in ((PIN_DIGITAL_A, CC_DIGITAL_A), (PIN_DIGITAL_B, CC_DIGITAL_B)):
+            # INPUT_PULLUP is active low: press sends max (127), release min (0).
+            self._expect_after(
+                link, f"Fake press pin {pin} -> CC {cc} = 127 ({transport})",
+                tc.fake_press(pin), tc.io_cc(cc, 127).matches,
             )
+            self._expect_after(
+                link, f"Fake release pin {pin} -> CC {cc} = 0 ({transport})",
+                tc.fake_release(pin), tc.io_cc(cc, 0).matches,
+            )
+
+        note_on = tc.MidiCase("note", "note_on", {"note": NOTE_PIN_NOTE, "velocity": 127}, channel=IO_CHANNEL)
+        self._expect_after(
+            link, f"Fake press pin {PIN_NOTE} -> note on {NOTE_PIN_NOTE} ({transport})",
+            tc.fake_press(PIN_NOTE), note_on.matches,
         )
+        self._expect_after(
+            link, f"Fake release pin {PIN_NOTE} -> note off {NOTE_PIN_NOTE} ({transport})",
+            tc.fake_release(PIN_NOTE), lambda m: tc.is_note_release(m, NOTE_PIN_NOTE),
+        )
+
+        for level in tc.ANALOG_SWEEP:
+            self._expect_after(
+                link, f"Fake analog pin {PIN_ANALOG_IN} -> CC {CC_ANALOG_IN} = {level} ({transport})",
+                tc.fake_analog(PIN_ANALOG_IN, level), tc.io_cc(CC_ANALOG_IN, level).matches,
+            )
+
+        for level, pitch, tolerance in tc.BEND_SWEEP:
+            self._expect_after(
+                link, f"Fake analog pin {PIN_BEND} -> pitch bend {pitch} ({transport})",
+                tc.fake_analog(PIN_BEND, level), tc.io_bend(pitch, tolerance).matches,
+            )
 
     def _digital_cc_test(
         self, link: MidiLink, pin: int, cc: int, transport: str
@@ -436,7 +573,24 @@ def main() -> int:
     )
     parser.add_argument("--client-port", help="substring to match the client USB MIDI port")
     parser.add_argument("--dongle-port", help="substring to match the dongle USB MIDI port")
+    parser.add_argument(
+        "--io",
+        choices=["virtual", "physical", "both"],
+        default="both",
+        help="input tests: fake inputs in the firmware, real buttons/pot, or both (default)",
+    )
+    parser.add_argument(
+        "--burst",
+        type=int,
+        default=100,
+        metavar="N",
+        help="notes in the burst test, 1..128 (0 = skip, default 100)",
+    )
     args = parser.parse_args()
+
+    if not 0 <= args.burst <= 128:
+        print("--burst must be 0..128", file=sys.stderr)
+        return 1
 
     if args.phase == "2" and not args.dongle_mac:
         print(
@@ -447,16 +601,19 @@ def main() -> int:
 
     print("=== ESP-NOW MIDI Test Wizard ===")
     print("Flash examples/client_test onto a USB-capable board (S2/S3, TinyUSB).")
-    print("Test jig wiring:")
-    print(f"  - Pin {PIN_DIGITAL_A}: button to GND (INPUT_PULLUP) -> CC {CC_DIGITAL_A}")
-    print(f"  - Pin {PIN_DIGITAL_B}: button to GND (INPUT_PULLUP) -> CC {CC_DIGITAL_B}")
-    print(f"  - Pin {PIN_ANALOG_IN}: potentiometer (analog in) -> CC {CC_ANALOG_IN}")
-    print(
-        f"  - Pin {PIN_ANALOG_OUT}: PWM out <- CC {CC_ANALOG_OUT} "
-        f"(loopback from pin {PIN_DIGITAL_B})"
-    )
+    if args.io == "virtual":
+        print("Inputs are faked by the firmware; no wiring needed.")
+    else:
+        print("Test jig wiring:")
+        print(f"  - Pin {PIN_DIGITAL_A}: button to GND (INPUT_PULLUP) -> CC {CC_DIGITAL_A}")
+        print(f"  - Pin {PIN_DIGITAL_B}: button to GND (INPUT_PULLUP) -> CC {CC_DIGITAL_B}")
+        print(f"  - Pin {PIN_ANALOG_IN}: potentiometer (analog in) -> CC {CC_ANALOG_IN}")
+        print(
+            f"  - Pin {PIN_ANALOG_OUT}: PWM out <- CC {CC_ANALOG_OUT} "
+            f"(loopback from pin {PIN_DIGITAL_B})"
+        )
 
-    wiz = Wizard()
+    wiz = Wizard(io_mode=args.io, burst=args.burst)
     wiz.dongle_mac = resolve_dongle_mac(args.dongle_mac)
 
     if args.phase in ("1", "both"):

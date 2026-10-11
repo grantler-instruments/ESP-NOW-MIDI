@@ -115,6 +115,7 @@ MODE_INPUT_TOUCH = 0x05
 MIDI_NOTE_OFF = 0x80
 MIDI_NOTE_ON = 0x90
 MIDI_CONTROL_CHANGE = 0xB0
+MIDI_PITCH_BEND = 0xE0
 
 
 def _header(cmd: int) -> list[int]:
@@ -137,6 +138,11 @@ def _nibbles_to_mac(nibbles: list[int]) -> list[int]:
 
 
 # --- Builders ----------------------------------------------------------------
+def build_raw(cmd: int, payload: list[int] | None = None, major: int = PROTOCOL_MAJOR) -> list[int]:
+    """Any command with any payload, e.g. to test the firmware's error replies."""
+    return [MANUFACTURER_ID, major, PROTOCOL_MINOR, cmd] + list(payload or [])
+
+
 def build_get_mac() -> list[int]:
     return _header(CMD_GET_MAC)
 

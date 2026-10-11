@@ -2,6 +2,9 @@
 
 ## 0.19.0
 
+- IO: `setAnalogReader()` / `setDigitalReader()` replace `analogRead()` / `digitalRead()` for input pins, e.g. to fake sensors in tests.
+- Fixed: Client ignored Song Position received over USB MIDI.
+- Test wizard: checks every channel voice and system message type with edge values, SysEx reads and error replies, a note burst with round-trip times, every `enomik::Client` send function, and all input types, first with fake inputs from `client_test` (channel 15), then with real buttons and a potentiometer.
 - Fixed: IO pitch-bend pins. Analog inputs send the full 14-bit range (were scaled twice and offset), buttons send `min`/`max` scaled to 14 bits, and outputs follow received pitch bend around center. `IO::onPitchBend()` now takes signed pitch bend (`-8192`..`8191`) like the other APIs.
 - Client: name per device so apps can tell clients apart. `setName("...")` in the sketch sets the default (optional, otherwise `"enomik"`); `getName()` returns the effective name. The app can override it with SysEx `SET_NAME` (`0x11`, response `0x51`) and read it with `GET_NAME` (`0x12`, response `0x52`); `GET_CONFIG` includes the name before its done marker. The override is stored in NVS and dropped by `RESET`, an empty `SET_NAME`, or flashing a new firmware. Printable ASCII, at most 16 characters. Examples set their sketch name.
 - Client and Dongle: USB serial number is the device's MAC (e.g. `48F6EE7A1CC8`; was empty on Arduino, `0` on ESP-IDF). macOS no longer reuses a cached MIDI port name from another enomik device with the same USB IDs.

@@ -155,6 +155,24 @@ namespace enomik
             saveNameToPrefs();
         }
 
+        /**
+         * @brief Replaces analogRead() for analog input pins, e.g. to fake a sensor in tests.
+         * @param reader Returns the raw ADC value (`0`..`ADC_MAX_VALUE`) for a pin; `nullptr` restores analogRead().
+         */
+        void setAnalogReader(std::function<int(uint8_t pin)> reader)
+        {
+            _analogReader = reader;
+        }
+
+        /**
+         * @brief Replaces digitalRead() for digital input pins, e.g. to fake buttons in tests.
+         * @param reader Returns `HIGH` or `LOW` for a pin; `nullptr` restores digitalRead().
+         */
+        void setDigitalReader(std::function<int(uint8_t pin)> reader)
+        {
+            _digitalReader = reader;
+        }
+
         /** @brief Registers a callback invoked when the power-save preference changes. */
         void setOnPowerSaveChanged(std::function<void(bool)> callback)
         {
@@ -348,6 +366,8 @@ namespace enomik
         std::function<const uint8_t *(uint8_t index)> _onGetPeerRequest;
         std::function<void()> _onResetRequest;
         std::function<void(bool)> _onPowerSaveChanged;
+        std::function<int(uint8_t)> _analogReader;
+        std::function<int(uint8_t)> _digitalReader;
 
         void setupSysExHandlers()
         {
@@ -621,7 +641,7 @@ namespace enomik
         bool processDigitalInput(const PinConfig &config, PinState &state,
                                  unsigned long now, int &currentValue)
         {
-            const int reading = digitalRead(config.pin);
+            const int reading = _digitalReader ? _digitalReader(config.pin) : digitalRead(config.pin);
 
             // Restart the stability window whenever the raw level flips.
             if (reading != state.lastRawValue)
@@ -682,7 +702,7 @@ namespace enomik
         bool processAnalogInput(const PinConfig &config, PinState &state,
                                 unsigned long now, int &currentValue)
         {
-            int rawValue = analogRead(config.pin);
+            int rawValue = _analogReader ? _analogReader(config.pin) : analogRead(config.pin);
             if (!updateSmoothedAnalog(rawValue, state))
                 return false;
 
