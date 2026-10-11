@@ -530,6 +530,51 @@ TEST_CASE("dongle receive runs concurrently with loop without races", "[espnow][
 
 // --- Auto-discovery --------------------------------------------------------
 
+TEST_CASE("sendSysex sends up to 128 bytes in one zero-padded frame", "[espnow][sysex]")
+{
+    esp_now_midi tx;
+    REQUIRE(tx.begin());
+    REQUIRE(tx.addPeer(kPeerA));
+    stubEspNowSent().clear();
+
+    std::vector<uint8_t> sysex(128, 0x55);
+    sysex.front() = 0xF0;
+    sysex.back() = 0xF7;
+    REQUIRE(tx.sendSysex(sysex.data(), 128) == ESP_OK);
+    REQUIRE(stubEspNowSent().size() == 1);
+    const auto &frame = stubEspNowSent()[0].data;
+    REQUIRE(frame.size() == sizeof(midi_sysex_message));
+    REQUIRE(std::vector<uint8_t>(frame.begin(), frame.begin() + 128) == sysex);
+    REQUIRE(frame.back() == 128);
+    REQUIRE(esp_now_midi::isMidiPacket(frame.data(), static_cast<int>(frame.size())));
+
+    // Unused bytes are zero, not leftover stack memory.
+    stubEspNowSent().clear();
+    const uint8_t shortSysex[] = {0xF0, 0x7D, 0x01, 0xF7};
+    REQUIRE(tx.sendSysex(shortSysex, sizeof(shortSysex)) == ESP_OK);
+    const auto &shortFrame = stubEspNowSent()[0].data;
+    REQUIRE(shortFrame.back() == sizeof(shortSysex));
+    for (size_t i = sizeof(shortSysex); i < 128; i++)
+    {
+        REQUIRE(shortFrame[i] == 0);
+    }
+}
+
+TEST_CASE("sendSysex rejects lengths a frame cannot hold", "[espnow][sysex]")
+{
+    esp_now_midi tx;
+    REQUIRE(tx.begin());
+    REQUIRE(tx.addPeer(kPeerA));
+    stubEspNowSent().clear();
+
+    std::vector<uint8_t> big(300, 0x11);
+    REQUIRE(tx.sendSysex(big.data(), 129) == ESP_ERR_INVALID_ARG);
+    REQUIRE(tx.sendSysex(big.data(), 300) == ESP_ERR_INVALID_ARG); // was cut to 44 bytes by uint8_t
+    REQUIRE(tx.sendSysex(big.data(), 0) == ESP_ERR_INVALID_ARG);
+    REQUIRE(tx.sendSysex(nullptr, 4) == ESP_ERR_INVALID_ARG);
+    REQUIRE(stubEspNowSent().empty());
+}
+
 TEST_CASE("isMidiPacket accepts what the library sends", "[espnow][discovery]")
 {
     REQUIRE(esp_now_midi::isMidiPacket(bytes({0x90, 60, 100}).data(), 3));

@@ -793,16 +793,21 @@ public:
 
   /**
    * @brief Sends a SysEx payload to all peers.
-   * @param data SysEx bytes in the fixed 128-byte message buffer.
-   * @param length Number of payload bytes to copy from @p data.
-   * @return ESP-NOW send result.
+   * @param data SysEx bytes.
+   * @param length Number of bytes in @p data, from 1 to 128.
+   * @return ESP-NOW send result, or `ESP_ERR_INVALID_ARG` when @p length is
+   * 0 or larger than one ESP-NOW SysEx frame holds.
    *
    * Incoming SysEx messages are not dispatched to a callback by this class.
    */
-  inline esp_err_t sendSysex(uint8_t data[128], uint8_t length)
+  inline esp_err_t sendSysex(const uint8_t *data, uint16_t length)
   {
-    midi_sysex_message sysexMessage;
-    sysexMessage.length = length;
+    midi_sysex_message sysexMessage = {};
+    if (!data || length == 0 || length > sizeof(sysexMessage.data))
+    {
+      return ESP_ERR_INVALID_ARG;
+    }
+    sysexMessage.length = static_cast<uint8_t>(length);
     memcpy(sysexMessage.data, data, length);
     return sendToAllPeers((uint8_t *)&sysexMessage, sizeof(sysexMessage));
   }

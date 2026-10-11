@@ -212,3 +212,22 @@ TEST_CASE("client name is part of the GET_CONFIG stream", "[client][name]")
     REQUIRE(name.data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_NAME_RESPONSE));
     REQUIRE(namePayload(name) == "client_test");
 }
+
+TEST_CASE("client sendSysEx sends at most 128 bytes over ESP-NOW", "[client][sysex]")
+{
+    enomik::Client client;
+    REQUIRE(client.begin());
+    REQUIRE(client.espnowMIDI.addPeer(kDongle));
+    stubEspNowSent().clear();
+
+    std::vector<uint8_t> sysex(128, 0x22);
+    sysex.front() = 0xF0;
+    sysex.back() = 0xF7;
+    REQUIRE(client.sendSysEx(sysex.data(), static_cast<uint16_t>(sysex.size())));
+    REQUIRE(stubEspNowSent().size() == 1);
+
+    stubEspNowSent().clear();
+    sysex.insert(sysex.begin() + 1, 0x22); // 129 bytes
+    REQUIRE_FALSE(client.sendSysEx(sysex.data(), static_cast<uint16_t>(sysex.size())));
+    REQUIRE(stubEspNowSent().empty());
+}

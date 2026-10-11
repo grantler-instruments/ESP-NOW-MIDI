@@ -131,7 +131,11 @@ namespace enomik
 
         void onSystemExclusive(uint8_t *data, unsigned int length)
         {
-            io.onSysEx(data, length);
+            // Longer than any enomik config message; also keeps uint16_t from wrapping
+            if (length <= SysExPacket::MAX_DATA_SIZE)
+            {
+                io.onSysEx(data, static_cast<uint16_t>(length));
+            }
             if (_onSysExHandler)
             {
                 _onSysExHandler(data, length);
@@ -742,10 +746,11 @@ namespace enomik
         }
 
         /** @brief Sends a complete SysEx buffer, including `F0` and `F7`.
+         * Over ESP-NOW at most 128 bytes fit; longer SysEx only goes to USB.
          * @return `true` when the ESP-NOW send succeeds. */
         bool sendSysEx(const uint8_t *data, uint16_t length)
         {
-            auto err = espnowMIDI.sendSysex((uint8_t *)data, length);
+            auto err = espnowMIDI.sendSysex(data, length);
             sendSysExToUsb(data, length);
             if (err != ESP_OK)
             {

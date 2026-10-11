@@ -51,8 +51,7 @@ namespace enomik
         // Main entry point for handling incoming SysEx messages
         void handleSysEx(const uint8_t *data, uint16_t length)
         {
-            // Validate minimum length
-            if (length < SysExPacket::MIN_PACKET_SIZE)
+            if (!data || length < SysExPacket::MIN_PACKET_SIZE || length > SysExPacket::MAX_DATA_SIZE)
             {
                 EspNowMidiLog::w("SysEx: Invalid packet length");
                 sendErrorResponse(0, SysExErrorCode::DECODE_FAILED);

@@ -2,6 +2,7 @@
 
 ## 0.19.0
 
+- Fixed: SysEx buffer overflows. `esp_now_midi::sendSysex()` takes `const uint8_t*` and a `uint16_t` length and returns `ESP_ERR_INVALID_ARG` above 128 bytes (lengths above 255 used to wrap), and pads the frame with zeros instead of stack memory. The SysEx config handler rejects packets longer than 256 bytes.
 - IO: `setAnalogReader()` / `setDigitalReader()` replace `analogRead()` / `digitalRead()` for input pins, e.g. to fake sensors in tests.
 - Fixed: Client ignored Song Position received over USB MIDI.
 - Test wizard: checks every channel voice and system message type with edge values, SysEx reads and error replies, a note burst with round-trip times, every `enomik::Client` send function, and all input types, first with fake inputs from `client_test` (channel 15), then with real buttons and a potentiometer.
