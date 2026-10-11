@@ -2,6 +2,7 @@
 
 ## 0.19.0
 
+- Client and Dongle: USB serial number is the device's MAC (e.g. `48F6EE7A1CC8`; was empty on Arduino, `0` on ESP-IDF). macOS no longer reuses a cached MIDI port name from another enomik device with the same USB IDs.
 - Client: MIDI received over ESP-NOW is now handled in `loop()` instead of the ESP-NOW receive callback (WiFi task), so handlers and pin outputs no longer race with `loop()` (e.g. a SysEx pin configuration arriving while notes are received). **Behavior change:** handlers react as often as `loop()` is called; avoid long `delay()`s. `setDispatchInLoop(false)` restores the old immediate dispatch in the WiFi task.
 - Dongle: ESP-NOW receive (mute check, to-host filter, message history) is handled in `loop()`; the receive callback only queues.
 - Core: `setHandleMessage()` delivers every received message with its sender MAC, before the per-type handlers.

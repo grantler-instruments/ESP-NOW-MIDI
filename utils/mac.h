@@ -10,6 +10,7 @@
 #include "../include/esp_now_midi_log.h"
 #include "../include/esp_now_midi_compat.h"
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 
 #define MAC_ADDRESS_SIZE 6
@@ -110,6 +111,22 @@ inline void macPrint(const uint8_t mac[MAC_ADDRESS_SIZE]) {
 // Log MAC address (alias of macPrint)
 inline void macPrintln(const uint8_t mac[MAC_ADDRESS_SIZE]) {
     EspNowMidiLog::mac("", mac);
+}
+
+// USB serial number from the WiFi STA MAC, e.g. "48F6EE7A1CC8". A unique serial lets the
+// computer tell devices apart (macOS otherwise reuses a cached port name for same VID/PID).
+inline const char *usbSerialFromMac() {
+    static char serial[2 * MAC_ADDRESS_SIZE + 1] = "";
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
+    if (serial[0] == '\0') {
+        uint8_t mac[MAC_ADDRESS_SIZE];
+        if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+            snprintf(serial, sizeof(serial), "%02X%02X%02X%02X%02X%02X",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        }
+    }
+#endif
+    return serial;
 }
 
 } // namespace enomik

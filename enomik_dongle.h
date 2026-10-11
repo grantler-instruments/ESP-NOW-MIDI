@@ -208,6 +208,7 @@ namespace enomik
 
             TinyUSBDevice.setManufacturerDescriptor(_manufacturer);
             TinyUSBDevice.setProductDescriptor(_product);
+            TinyUSBDevice.setSerialDescriptor(usbSerialFromMac());
 
             g_dongle_usb_midi.begin();
 

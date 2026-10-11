@@ -80,6 +80,12 @@ inline const char *&productString()
     return s;
 }
 
+inline const char *&serialString()
+{
+    static const char *s = "0";
+    return s;
+}
+
 // --- Handler storage (mirrors the 13 setHandleX() registrations enomik_dongle.h makes) ---
 
 struct HandlerTable
@@ -348,7 +354,7 @@ inline void usbInstall()
         langIdBytes, // 0: language ID
         manufacturerString(),
         productString(),
-        "0", // serial
+        serialString(),
     };
 
     tinyusb_config_t cfg = {};
@@ -386,6 +392,12 @@ public:
     {
         if (s)
             esp_now_midi_usb_detail::productString() = s;
+    }
+
+    void setSerialDescriptor(const char *s)
+    {
+        if (s && s[0])
+            esp_now_midi_usb_detail::serialString() = s;
     }
 
     bool mounted() { return tud_mounted(); }

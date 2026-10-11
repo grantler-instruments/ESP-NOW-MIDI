@@ -466,6 +466,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             TinyUSBDevice.setManufacturerDescriptor("grantler instruments");
             TinyUSBDevice.setProductDescriptor("enomik3000_client");
+            TinyUSBDevice.setSerialDescriptor(usbSerialFromMac());
 
             g_client_usb_midi.begin();
 
