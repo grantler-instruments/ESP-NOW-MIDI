@@ -113,8 +113,6 @@ void setup() {
   // _dongle.setFromHostFilter(nullptr);
 
   _dongle.begin();
-    uint8_t clientMac[6] = { 0x84, 0xF7, 0x03, 0xF0, 0x80, 0x14 };
-  _dongle.addPeer(clientMac);
 }
 
 void loop() {
