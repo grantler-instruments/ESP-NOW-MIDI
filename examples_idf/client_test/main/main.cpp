@@ -18,7 +18,6 @@ static const byte kTestChannel = TEST_ECHO_CHANNEL;
 static const byte kFakeChannel = TEST_FAKE_CHANNEL;
 static const byte kApiTriggerChannel = TEST_API_TRIGGER_CHANNEL;
 static const byte kApiChannel = TEST_API_CHANNEL;
-static unsigned long g_lastHandshakeMs = 0;
 
 // --- Fake inputs (see examples/client_test/client_test.ino) -------------------
 static const int kNotFaked = -1;
@@ -184,22 +183,6 @@ static void onStop() { g_client.sendStop(); }
 static void onSongPosition(uint16_t position) { g_client.sendSongPosition(position); }
 static void onSongSelect(byte song) { g_client.sendSongSelect(song); }
 
-static void maybeHandshake()
-{
-    const unsigned long now = millis();
-    if (now - g_lastHandshakeMs < TEST_HANDSHAKE_INTERVAL_MS)
-    {
-        return;
-    }
-    g_lastHandshakeMs = now;
-
-    // Only meaningful once we know at least one peer (the dongle).
-    if (g_client.getPeerCount() > 0)
-    {
-        g_client.sendControlChange(127, 127, 16);
-    }
-}
-
 extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "starting enomik::Client test DUT");
@@ -207,6 +190,7 @@ extern "C" void app_main(void)
     clearFakes();
 
     g_client.setName("idf_client_test"); // optional
+    g_client.setHeartbeatInterval(TEST_HEARTBEAT_INTERVAL_MS);
     if (!g_client.begin())
     {
         ESP_LOGE(TAG, "enomik::Client::begin() failed");
@@ -235,7 +219,6 @@ extern "C" void app_main(void)
     while (true)
     {
         g_client.loop();
-        maybeHandshake();
         vTaskDelay(1);
     }
 }

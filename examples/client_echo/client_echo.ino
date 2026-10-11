@@ -63,10 +63,6 @@ void setup() {
   _client.setHandleStop(onStop);
   _client.setHandleContinue(onContinue);
   _client.setHandleClock(onClock);
-
-  //register as a client by sending any message
-  //this is needed in this case, as the client will stay unkown to the dongle until the first message is sent.
-  _client.sendControlChange(127, 127, 16);
 }
 
 

@@ -18,10 +18,16 @@ There are three main ways to use the library:
   interface for pin mapping and board setup. Received MIDI is handled in
   `loop()`, so call it often and avoid long `delay()`s
   (`setDispatchInLoop(false)` handles it immediately in the WiFi task instead).
+  The client introduces itself to its peers with a SysEx ANNOUNCE (name, kind,
+  version) after `begin()`, after `addPeer()`, and when it sent nothing for
+  `setHeartbeatInterval()` (default 60 s, `0` = off).
 - `enomik::Dongle`: USB MIDI ↔ ESP-NOW bridge for a host-connected board
   (ESP32-S2/S3). Call `begin()` / `loop()`. Optional status UI via
   `enomik::Dongle::Display` and `setDisplay()`. Optional
   `setToHostFilter` / `setFromHostFilter` to drop or remap bridged messages.
+  From the clients' announces it knows each peer's name and whether it is
+  online: `getPeerName()`, `getPeerAnnounce()`, `getPeerStatus()`
+  (`setPeerTimeout()`, default 180 s).
   USB robustness is built in: messages the computer has not read within
   500 ms are dropped instead of arriving late (`setUsbStaleTimeout()`; Note
   Offs and latest controller values are always delivered), and a USB watchdog

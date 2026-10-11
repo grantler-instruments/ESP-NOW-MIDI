@@ -31,7 +31,6 @@
 #define TEST_API_TRIGGER_CHANNEL 14
 #define TEST_API_CHANNEL 12
 
-// How often (ms) to send a registration handshake to known peers. This lets the
-// dongle auto-discover this client in Phase 2 once the dongle MAC has been
-// stored via the ADD_PEER SysEx in Phase 1.
-#define TEST_HANDSHAKE_INTERVAL_MS 2000
+// Heartbeat (SysEx ANNOUNCE) interval while idle. Shorter than the library
+// default of 60 s so the dongle discovers this client within seconds in Phase 2.
+#define TEST_HEARTBEAT_INTERVAL_MS 2000

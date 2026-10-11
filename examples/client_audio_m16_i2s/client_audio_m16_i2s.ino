@@ -58,8 +58,6 @@ void setup() {
   _client.espnowMIDI.setHandleNoteOn(onNoteOn);
   _client.espnowMIDI.setHandleNoteOff(onNoteOff);
 
-  delay(1000);
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

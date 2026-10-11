@@ -44,8 +44,6 @@ void setup() {
   Serial.println(F("VL53L0X is connected"));
 
   delay(200);
-
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

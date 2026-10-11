@@ -95,5 +95,5 @@ The wizard exits with a non-zero status if any step fails.
 - Button / pot steps advance automatically when MIDI arrives — no Enter. Press **Esc** during those steps to skip the current test.
 - Test cases live in `cases.py` (no MIDI dependency); `test/protocol` unit-tests
   them.
-- A registration handshake (CC 127 on channel 16) is emitted periodically by the
-  firmware; the wizard ignores it.
+- The firmware sends a SysEx ANNOUNCE every 2 s while idle so the dongle
+  discovers it; the dongle keeps announces to itself, so the wizard never sees them.

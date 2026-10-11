@@ -74,8 +74,6 @@ void setup() {
   myMPU6500.setAccDLPF(MPU6500_DLPF_6);
 
   delay(200);
-
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

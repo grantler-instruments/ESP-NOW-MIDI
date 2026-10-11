@@ -6,6 +6,7 @@
 #include "include/MidiMessageHistory.h"
 #include "include/UsbMidiQueue.h"
 #include "include/UsbSysExQueue.h"
+#include "include/PeerDirectory.h"
 #include "include/UsbStallWatchdog.h"
 #include "include/MidiInbox.h"
 #include "include/UsbMidiPacket.h"
@@ -51,6 +52,10 @@ extern "C" bool usbd_edpt_busy(uint8_t rhport, uint8_t ep_addr) __attribute__((w
 extern "C" uint8_t const *tud_descriptor_configuration_cb(uint8_t index) __attribute__((weak));
 #endif
 
+#ifndef ENOMIK_PEER_TIMEOUT_MS
+#define ENOMIK_PEER_TIMEOUT_MS 180000 // 3 missed heartbeats at the Client default of 60 s
+#endif
+
 namespace enomik
 {
     /**
@@ -61,6 +66,14 @@ namespace enomik
      *
      * Requires a native-USB chip (ESP32-S2 / ESP32-S3) with TinyUSB.
      */
+    /** @brief What the dongle knows about a peer's link (see Dongle::getPeerStatus()). */
+    enum class PeerStatus : uint8_t
+    {
+        Unknown, ///< Nothing heard since boot, or silent and never announced (e.g. older firmware).
+        Online,  ///< Heard within the peer timeout.
+        Offline, ///< Announced before, silent longer than the peer timeout.
+    };
+
     class Dongle
     {
     public:
@@ -97,7 +110,7 @@ namespace enomik
                 int historyHead) = 0;
         };
 
-        static Dongle *instancePtr; ///< Active dongle used by static receive callbacks.
+        inline static Dongle *instancePtr = nullptr; ///< Active dongle used by static receive callbacks.
         esp_now_midi espnowMIDI;    ///< Underlying ESP-NOW MIDI transport.
 
         /**
@@ -130,7 +143,7 @@ namespace enomik
             memset(_messageHistory, 0, sizeof(_messageHistory));
             instancePtr = this;
             espnowMIDI.setHandleMessage(onEspNowMessageStatic);
-            espnowMIDI.setHandleSysEx(handleSysExStatic);
+            espnowMIDI.setHandleSysExFrom(handleSysExStatic);
         }
 
         /**
@@ -509,6 +522,72 @@ namespace enomik
             {
                 bridgeToHost(msg, from);
             }
+            if (_announceChanged)
+            {
+                _announceChanged = false;
+                _displayDirty = true;
+            }
+        }
+
+        /**
+         * @brief What a peer last announced about itself (kind, version, name).
+         * @return `false` when no announce arrived from @p mac since boot.
+         */
+        bool getPeerAnnounce(const uint8_t mac[6], Announce &out) const
+        {
+            return _directory.get(mac, out);
+        }
+
+        /**
+         * @brief Name a peer announced, e.g. "client_test".
+         * @return `false` when no announce arrived from @p mac since boot.
+         */
+        bool getPeerName(const uint8_t mac[6], char out[MAX_NAME_LENGTH + 1]) const
+        {
+            Announce info;
+            if (!out || !_directory.get(mac, info))
+            {
+                return false;
+            }
+            memcpy(out, info.name, sizeof(info.name));
+            return true;
+        }
+
+        /** @brief Whether a peer is online, from any packet or announce it sent. */
+        PeerStatus getPeerStatus(const uint8_t mac[6]) const
+        {
+            uint32_t lastSeen = 0;
+            if (!espnowMIDI.hasPeer(mac) || !espnowMIDI.getPeerLastSeen(mac, lastSeen))
+            {
+                return PeerStatus::Unknown;
+            }
+            if (static_cast<uint32_t>(millis()) - lastSeen < _peerTimeoutMs)
+            {
+                return PeerStatus::Online;
+            }
+            Announce info;
+            return _directory.get(mac, info) ? PeerStatus::Offline : PeerStatus::Unknown;
+        }
+
+        /**
+         * @brief How long a peer may stay silent before it counts as offline.
+         * @param ms Milliseconds; default ENOMIK_PEER_TIMEOUT_MS (180 s, three
+         * missed heartbeats at the Client default).
+         */
+        void setPeerTimeout(uint32_t ms)
+        {
+            _peerTimeoutMs = ms;
+        }
+
+        uint32_t getPeerTimeout() const
+        {
+            return _peerTimeoutMs;
+        }
+
+        /** @return true while SysEx from peers waits to be sent to the USB host. */
+        bool usbSysExPending()
+        {
+            return _usbSysExQueue.hasPending();
         }
 
         /** @return ESP-NOW messages dropped because loop() fell behind (since boot). */
@@ -598,6 +677,7 @@ namespace enomik
                 return false;
             }
             clearMuted(mac);
+            _directory.remove(mac);
             const bool live = espnowMIDI.removePeer(mac);
             bool stored = false;
             if (peerStorage.exists(mac))
@@ -884,6 +964,9 @@ namespace enomik
         uint32_t _lastDisplayUpdate;
         uint32_t _displayIntervalMs;
         bool _displayDirty;
+        PeerDirectory _directory;
+        volatile bool _announceChanged = false; // set in the receive callback, read in loop()
+        uint32_t _peerTimeoutMs = ENOMIK_PEER_TIMEOUT_MS;
         int _lastDrawnPeerCount;
         char _lastDrawnUsbStatus;
         unsigned long _lastDrawnSecond;
@@ -1324,12 +1407,16 @@ namespace enomik
             }
 
             const uint8_t *data = nullptr;
+            const uint8_t *from = nullptr;
             uint16_t length = 0;
-            while (_usbSysExQueue.peek(data, length))
+            while (_usbSysExQueue.peek(data, length, from))
             {
-                // Whole USB-MIDI packets, like the rest of the dongle's USB output
-                writeUsbMidiSysEx(data, length, [](const uint8_t packet[4])
-                                  { return g_dongle_usb_midi.writePacket(packet); });
+                if (!from || !isMuted(from))
+                {
+                    // Whole USB-MIDI packets, like the rest of the dongle's USB output
+                    writeUsbMidiSysEx(data, length, [](const uint8_t packet[4])
+                                      { return g_dongle_usb_midi.writePacket(packet); });
+                }
                 _usbSysExQueue.consumeHead();
             }
         }
@@ -1404,11 +1491,23 @@ namespace enomik
             }
         }
 
-        static void handleSysExStatic(uint8_t *data, uint16_t length)
+        // Runs in the ESP-NOW receive callback (WiFi task).
+        static void handleSysExStatic(const uint8_t *mac, uint8_t *data, uint16_t length)
         {
             if (!instancePtr || data == nullptr || length == 0)
                 return;
-            instancePtr->_usbSysExQueue.enqueue(data, length);
+            if (SysExDecoder::isAnnounce(data, length))
+            {
+                // Announces are for the dongle, never for the host
+                Announce info;
+                if (SysExDecoder::decodeAnnounceMessage(data, length, info) &&
+                    instancePtr->_directory.set(mac, info))
+                {
+                    instancePtr->_announceChanged = true;
+                }
+                return;
+            }
+            instancePtr->_usbSysExQueue.enqueue(data, length, mac);
         }
 
         // --- USB host → ESP-NOW ---
@@ -1586,5 +1685,4 @@ namespace enomik
         }
     };
 
-    Dongle *Dongle::instancePtr = nullptr;
 } // namespace enomik

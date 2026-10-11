@@ -44,9 +44,12 @@ When building messages for Web MIDI / `mido`, the inner data is everything **bet
 
 | Kind | Rule | Range (current) |
 |---|---|---|
-| Request | assigned sequentially | `0x01` … `0x10` |
-| Success response | **request + 64** (`0x40`) | `0x41` … `0x50` |
+| Request | assigned sequentially | `0x01` … `0x12` |
+| Success response | **request + 64** (`0x40`) | `0x41` … `0x52` |
+| Notification | device → device, never answered | `0x15` (ANNOUNCE) |
 | Error response | fixed **`0x7F`** | always `0x7F` |
+
+`0x13` and `0x14` are reserved.
 
 **Reserved:** request `0x3F` must not be used — its success pair would be `0x7F`, which is reserved for errors. Future requests should stay ≤ `0x3E` if the `+ 64` rule is kept.
 
@@ -277,6 +280,22 @@ Empty payload. Clears pin configs, stored flags and the name override, and invok
 
 Payload: major (1 byte), minor (1 byte), patch (1 byte, v0.19+) — protocol/library version. Older firmware sends only major and minor; hosts should read the first two bytes and treat patch as optional.
 
+## ANNOUNCE (`0x15`)
+
+A device tells its ESP-NOW peers who it is. It is a notification: receivers never answer, and the dongle never forwards it to the USB host. A Client sends it after `begin()`, after a peer is added, and as heartbeat when it sent nothing else over ESP-NOW for `setHeartbeatInterval()` (default 60 s).
+
+| Byte | Value |
+|---|---|
+| 0 | kind: `0x00` client, `0x01` dongle |
+| 1–3 | library version: major, minor, patch |
+| 4… | name, 0–16 printable ASCII bytes |
+
+```
+F0 7D 00 13 15 00 00 13 00 63 6C 69 65 6E 74 5F 74 65 73 74 F7   ← client "client_test", v0.19.0
+```
+
+The dongle keeps the last announce per peer (`Dongle::getPeerAnnounce()`, `getPeerName()`). Any valid packet from a peer counts as a sign of life: `Dongle::getPeerStatus()` is Online when the peer was heard within the peer timeout (default 180 s), Offline when it announced before but has been silent longer, and Unknown otherwise (including older clients that never announce).
+
 ## Errors
 
 Errors use a **single global command** `0x7F`, not request + 128 (invalid in 7-bit MIDI).
@@ -401,6 +420,7 @@ When adding a new command:
 
 | Change | Notes |
 |---|---|
+| v0.19 announce | `ANNOUNCE` (`0x15`) replaces the CC 127 = 127 on channel 16 handshake; sent at boot, after pairing and as idle heartbeat |
 | v0.19 client name | `SET_NAME`/`GET_NAME` (`0x11`/`0x12`); `GET_CONFIG` streams `0x52` before empty `0x4C`; GET_VERSION adds patch byte |
 | v0.14 MIDI loopback + power save | `SET_MIDI_LOOPBACK`/`GET_MIDI_LOOPBACK` (`0x0D`/`0x0E`); `SET_POWER_SAVE`/`GET_POWER_SAVE` (`0x0F`/`0x10`); `GET_CONFIG` streams `0x4E` then `0x50` before empty `0x4C` |
 | v0.13 ADD_PEER errors | Failures use `0x7F` with PEER_TABLE_FULL / PEER_ALREADY_EXISTS / OPERATION_FAILED |

@@ -32,6 +32,11 @@ REQUEST_COMMANDS = (
     "GET_NAME",
 )
 
+# Notifications: no response command
+NOTIFICATION_COMMANDS = ("ANNOUNCE",)
+
+DEVICE_KINDS = ("CLIENT", "DONGLE")
+
 ERROR_CODES = (
     "BAD_VERSION",
     "UNKNOWN_COMMAND",
@@ -137,6 +142,20 @@ def collect_mismatches() -> list[str]:
             mismatches.append(
                 f"{resp_name}: cpp=0x{cpp_resp:02X} != request + 0x40 (0x{expected:02X})"
             )
+
+    for name in NOTIFICATION_COMMANDS:
+        py_val = getattr(sx, f"CMD_{name}", None)
+        cpp_val = commands.get(name)
+        if py_val is None or cpp_val is None or py_val != cpp_val:
+            mismatches.append(f"{name}: python={py_val} cpp={cpp_val}")
+        if f"{name}_RESPONSE" in commands:
+            mismatches.append(f"{name} is a notification but C++ defines {name}_RESPONSE")
+
+    kinds = parse_cpp_enum(cpp_text, "DeviceKind")
+    for name in DEVICE_KINDS:
+        py_val = getattr(sx, f"DEVICE_KIND_{name}", None)
+        if py_val is None or py_val != kinds.get(name):
+            mismatches.append(f"DeviceKind {name}: python={py_val} cpp={kinds.get(name)}")
 
     cpp_error_response = commands.get("ERROR_RESPONSE")
     if cpp_error_response != sx.RESP_ERROR:

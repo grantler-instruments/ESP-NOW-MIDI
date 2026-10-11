@@ -22,7 +22,7 @@ via the dongle in Phase 2). There is no parallel serial protocol.
   the board call `enomik::Client` send function number *p* (`runApiCase()`);
   channel messages go out on **channel 12**. Keep `runApiCase()` in sync with
   `API_CASES` in `scripts/wizard/cases.py` (a unit test checks this).
-- Periodically sends a registration handshake (CC 127 on channel 16) so the
+- Sends the library's SysEx ANNOUNCE every 2 s while idle (`setHeartbeatInterval`) so the
   dongle can auto-discover this client once its MAC has been stored.
 - I/O pins are configured at runtime over SysEx by the wizard:
   - **16** / **17** INPUT_PULLUP → CC 16 / 17

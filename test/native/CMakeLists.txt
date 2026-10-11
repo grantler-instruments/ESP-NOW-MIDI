@@ -31,6 +31,7 @@ add_executable(native_tests
   test_io_name.cpp
   test_client_peers.cpp
   test_io_readers.cpp
+  test_announce.cpp
   test_usb_midi_packet.cpp
 )
 target_include_directories(native_tests PRIVATE

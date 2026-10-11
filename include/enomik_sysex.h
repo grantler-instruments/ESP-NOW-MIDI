@@ -302,6 +302,9 @@ namespace enomik
                 handleSetName(payload, payloadLen);
                 break;
 
+            case SysExCommand::ANNOUNCE:
+                break; // device-to-device notification, never answered
+
             case SysExCommand::GET_NAME:
                 handleGetName();
                 break;

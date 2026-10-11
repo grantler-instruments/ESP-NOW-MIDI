@@ -151,10 +151,6 @@ void setup() {
   // 250k baud, 8N2 (DMX512). RX unused (-1); TX on dmxTxPin (any GPIO works on ESP32-S2).
   dmxSerial.begin(250000, SERIAL_8N2, -1, dmxTxPin);
   dmx.begin(dmxSerial, dePin, numChannels);
-
-  // register as a client by sending any message
-  // this is needed in this case, as the client will stay unkown to the dongle until the first message is sent.
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

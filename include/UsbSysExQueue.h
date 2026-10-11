@@ -23,7 +23,8 @@ namespace enomik
 class UsbSysExQueue
 {
 public:
-    bool enqueue(const uint8_t *data, uint16_t length)
+    /** @param from Sender MAC to keep with the message, or nullptr. */
+    bool enqueue(const uint8_t *data, uint16_t length, const uint8_t *from = nullptr)
     {
         if (data == nullptr || length == 0 || length > esp_now_midi_sysex::MAX_MESSAGE)
             return false;
@@ -38,6 +39,9 @@ public:
         Slot &slot = _slots[_head];
         memcpy(slot.data, data, length);
         slot.length = length;
+        slot.hasFrom = from != nullptr;
+        if (from)
+            memcpy(slot.from, from, 6);
         _head = next;
         portEXIT_CRITICAL(&_mux);
         return true;
@@ -53,6 +57,13 @@ public:
 
     bool peek(const uint8_t *&data, uint16_t &length)
     {
+        const uint8_t *from = nullptr;
+        return peek(data, length, from);
+    }
+
+    /** @param from Set to the sender MAC, or nullptr when none was queued. */
+    bool peek(const uint8_t *&data, uint16_t &length, const uint8_t *&from)
+    {
         portENTER_CRITICAL(&_mux);
         if (_tail == _head)
         {
@@ -61,6 +72,7 @@ public:
         }
         data = _slots[_tail].data;
         length = _slots[_tail].length;
+        from = _slots[_tail].hasFrom ? _slots[_tail].from : nullptr;
         portEXIT_CRITICAL(&_mux);
         return true;
     }
@@ -86,6 +98,8 @@ private:
     {
         uint8_t data[esp_now_midi_sysex::MAX_MESSAGE];
         uint16_t length;
+        uint8_t from[6];
+        bool hasFrom;
     };
 
     portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;

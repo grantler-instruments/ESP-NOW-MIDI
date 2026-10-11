@@ -41,6 +41,8 @@ CMD_SET_POWER_SAVE = 0x0F
 CMD_GET_POWER_SAVE = 0x10
 CMD_SET_NAME = 0x11
 CMD_GET_NAME = 0x12
+# Device -> device notification (hello and heartbeat), never answered
+CMD_ANNOUNCE = 0x15
 
 # Response codes (request + 64)
 RESP_SET_PIN_CONFIG = CMD_SET_PIN_CONFIG + 0x40
@@ -102,6 +104,11 @@ PEER_ENTRY_PAYLOAD_SIZE = 13
 
 # Client name: printable ASCII (0x20-0x7E), at most 16 characters
 MAX_NAME_LENGTH = 16
+
+# Device kind in ANNOUNCE (enomik::DeviceKind)
+DEVICE_KIND_CLIENT = 0x00
+DEVICE_KIND_DONGLE = 0x01
+DEVICE_KIND_NAMES = {DEVICE_KIND_CLIENT: "client", DEVICE_KIND_DONGLE: "dongle"}
 
 # Pin modes (enomik_io.h)
 MODE_INPUT = 0x00
@@ -189,6 +196,12 @@ def build_set_name(name: str) -> list[int]:
     if len(data) > MAX_NAME_LENGTH or any(b < 0x20 or b > 0x7E for b in data):
         raise ValueError(f"name must be printable ASCII, at most {MAX_NAME_LENGTH} characters")
     return _header(CMD_SET_NAME) + data
+
+
+def build_announce(kind: int, version: tuple[int, int, int], name: str) -> list[int]:
+    if len(name) > MAX_NAME_LENGTH or not all(0x20 <= ord(c) <= 0x7E for c in name):
+        raise ValueError("name must be at most 16 printable ASCII characters")
+    return _header(CMD_ANNOUNCE) + [kind, *version] + list(name.encode("ascii"))
 
 
 def build_get_name() -> list[int]:
@@ -293,6 +306,14 @@ def parse(data: list[int]) -> dict | None:
 
     if cmd in (RESP_SET_POWER_SAVE, RESP_GET_POWER_SAVE) and len(payload) >= 1:
         return {"cmd": "power_save", "enabled": bool(payload[0])}
+
+    if cmd == CMD_ANNOUNCE and len(payload) >= 4:
+        return {
+            "cmd": "announce",
+            "kind": DEVICE_KIND_NAMES.get(payload[0], f"unknown_0x{payload[0]:02X}"),
+            "version": tuple(payload[1:4]),
+            "name": bytes(payload[4:]).decode("ascii", errors="replace"),
+        }
 
     if cmd in (RESP_SET_NAME, RESP_GET_NAME):
         return {"cmd": "name", "name": bytes(payload).decode("ascii", errors="replace")}

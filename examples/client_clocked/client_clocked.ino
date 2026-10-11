@@ -56,10 +56,6 @@ void setup() {
   _client.setHandleNoteOn(onNoteOn);
   _client.setHandleSongPosition(onSongPosition);
   _client.setHandleSongSelect(onSongSelect);
-
-  //send any midi message to register at the dongle
-  delay(1000);
-  bool success = _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

@@ -18,8 +18,8 @@
 //       program change  all pins read the hardware again
 //   * program change p on TEST_API_TRIGGER_CHANNEL makes this board send API
 //     case p with the enomik::Client send functions (see runApiCase())
-//   * a registration handshake (CC 127 on ch 16) is sent periodically so the
-//     dongle can auto-discover this client once its MAC is known
+//   * the library's ANNOUNCE heartbeat runs every TEST_HEARTBEAT_INTERVAL_MS
+//     so the dongle discovers this client quickly once its MAC is stored
 
 #include "config.h"
 #include "enomik_client.h"
@@ -30,7 +30,6 @@ static const byte kTestChannel = TEST_ECHO_CHANNEL;
 static const byte kFakeChannel = TEST_FAKE_CHANNEL;
 static const byte kApiTriggerChannel = TEST_API_TRIGGER_CHANNEL;
 static const byte kApiChannel = TEST_API_CHANNEL;
-static unsigned long _lastHandshakeMs = 0;
 
 // --- Fake inputs ---------------------------------------------------------------
 static const int kNotFaked = -1;
@@ -134,23 +133,11 @@ void onStop() { _client.sendStop(); }
 void onSongPosition(uint16_t position) { _client.sendSongPosition(position); }
 void onSongSelect(byte song) { _client.sendSongSelect(song); }
 
-static void maybeHandshake() {
-  unsigned long now = millis();
-  if (now - _lastHandshakeMs < TEST_HANDSHAKE_INTERVAL_MS) return;
-  _lastHandshakeMs = now;
-
-  // Only meaningful once we know at least one peer (the dongle). Sending a
-  // message lets the dongle auto-discover this client so it can route host
-  // traffic back to us in Phase 2.
-  if (_client.getPeerCount() > 0) {
-    _client.sendControlChange(127, 127, 16);
-  }
-}
-
 void setup() {
   clearFakes();
 
   _client.setName("client_test"); // optional
+  _client.setHeartbeatInterval(TEST_HEARTBEAT_INTERVAL_MS);
   _client.begin();
   _client.io.setAnalogReader(readAnalog);
   _client.io.setDigitalReader(readDigital);
@@ -172,5 +159,4 @@ void setup() {
 
 void loop() {
   _client.loop();
-  maybeHandshake();
 }

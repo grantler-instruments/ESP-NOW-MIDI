@@ -13,6 +13,10 @@
 #include "include/UsbMidiPacket.h"
 #include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
+
+#ifndef ENOMIK_HEARTBEAT_INTERVAL_MS
+#define ENOMIK_HEARTBEAT_INTERVAL_MS 60000
+#endif
 #include "utils/mac.h"
 
 #ifdef HAS_USB_MIDI
@@ -75,6 +79,31 @@ namespace enomik
         MidiInbox _inbox;
         UsbSysExQueue _sysexInbox; // complete SysEx received over ESP-NOW, for loop()
         bool _dispatchInLoop = true;
+        uint32_t _heartbeatIntervalMs = ENOMIK_HEARTBEAT_INTERVAL_MS;
+        uint32_t _lastHeartbeatTryMs = 0;
+        bool _heartbeatTried = false;
+
+        void maybeSendHeartbeat()
+        {
+            if (_heartbeatIntervalMs == 0 || !isInitialized)
+            {
+                return;
+            }
+            const uint32_t now = static_cast<uint32_t>(millis());
+            uint32_t lastSend = 0;
+            if (espnowMIDI.getLastSendTime(lastSend) && now - lastSend < _heartbeatIntervalMs)
+            {
+                return;
+            }
+            // A failing send does not move lastSend: retry once per interval, not every loop
+            if (_heartbeatTried && now - _lastHeartbeatTryMs < _heartbeatIntervalMs)
+            {
+                return;
+            }
+            _lastHeartbeatTryMs = now;
+            _heartbeatTried = true;
+            sendAnnounce();
+        }
 
         struct LoopbackScope
         {
@@ -330,7 +359,8 @@ namespace enomik
         /** ESP-NOW SysEx → user callback only (never Enomik config IO). */
         static void handleEspNowSysExStatic(uint8_t *data, uint16_t length)
         {
-            if (!Client::instancePtr)
+            // Announces from other devices are for dongles, not the sketch
+            if (!Client::instancePtr || SysExDecoder::isAnnounce(data, length))
                 return;
             if (Client::instancePtr->_dispatchInLoop)
                 Client::instancePtr->_sysexInbox.enqueue(data, length);
@@ -466,6 +496,7 @@ namespace enomik
                                }
 
                                EspNowMidiLog::i("Peer added and stored successfully");
+                               sendAnnounce();
                                return AddPeerResult::Success;
                            });
 
@@ -571,7 +602,7 @@ namespace enomik
                           restoredCount, skippedCount);
 
             isInitialized = true;
-            sendHandShake();
+            sendAnnounce();
             return true;
         }
 
@@ -587,6 +618,7 @@ namespace enomik
 #endif
             processReceived();
             io.loop();
+            maybeSendHeartbeat();
         }
 
         /**
@@ -855,35 +887,46 @@ namespace enomik
             _onSysExHandler = handler;
         }
 
+        /**
+         * @brief Tells all peers who this client is (enomik SysEx ANNOUNCE).
+         *
+         * Carries kind, library version and getName(). Lets a dongle discover
+         * this client without anything reaching the DAW. Sent by begin(),
+         * after a peer is added, and as heartbeat (setHeartbeatInterval()).
+         * @return `true` when ESP-NOW accepted the send.
+         */
+        bool sendAnnounce()
+        {
+            if (!isInitialized || espnowMIDI.getPeersCount() == 0)
+            {
+                return false;
+            }
+            const SysExPacket pkt = SysExEncoder::encodeAnnounce(DeviceKind::CLIENT, getName());
+            return espnowMIDI.sendSysex(pkt.data, pkt.length) == ESP_OK;
+        }
+
+        /** @deprecated Use sendAnnounce(). */
         void sendHandShake()
         {
-            if (!isInitialized)
-            {
-                EspNowMidiLog::e("Client not initialized. Cannot send handshake.");
-                return;
-            }
-            // TODO: refactor to use sysex instead of control change
-            // also add a heartbeat mechanism
+            sendAnnounce();
+        }
 
-            byte channel = 16;
-            byte control = 127;
-            byte value = 127;
+        /**
+         * @brief How long the client may stay silent before it sends an ANNOUNCE.
+         *
+         * Any MIDI sent over ESP-NOW resets the timer, so a busy client sends no
+         * extra packets. Default ENOMIK_HEARTBEAT_INTERVAL_MS (60 s).
+         * @param ms Interval in milliseconds; `0` turns the heartbeat off.
+         */
+        void setHeartbeatInterval(uint32_t ms)
+        {
+            _heartbeatIntervalMs = ms;
+        }
 
-            for (int i = 0; i < peerStorage.count(); i++)
-            {
-                const uint8_t *mac = peerStorage.get(i);
-                if (mac)
-                {
-                    bool ok = espnowMIDI.sendControlChange(control, value, channel);
-                    if (ok)
-                    {
-                    }
-                    else
-                    {
-                        EspNowMidiLog::e("Failed to send handshake to: %s", macToString(mac).c_str());
-                    }
-                }
-            }
+        /** @return Heartbeat interval in milliseconds; `0` = off. */
+        uint32_t getHeartbeatInterval() const
+        {
+            return _heartbeatIntervalMs;
         }
 
         // Simplified peer management - delegates to PeerStorage
@@ -910,6 +953,7 @@ namespace enomik
                 return false;
             }
 
+            sendAnnounce();
             return true;
         }
 

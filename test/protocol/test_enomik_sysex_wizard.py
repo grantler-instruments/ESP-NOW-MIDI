@@ -228,3 +228,32 @@ class TestWizardParserMacAndVersion(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWizardAnnounce(unittest.TestCase):
+    def test_build_announce(self):
+        data = sx.build_announce(sx.DEVICE_KIND_CLIENT, (0, 19, 0), "client_test")
+        self.assertEqual(data[:4], [sx.MANUFACTURER_ID, sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR, sx.CMD_ANNOUNCE])
+        self.assertEqual(data[4:8], [sx.DEVICE_KIND_CLIENT, 0, 19, 0])
+        self.assertEqual(bytes(data[8:]).decode("ascii"), "client_test")
+        self.assertTrue(all(0 <= b <= 127 for b in data))
+
+    def test_parse_announce(self):
+        data = sx.build_announce(sx.DEVICE_KIND_DONGLE, (0, 19, 2), "dongle")
+        self.assertEqual(
+            sx.parse(data),
+            {"cmd": "announce", "kind": "dongle", "version": (0, 19, 2), "name": "dongle"},
+        )
+
+    def test_parse_announce_without_name(self):
+        parsed = sx.parse(sx.build_announce(sx.DEVICE_KIND_CLIENT, (0, 19, 0), ""))
+        self.assertEqual((parsed["cmd"], parsed["name"]), ("announce", ""))
+
+    def test_announce_rejects_bad_names(self):
+        with self.assertRaises(ValueError):
+            sx.build_announce(sx.DEVICE_KIND_CLIENT, (0, 19, 0), "x" * 17)
+        with self.assertRaises(ValueError):
+            sx.build_announce(sx.DEVICE_KIND_CLIENT, (0, 19, 0), "tab\there")
+
+    def test_announce_is_not_a_request_with_response(self):
+        self.assertFalse(hasattr(sx, "RESP_ANNOUNCE"))

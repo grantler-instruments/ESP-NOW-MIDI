@@ -2,7 +2,7 @@
 
 ESP-IDF port of [`examples/client_test`](../../examples/client_test): deterministic
 device-under-test for [`scripts/wizard`](../../scripts/wizard). Same MIDI-only
-contract (echo on channel 10, periodic handshake, SysEx-configured I/O pins).
+contract (echo on channel 10, periodic SysEx announce, SysEx-configured I/O pins).
 
 ## Build
 
@@ -22,6 +22,6 @@ Same as the Arduino sketch — see [`examples/client_test/README.md`](../../exam
 
 ## Layout
 
-- `main/` — `app_main` with echo handlers + handshake loop
+- `main/` — `app_main` with echo handlers and the main loop
 - `main/config.h` — `TEST_*` constants (same as Arduino)
 - `components/esp_now_midi_client_test/` — CMake wrapper for `enomik_client.h` + `include/`

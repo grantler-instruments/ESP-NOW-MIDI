@@ -27,6 +27,8 @@ struct PeerInfo
 {
   uint8_t mac[6];       ///< Peer Wi-Fi MAC address.
   uint64_t packed_mac; ///< MAC address packed into the lower 48 bits.
+  uint32_t lastSeenMs; ///< millis() of the last valid packet from this peer.
+  bool seen;           ///< A valid packet arrived since the peer was added.
 
   /**
    * @brief Packs a six-byte MAC address for fast comparisons.
@@ -260,6 +262,8 @@ public:
       {
         memcpy(_peers[count].mac, macAddress, 6);
         _peers[count].packed_mac = PeerInfo::packMac(macAddress);
+        _peers[count].lastSeenMs = 0;
+        _peers[count].seen = false;
         count = ++_peersCount;
       }
       else
@@ -848,9 +852,13 @@ public:
     {
       return;
     }
-    if (_autoPeerDiscovery && isMidiPacket(incomingData, len) && !hasPeer(mac))
+    if (isMidiPacket(incomingData, len))
     {
-      addPeer(mac);
+      if (_autoPeerDiscovery && !hasPeer(mac))
+      {
+        addPeer(mac);
+      }
+      markSeen(mac);
     }
     // SysEx transport frames are always longer than short MIDI (1–3 bytes).
     if (len > static_cast<int>(sizeof(midi_message_packet)))
@@ -862,6 +870,8 @@ public:
       {
         if (onSysExHandler)
           onSysExHandler(const_cast<uint8_t *>(complete), completeLen);
+        if (onSysExFromHandler)
+          onSysExFromHandler(mac, const_cast<uint8_t *>(complete), completeLen);
       }
       return;
     }
@@ -1108,6 +1118,53 @@ public:
   }
 
   /**
+   * @brief Registers a SysEx receive handler that also gets the sender MAC.
+   *
+   * Same as setHandleSysEx(), and called after it when both are set. Runs in
+   * the ESP-NOW receive callback (WiFi task).
+   *
+   * @param callback Handler, or `nullptr` to remove it.
+   */
+  void setHandleSysExFrom(void (*callback)(const uint8_t *mac, uint8_t *data, uint16_t length))
+  {
+    onSysExFromHandler = callback;
+  }
+
+  /**
+   * @brief When a peer last sent a valid packet.
+   * @param mac Peer MAC address.
+   * @param ms Set to the millis() of the last packet.
+   * @return `false` when @p mac is not a peer or nothing arrived from it yet.
+   */
+  bool getPeerLastSeen(const uint8_t mac[6], uint32_t &ms) const
+  {
+    if (!mac)
+    {
+      return false;
+    }
+    EspNowMidiLock lock(_peersMux);
+    const int index = indexOfLocked(PeerInfo::packMac(mac));
+    if (index < 0 || !_peers[index].seen)
+    {
+      return false;
+    }
+    ms = _peers[index].lastSeenMs;
+    return true;
+  }
+
+  /**
+   * @brief When ESP-NOW last accepted a packet from this device for sending.
+   * @param ms Set to the millis() of the last accepted send.
+   * @return `false` when nothing was sent yet.
+   */
+  bool getLastSendTime(uint32_t &ms) const
+  {
+    EspNowMidiLock lock(_statsMux);
+    ms = _lastSendMs;
+    return _hasSent;
+  }
+
+  /**
    * @brief Registers one handler for every received MIDI message.
    *
    * Receives the decoded message and the sender MAC, before the per-type
@@ -1215,6 +1272,8 @@ private:
     if (err == ESP_OK)
     {
       ++_stats.sent;
+      _lastSendMs = static_cast<uint32_t>(millis());
+      _hasSent = true;
     }
     else
     {
@@ -1227,6 +1286,22 @@ private:
   PeerInfo _peers[MAX_PEERS];     // Guarded by _peersMux
   int _peersCount = 0;            // Guarded by _peersMux
   mutable portMUX_TYPE _peersMux = portMUX_INITIALIZER_UNLOCKED;
+
+  void markSeen(const uint8_t mac[6])
+  {
+    if (!mac)
+    {
+      return;
+    }
+    const uint32_t now = static_cast<uint32_t>(millis());
+    EspNowMidiLock lock(_peersMux);
+    const int index = indexOfLocked(PeerInfo::packMac(mac));
+    if (index >= 0)
+    {
+      _peers[index].lastSeenMs = now;
+      _peers[index].seen = true;
+    }
+  }
 
   int indexOfLocked(uint64_t packed) const
   {
@@ -1274,6 +1349,9 @@ private:
   void (*onActiveSensingHandler)() = nullptr;
   void (*onSystemResetHandler)() = nullptr;
   void (*onSysExHandler)(uint8_t *data, uint16_t length) = nullptr;
+  void (*onSysExFromHandler)(const uint8_t *mac, uint8_t *data, uint16_t length) = nullptr;
+  uint32_t _lastSendMs = 0;
+  bool _hasSent = false;
   esp_now_midi_sysex::Reassembler _sysexReassembler;
   void (*onMessageHandler)(const uint8_t *mac, const midi_message &message) = nullptr;
 };

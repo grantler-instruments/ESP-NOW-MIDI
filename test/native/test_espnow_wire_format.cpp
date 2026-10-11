@@ -1,9 +1,6 @@
 // ESP-NOW wire format: what the dongle sends and what the core receive path
 // accepts. Uses the real enomik::Dongle and esp_now_midi with the host stubs in
 // test/native/stubs (esp_now_send() records every packet).
-//
-// esp_now_midi.h defines a static member in the header, so it may only be
-// included by this one test translation unit.
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -33,6 +33,8 @@ namespace enomik
         GET_POWER_SAVE = 0x10,
         SET_NAME = 0x11,
         GET_NAME = 0x12,
+        // 0x13, 0x14 reserved
+        ANNOUNCE = 0x15, // device -> device notification, never answered
 
         // Response codes: always request command + 64 (0x40)
         SET_PIN_CONFIG_RESPONSE = 0x41,
@@ -99,6 +101,12 @@ namespace enomik
 
     static constexpr size_t PEER_ENTRY_PAYLOAD_SIZE = 13; // index + 12 MAC nibbles
 
+    enum class DeviceKind : uint8_t
+    {
+        CLIENT = 0x00,
+        DONGLE = 0x01,
+    };
+
     // Client name: printable ASCII (0x20-0x7E), 7-bit SysEx safe without nibble encoding
     static constexpr size_t MAX_NAME_LENGTH = 16;
 
@@ -106,6 +114,18 @@ namespace enomik
     {
         return c >= 0x20 && c <= 0x7E;
     }
+
+    /** Who a device is: sent in ANNOUNCE at boot, after pairing and as heartbeat. */
+    struct Announce
+    {
+        DeviceKind kind = DeviceKind::CLIENT;
+        uint8_t major = 0;
+        uint8_t minor = 0;
+        uint8_t patch = 0;
+        char name[MAX_NAME_LENGTH + 1] = {};
+    };
+
+    static constexpr size_t ANNOUNCE_HEADER_SIZE = 4; // kind + major + minor + patch
 
     inline constexpr SysExCommand responseCommand(SysExCommand request)
     {
@@ -230,6 +250,32 @@ namespace enomik
             for (size_t i = 0; name && name[i] && i < MAX_NAME_LENGTH; i++)
             {
                 pkt.data[idx++] = static_cast<uint8_t>(name[i]) & 0x7F;
+            }
+
+            pkt.data[idx++] = SysExPacket::END_BYTE;
+            pkt.length = idx;
+            return pkt;
+        }
+
+        // Encode ANNOUNCE: [kind][major][minor][patch][name bytes]
+        static SysExPacket encodeAnnounce(DeviceKind kind, const char *name)
+        {
+            SysExPacket pkt;
+            pkt.data[0] = SysExPacket::START_BYTE;
+            pkt.data[1] = SysExPacket::MANUFACTURER_ID;
+            pkt.data[2] = PROTOCOL_VERSION_MAJOR;
+            pkt.data[3] = PROTOCOL_VERSION_MINOR;
+            pkt.data[4] = static_cast<uint8_t>(SysExCommand::ANNOUNCE);
+            pkt.data[5] = static_cast<uint8_t>(kind);
+            pkt.data[6] = PROTOCOL_VERSION_MAJOR;
+            pkt.data[7] = PROTOCOL_VERSION_MINOR;
+            pkt.data[8] = ESP_NOW_MIDI_VERSION_PATCH;
+
+            int idx = 9;
+            for (size_t i = 0; name && name[i] && i < MAX_NAME_LENGTH; i++)
+            {
+                if (isNameChar(static_cast<uint8_t>(name[i])))
+                    pkt.data[idx++] = static_cast<uint8_t>(name[i]);
             }
 
             pkt.data[idx++] = SysExPacket::END_BYTE;
@@ -429,6 +475,44 @@ namespace enomik
             }
             name[length] = '\0';
             return true;
+        }
+
+        // Decode ANNOUNCE payload: [kind][major][minor][patch][name bytes]
+        static bool decodeAnnounce(const uint8_t *payload, uint16_t length, Announce &out)
+        {
+            if (!payload || length < ANNOUNCE_HEADER_SIZE)
+                return false;
+            if (payload[0] > static_cast<uint8_t>(DeviceKind::DONGLE))
+                return false;
+            if (!decodeName(payload + ANNOUNCE_HEADER_SIZE, length - ANNOUNCE_HEADER_SIZE, out.name))
+                return false;
+            out.kind = static_cast<DeviceKind>(payload[0]);
+            out.major = payload[1];
+            out.minor = payload[2];
+            out.patch = payload[3];
+            return true;
+        }
+
+        // Decode a complete ANNOUNCE SysEx message (F0 7D major minor 0x15 ... F7)
+        static bool decodeAnnounceMessage(const uint8_t *data, uint16_t length, Announce &out)
+        {
+            if (!data || length < SysExPacket::MIN_PACKET_SIZE + ANNOUNCE_HEADER_SIZE ||
+                length > SysExPacket::MAX_DATA_SIZE)
+                return false;
+            if (data[0] != SysExPacket::START_BYTE || data[1] != SysExPacket::MANUFACTURER_ID ||
+                data[2] != PROTOCOL_VERSION_MAJOR || data[length - 1] != SysExPacket::END_BYTE ||
+                data[4] != static_cast<uint8_t>(SysExCommand::ANNOUNCE))
+                return false;
+            return decodeAnnounce(data + SysExPacket::HEADER_SIZE,
+                                  static_cast<uint16_t>(length - SysExPacket::MIN_PACKET_SIZE), out);
+        }
+
+        // True for any enomik SysEx ANNOUNCE, even one this firmware cannot decode
+        static bool isAnnounce(const uint8_t *data, uint16_t length)
+        {
+            return data && length >= SysExPacket::HEADER_SIZE &&
+                   data[0] == SysExPacket::START_BYTE && data[1] == SysExPacket::MANUFACTURER_ID &&
+                   data[4] == static_cast<uint8_t>(SysExCommand::ANNOUNCE);
         }
 
         static bool decodePin(const uint8_t *payload, uint16_t length, uint8_t &pin)

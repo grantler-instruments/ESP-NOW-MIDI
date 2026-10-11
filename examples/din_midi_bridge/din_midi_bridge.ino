@@ -63,9 +63,6 @@ void setup() {
   _client.setHandleStart(            []()                                  { DIN_MIDI.sendStart();                        });
   _client.setHandleContinue(         []()                                  { DIN_MIDI.sendContinue();                     });
   _client.setHandleStop(             []()                                  { DIN_MIDI.sendStop();                         });
-
-  // Register with the dongle
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

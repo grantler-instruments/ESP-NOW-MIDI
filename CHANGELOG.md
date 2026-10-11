@@ -2,6 +2,9 @@
 
 ## 0.19.0
 
+- Client: introduces itself with a SysEx ANNOUNCE (`0x15`: kind, version, name) after `begin()`, after a peer is added, and as heartbeat when it sent nothing over ESP-NOW for `setHeartbeatInterval()` (default 60 s, `0` = off). Replaces the CC 127 = 127 on channel 16 handshake, which reached the DAW as "Poly Mode On"; examples no longer send it. `sendHandShake()` is deprecated (calls `sendAnnounce()`).
+- Dongle: keeps what peers announce and tracks when each was last heard: `getPeerName()`, `getPeerAnnounce()`, `getPeerStatus()` (Online / Offline / Unknown, `setPeerTimeout()`, default 180 s). Announces are not forwarded to the USB host. SysEx from muted peers is no longer forwarded either.
+- Core: `setHandleSysExFrom()` (SysEx handler with the sender MAC), `getPeerLastSeen()`, `getLastSendTime()`. `enomik_dongle.h` can be included from several source files.
 - SysEx over ESP-NOW: versioned fragment protocol (max 1024 bytes, 240-byte payloads), receive callback (`setHandleSysEx`; the Client runs it in `loop()`), Client/Dongle bridging, auto-discovery accepts SysEx frames
 - Breaking: replaces the unused fixed 129-byte SysEx blob; CircuitPython `send_sysex` updated to match
 - Enomik config SysEx stays USB-only: Client config replies are no longer sent over ESP-NOW, and the Dongle does not forward host config SysEx (`F0 7D`) to clients

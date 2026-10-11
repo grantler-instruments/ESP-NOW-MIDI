@@ -308,7 +308,7 @@ class Wizard:
         self.section("Phase 2 - Client via ESP-NOW (through dongle)")
         print("  (SysEx configuration is not bridged by the dongle, so it runs in Phase 1 only)")
 
-        # The first echo waits for a couple of handshake cycles, so the dongle
+        # The first echo waits for a couple of heartbeat (ANNOUNCE) cycles, so the dongle
         # can auto-discover the client before host -> client routing is used.
         self._echo(link, tc.channel_voice_cases(), "ESP-NOW", first_timeout=12.0)
         self._no_echo_on_io_channel(link, "ESP-NOW")
