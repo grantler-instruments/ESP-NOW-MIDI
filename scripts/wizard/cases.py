@@ -35,7 +35,6 @@ class MidiCase:
     fields: dict = field(default_factory=dict)
     tolerance: dict = field(default_factory=dict)  # field -> allowed abs difference
     channel: int | None = None  # 1-based; None for system messages
-    usb_only: bool = False  # SysEx is not bridged over ESP-NOW
 
     def message_kwargs(self) -> dict:
         kwargs = dict(self.fields)
@@ -112,6 +111,10 @@ def system_cases() -> list[MidiCase]:
 
 API_SYSEX_SHORT = (0x7D, 0x7F, 0x7F, 0x01, 0x02, 0x03)
 API_SYSEX_LONG = (0x7D, 0x7F, 0x7F) + tuple(range(0x10, 0x10 + 17))  # spans several USB packets
+# 300 bytes with F0/F7: more than one ESP-NOW frame (240-byte payloads), so it is
+# split and reassembled. The firmware builds it at run time (runApiCase()).
+API_SYSEX_FRAGMENTED_LENGTH = 300
+API_SYSEX_FRAGMENTED = (0x7D, 0x7F, 0x7F) + tuple(i & 0x7F for i in range(API_SYSEX_FRAGMENTED_LENGTH - 5))
 
 
 def _api(name: str, type_: str, **fields) -> MidiCase:
@@ -134,8 +137,9 @@ API_CASES = [
     MidiCase("sendStop", "stop"),
     MidiCase("sendSongPosition", "songpos", {"pos": 1234}),
     MidiCase("sendSongSelect", "song_select", {"song": 3}),
-    MidiCase("sendSysEx short", "sysex", {"data": API_SYSEX_SHORT}, usb_only=True),
-    MidiCase("sendSysEx long", "sysex", {"data": API_SYSEX_LONG}, usb_only=True),
+    MidiCase("sendSysEx short", "sysex", {"data": API_SYSEX_SHORT}),
+    MidiCase("sendSysEx long", "sysex", {"data": API_SYSEX_LONG}),
+    MidiCase("sendSysEx fragmented", "sysex", {"data": API_SYSEX_FRAGMENTED}),
 ]
 
 

@@ -34,8 +34,8 @@ buttons and a potentiometer. Press **Esc** to skip a physical step, or use
    `ADD_PEER` error, `GET_PEER`, `GET_ALL_PEERS`, `GET_CONFIG` stream
 8. API sends: the client calls each `enomik::Client` send function (note
    on/off, CC, program change, pitch bend min/center/max, aftertouch, poly
-   aftertouch, clock, start, continue, stop, song position, song select, short
-   and long SysEx) and the wizard checks what arrives on channel 12
+   aftertouch, clock, start, continue, stop, song position, song select, and
+   SysEx of 8, 22 and 300 bytes) and the wizard checks what arrives on channel 12
 9. Fake inputs: press/release pins 16, 17 and 18, analog pin 10 through CC 64,
    0, 127, 32, 96, analog pin 11 through pitch bend max, center and min
 10. Real inputs: press the buttons on pins 16 and 17, turn the potentiometer on
@@ -44,7 +44,7 @@ buttons and a potentiometer. Press **Esc** to skip a physical step, or use
 **Phase 2 — client over ESP-NOW (through the dongle)**
 
 Steps 4, 5, 6, 8, 9 and 10 again over the air. The burst allows up to 5% loss.
-SysEx API sends run over USB only.
+The 300-byte SysEx is split into two ESP-NOW frames and reassembled by the dongle.
 
 > The dongle does not bridge configuration SysEx, so SysEx steps run in Phase 1 only.
 

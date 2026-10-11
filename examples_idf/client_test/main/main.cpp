@@ -74,6 +74,24 @@ static const uint8_t kSysExShort[] = {0xF0, 0x7D, 0x7F, 0x7F, 0x01, 0x02, 0x03, 
 static const uint8_t kSysExLong[] = {0xF0, 0x7D, 0x7F, 0x7F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
                                      0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0xF7};
 
+// More than one ESP-NOW frame (240-byte payloads): F0 7D 7F 7F, 0x00..0x7F repeating, F7.
+static const uint16_t kSysExFragmentedLength = 300;
+
+static void sendFragmentedSysEx()
+{
+    static uint8_t sysex[kSysExFragmentedLength];
+    sysex[0] = 0xF0;
+    sysex[1] = 0x7D;
+    sysex[2] = 0x7F;
+    sysex[3] = 0x7F;
+    for (uint16_t i = 0; i < kSysExFragmentedLength - 5; i++)
+    {
+        sysex[4 + i] = i & 0x7F;
+    }
+    sysex[kSysExFragmentedLength - 1] = 0xF7;
+    g_client.sendSysEx(sysex, kSysExFragmentedLength);
+}
+
 static void runApiCase(byte index)
 {
     switch (index)
@@ -95,6 +113,7 @@ static void runApiCase(byte index)
     case 14: g_client.sendSongSelect(3); break;
     case 15: g_client.sendSysEx(kSysExShort, sizeof(kSysExShort)); break;
     case 16: g_client.sendSysEx(kSysExLong, sizeof(kSysExLong)); break;
+    case 17: sendFragmentedSysEx(); break;
     default: break;
     }
 }

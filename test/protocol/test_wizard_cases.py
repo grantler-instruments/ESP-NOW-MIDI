@@ -142,9 +142,13 @@ class TestApiCases(unittest.TestCase):
     def test_api_trigger(self):
         self.assertEqual(tc.api_trigger(3), ("program_change", {"channel": tc.API_TRIGGER_CHANNEL - 1, "program": 3}))
 
-    def test_only_sysex_is_usb_only(self):
-        for case in tc.API_CASES:
-            self.assertEqual(case.usb_only, case.type == "sysex", case.name)
+    def test_fragmented_sysex_needs_more_than_one_frame(self):
+        max_payload = 240  # esp_now_midi_sysex::MAX_PAYLOAD
+        length = len(tc.API_SYSEX_FRAGMENTED) + 2  # with F0/F7
+        self.assertEqual(length, tc.API_SYSEX_FRAGMENTED_LENGTH)
+        self.assertGreater(length, max_payload)
+        self.assertLessEqual(length, 1024)  # esp_now_midi_sysex::MAX_MESSAGE
+        self.assertTrue(all(0 <= b <= 127 for b in tc.API_SYSEX_FRAGMENTED))
 
     def test_sysex_data_matches(self):
         case = next(c for c in tc.API_CASES if c.name == "sendSysEx long")
@@ -169,6 +173,10 @@ class TestApiCases(unittest.TestCase):
                 data = [int(b, 16) for b in raw.replace("\n", " ").split(",")]
                 with self.subTest(sketch.name, array=name):
                     self.assertEqual(data, [0xF0, *want, 0xF7])
+            length = re.search(r"kSysExFragmentedLength = (\d+);", source).group(1)
+            with self.subTest(sketch.name, array="fragmented"):
+                self.assertEqual(int(length), tc.API_SYSEX_FRAGMENTED_LENGTH)
+                self.assertIn("sysex[4 + i] = i & 0x7F", source)
 
 
 class TestBurst(unittest.TestCase):

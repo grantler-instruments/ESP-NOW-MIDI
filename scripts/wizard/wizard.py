@@ -384,8 +384,6 @@ class Wizard:
     def _api_sends(self, link: MidiLink, transport: str) -> None:
         """Have the client call each enomik::Client send function and check what arrives."""
         for index, case in enumerate(tc.API_CASES):
-            if case.usb_only and transport != "USB":
-                continue
             self._expect_after(link, f"API {case.name} ({transport})", tc.api_trigger(index), case.matches)
         self.drain(link, 0.3)
 

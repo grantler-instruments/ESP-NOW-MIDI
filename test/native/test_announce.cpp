@@ -400,3 +400,34 @@ TEST_CASE("dongle updates a name that changed", "[announce][dongle]")
     REQUIRE(dongle.getPeerName(kClientMac, name));
     REQUIRE(std::string(name) == "after");
 }
+
+TEST_CASE("client SysEx over two frames reaches the dongle's USB queue whole", "[announce][dongle][sysex]")
+{
+    enomik::Client client;
+    REQUIRE(client.begin());
+    REQUIRE(client.addPeer(kDongleMac));
+    stubEspNowSent().clear();
+
+    // Same message as the wizard's "sendSysEx fragmented" case
+    std::vector<uint8_t> sysex(300);
+    sysex[0] = 0xF0;
+    sysex[1] = 0x7D;
+    sysex[2] = 0x7F;
+    sysex[3] = 0x7F;
+    for (size_t i = 0; i < sysex.size() - 5; i++)
+        sysex[4 + i] = static_cast<uint8_t>(i & 0x7F);
+    sysex.back() = 0xF7;
+    REQUIRE(client.sendSysEx(sysex.data(), static_cast<uint16_t>(sysex.size())));
+    REQUIRE(stubEspNowSent().size() == 2);
+    const auto frames = stubEspNowSent();
+
+    enomik::Dongle dongle;
+    REQUIRE(dongle.espnowMIDI.begin());
+    for (const auto &p : frames)
+        deliver(dongle.espnowMIDI, kClientMac, p.data);
+
+    const uint8_t *data = nullptr;
+    uint16_t length = 0;
+    REQUIRE(dongle.usbSysExPeek(data, length));
+    REQUIRE(std::vector<uint8_t>(data, data + length) == sysex);
+}

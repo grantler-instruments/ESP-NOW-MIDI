@@ -590,6 +590,12 @@ namespace enomik
             return _usbSysExQueue.hasPending();
         }
 
+        /** @brief Next SysEx waiting for the USB host, left in the queue. */
+        bool usbSysExPeek(const uint8_t *&data, uint16_t &length)
+        {
+            return _usbSysExQueue.peek(data, length);
+        }
+
         /** @return ESP-NOW messages dropped because loop() fell behind (since boot). */
         uint32_t getReceiveDropCount() const
         {
