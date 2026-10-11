@@ -120,6 +120,24 @@ class TestWizardParserPeers(unittest.TestCase):
         parsed = sx.parse(response(sx.RESP_SET_POWER_SAVE, [0]))
         self.assertEqual(parsed, {"cmd": "power_save", "enabled": False})
 
+    def test_build_name_requests(self):
+        self.assertEqual(
+            sx.build_set_name("pad left"),
+            [sx.MANUFACTURER_ID, sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR, 0x11]
+            + list(b"pad left"),
+        )
+        self.assertEqual(sx.build_set_name("")[3:], [sx.CMD_SET_NAME])
+        self.assertEqual(sx.build_get_name()[3:], [0x12])
+        with self.assertRaises(ValueError):
+            sx.build_set_name("x" * 17)
+
+    def test_parse_name_response(self):
+        parsed = sx.parse(response(sx.RESP_GET_NAME, list(b"client_buttons")))
+        self.assertEqual(parsed, {"cmd": "name", "name": "client_buttons"})
+        parsed = sx.parse(response(sx.RESP_SET_NAME, []))
+        self.assertEqual(parsed, {"cmd": "name", "name": ""})
+        self.assertEqual(sx.RESP_GET_NAME, 0x52)
+
 
 class TestWizardParserAddPeerAndErrors(unittest.TestCase):
     def test_parse_add_peer_ok(self):
@@ -184,7 +202,7 @@ class TestWizardParserMacAndVersion(unittest.TestCase):
 
     def test_parse_version(self):
         parsed = sx.parse(
-            response(sx.RESP_GET_VERSION, [sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR])
+            response(sx.RESP_GET_VERSION, [sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR, 2])
         )
         self.assertEqual(
             parsed,
@@ -192,8 +210,14 @@ class TestWizardParserMacAndVersion(unittest.TestCase):
                 "cmd": "version",
                 "major": sx.PROTOCOL_MAJOR,
                 "minor": sx.PROTOCOL_MINOR,
+                "patch": 2,
             },
         )
+        # Older firmware sends only major.minor
+        parsed = sx.parse(
+            response(sx.RESP_GET_VERSION, [sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR])
+        )
+        self.assertIsNone(parsed["patch"])
 
     def test_rejects_non_enomik_manufacturer(self):
         self.assertIsNone(sx.parse([0x7E, 0, 13, sx.RESP_GET_VERSION, 0, 13]))

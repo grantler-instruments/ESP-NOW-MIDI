@@ -45,6 +45,7 @@ void setup() {
   Serial.println("Serial started");
 
 
+  _client.setName("client_clocked"); // optional
   _client.begin();
   _client.addPeer(peerMacAddress);
 

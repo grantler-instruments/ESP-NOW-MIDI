@@ -944,6 +944,24 @@ namespace enomik
             }
             return macToString(mac);
         }
+
+        /**
+         * @brief Sets the default client name, shown to the app (GET_NAME / GET_CONFIG).
+         *
+         * Optional; without it the name is "enomik". The app can override it over SysEx
+         * (SET_NAME); the override is kept until RESET, an empty SET_NAME, or a new firmware is flashed.
+         * Printable ASCII, at most 16 characters.
+         */
+        void setName(const char *name)
+        {
+            io.setDefaultName(name);
+        }
+
+        /** @brief Returns the effective client name: app override if set, else the setName() default. */
+        const char *getName() const
+        {
+            return io.getName();
+        }
     };
 
     Client *Client::instancePtr = nullptr;

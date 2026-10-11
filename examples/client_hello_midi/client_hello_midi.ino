@@ -57,6 +57,7 @@ void setup() {
 #ifdef HEARTBEAT_LED
   pinMode(HEARTBEAT_LED, OUTPUT);
 #endif
+  _client.setName("hello_midi"); // optional
   _client.begin();
   _client.addPeer(peerMacAddress);
   // all of these midi handlers are optional, depends on the usecase, very often you just wanna send data and not receive

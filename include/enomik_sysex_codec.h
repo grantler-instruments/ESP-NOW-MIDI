@@ -31,6 +31,8 @@ namespace enomik
         GET_MIDI_LOOPBACK = 0x0E,
         SET_POWER_SAVE = 0x0F,
         GET_POWER_SAVE = 0x10,
+        SET_NAME = 0x11,
+        GET_NAME = 0x12,
 
         // Response codes: always request command + 64 (0x40)
         SET_PIN_CONFIG_RESPONSE = 0x41,
@@ -49,6 +51,8 @@ namespace enomik
         GET_MIDI_LOOPBACK_RESPONSE = 0x4E,
         SET_POWER_SAVE_RESPONSE = 0x4F,
         GET_POWER_SAVE_RESPONSE = 0x50,
+        SET_NAME_RESPONSE = 0x51,
+        GET_NAME_RESPONSE = 0x52,
 
         // Global error response (reserved; not request + 64). Request 0x3F is
         // reserved so its success response (0x7F) never collides with errors.
@@ -94,6 +98,14 @@ namespace enomik
     }
 
     static constexpr size_t PEER_ENTRY_PAYLOAD_SIZE = 13; // index + 12 MAC nibbles
+
+    // Client name: printable ASCII (0x20-0x7E), 7-bit SysEx safe without nibble encoding
+    static constexpr size_t MAX_NAME_LENGTH = 16;
+
+    inline constexpr bool isNameChar(uint8_t c)
+    {
+        return c >= 0x20 && c <= 0x7E;
+    }
 
     inline constexpr SysExCommand responseCommand(SysExCommand request)
     {
@@ -198,8 +210,30 @@ namespace enomik
             pkt.data[4] = static_cast<uint8_t>(SysExCommand::GET_VERSION_RESPONSE);
             pkt.data[5] = PROTOCOL_VERSION_MAJOR;
             pkt.data[6] = PROTOCOL_VERSION_MINOR;
-            pkt.data[7] = SysExPacket::END_BYTE;
-            pkt.length = 8;
+            pkt.data[7] = ESP_NOW_MIDI_VERSION_PATCH;
+            pkt.data[8] = SysExPacket::END_BYTE;
+            pkt.length = 9;
+            return pkt;
+        }
+
+        // Encode name response: [name bytes] (up to MAX_NAME_LENGTH, no terminator)
+        static SysExPacket encodeName(const char *name, SysExCommand responseCmd)
+        {
+            SysExPacket pkt;
+            pkt.data[0] = SysExPacket::START_BYTE;
+            pkt.data[1] = SysExPacket::MANUFACTURER_ID;
+            pkt.data[2] = PROTOCOL_VERSION_MAJOR;
+            pkt.data[3] = PROTOCOL_VERSION_MINOR;
+            pkt.data[4] = static_cast<uint8_t>(responseCmd);
+
+            int idx = 5;
+            for (size_t i = 0; name && name[i] && i < MAX_NAME_LENGTH; i++)
+            {
+                pkt.data[idx++] = static_cast<uint8_t>(name[i]) & 0x7F;
+            }
+
+            pkt.data[idx++] = SysExPacket::END_BYTE;
+            pkt.length = idx;
             return pkt;
         }
 
@@ -376,6 +410,22 @@ namespace enomik
         static bool decodePowerSave(const uint8_t *payload, uint16_t length, bool &enabled)
         {
             return decodeBoolFlag(payload, length, enabled);
+        }
+
+        // Decode name: 0..MAX_NAME_LENGTH printable ASCII bytes. Empty = clear override.
+        static bool decodeName(const uint8_t *payload, uint16_t length, char name[MAX_NAME_LENGTH + 1])
+        {
+            if (length > MAX_NAME_LENGTH)
+                return false;
+
+            for (uint16_t i = 0; i < length; i++)
+            {
+                if (!isNameChar(payload[i]))
+                    return false;
+                name[i] = static_cast<char>(payload[i]);
+            }
+            name[length] = '\0';
+            return true;
         }
 
         static bool decodePin(const uint8_t *payload, uint16_t length, uint8_t &pin)

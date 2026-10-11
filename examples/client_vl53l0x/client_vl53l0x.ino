@@ -33,6 +33,7 @@ void setup() {
   delay(2000);
   Wire.begin();
 
+  _client.setName("client_vl53l0x"); // optional
   _client.begin();
 
   _vl53Ok = lox.begin();

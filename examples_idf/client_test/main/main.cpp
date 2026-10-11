@@ -93,6 +93,7 @@ extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "starting enomik::Client test DUT");
 
+    g_client.setName("idf_client_test"); // optional
     if (!g_client.begin())
     {
         ESP_LOGE(TAG, "enomik::Client::begin() failed");

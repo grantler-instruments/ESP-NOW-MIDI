@@ -2,6 +2,9 @@
 
 #include "include/enomik_sysex_codec.h"
 
+#include <cstring>
+#include <string>
+
 namespace {
 
 constexpr uint8_t kSampleMac[6] = {0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62};
@@ -305,9 +308,70 @@ TEST_CASE("get version response encoding", "[sysex][response]")
 {
     const auto pkt = enomik::SysExEncoder::encodeVersion();
     requireCommand(pkt, enomik::SysExCommand::GET_VERSION_RESPONSE);
-    REQUIRE(pkt.length == 8);
+    REQUIRE(pkt.length == 9);
     REQUIRE(pkt.data[5] == enomik::PROTOCOL_VERSION_MAJOR);
     REQUIRE(pkt.data[6] == enomik::PROTOCOL_VERSION_MINOR);
+    REQUIRE(pkt.data[7] == ESP_NOW_MIDI_VERSION_PATCH);
+}
+
+TEST_CASE("name response encoding", "[sysex][response][name]")
+{
+    const auto pkt = enomik::SysExEncoder::encodeName("pad left", enomik::SysExCommand::GET_NAME_RESPONSE);
+    requireCommand(pkt, enomik::SysExCommand::GET_NAME_RESPONSE);
+    REQUIRE(pkt.length == 5 + 8 + 1);
+    REQUIRE(memcmp(pkt.getPayload(), "pad left", 8) == 0);
+
+    SECTION("empty name has no payload")
+    {
+        const auto empty = enomik::SysExEncoder::encodeName("", enomik::SysExCommand::SET_NAME_RESPONSE);
+        requireCommand(empty, enomik::SysExCommand::SET_NAME_RESPONSE);
+        REQUIRE(empty.length == 6);
+    }
+
+    SECTION("long name is cut to MAX_NAME_LENGTH")
+    {
+        const auto cut = enomik::SysExEncoder::encodeName("0123456789abcdefXYZ", enomik::SysExCommand::GET_NAME_RESPONSE);
+        REQUIRE(cut.getPayloadLength() == enomik::MAX_NAME_LENGTH);
+    }
+}
+
+TEST_CASE("name decoding", "[sysex][decode][name]")
+{
+    char name[enomik::MAX_NAME_LENGTH + 1];
+
+    SECTION("round-trip")
+    {
+        const auto pkt = enomik::SysExEncoder::encodeName("client_buttons", enomik::SysExCommand::SET_NAME);
+        REQUIRE(enomik::SysExDecoder::decodeName(pkt.getPayload(), pkt.getPayloadLength(), name));
+        REQUIRE(std::string(name) == "client_buttons");
+    }
+
+    SECTION("16 characters accepted")
+    {
+        const char *sixteen = "0123456789abcdef";
+        REQUIRE(enomik::SysExDecoder::decodeName(reinterpret_cast<const uint8_t *>(sixteen), 16, name));
+        REQUIRE(std::string(name) == sixteen);
+    }
+
+    SECTION("17 characters rejected")
+    {
+        const char *seventeen = "0123456789abcdefg";
+        REQUIRE_FALSE(enomik::SysExDecoder::decodeName(reinterpret_cast<const uint8_t *>(seventeen), 17, name));
+    }
+
+    SECTION("non-printable bytes rejected")
+    {
+        const uint8_t control[] = {'a', 0x1F, 'b'};
+        const uint8_t del[] = {'a', 0x7F};
+        REQUIRE_FALSE(enomik::SysExDecoder::decodeName(control, sizeof(control), name));
+        REQUIRE_FALSE(enomik::SysExDecoder::decodeName(del, sizeof(del), name));
+    }
+
+    SECTION("empty payload accepted")
+    {
+        REQUIRE(enomik::SysExDecoder::decodeName(nullptr, 0, name));
+        REQUIRE(name[0] == '\0');
+    }
 }
 
 TEST_CASE("SysExPacket version compatibility", "[sysex][protocol]")

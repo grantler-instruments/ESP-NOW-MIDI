@@ -2,7 +2,9 @@
 
 ## 0.19.0
 
+- Client: name per device so apps can tell clients apart. `setName("...")` in the sketch sets the default (optional, otherwise `"enomik"`); `getName()` returns the effective name. The app can override it with SysEx `SET_NAME` (`0x11`, response `0x51`) and read it with `GET_NAME` (`0x12`, response `0x52`); `GET_CONFIG` includes the name before its done marker. The override is stored in NVS and dropped by `RESET`, an empty `SET_NAME`, or flashing a new firmware. Printable ASCII, at most 16 characters. Examples set their sketch name.
 - Client and Dongle: USB serial number is the device's MAC (e.g. `48F6EE7A1CC8`; was empty on Arduino, `0` on ESP-IDF). macOS no longer reuses a cached MIDI port name from another enomik device with the same USB IDs.
+- SysEx: `GET_VERSION` response also carries the patch version (`[major, minor, patch]`); older hosts reading two bytes are unaffected.
 - Client: MIDI received over ESP-NOW is now handled in `loop()` instead of the ESP-NOW receive callback (WiFi task), so handlers and pin outputs no longer race with `loop()` (e.g. a SysEx pin configuration arriving while notes are received). **Behavior change:** handlers react as often as `loop()` is called; avoid long `delay()`s. `setDispatchInLoop(false)` restores the old immediate dispatch in the WiFi task.
 - Dongle: ESP-NOW receive (mute check, to-host filter, message history) is handled in `loop()`; the receive callback only queues.
 - Core: `setHandleMessage()` delivers every received message with its sender MAC, before the per-type handlers.

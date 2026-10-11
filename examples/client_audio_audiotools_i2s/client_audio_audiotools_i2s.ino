@@ -46,6 +46,7 @@ void setup() {
   sineWave.begin(CHANNELS, SAMPLE_RATE, 0);  // start silent
   soundStream.begin();
 
+  _client.setName("audiotools_i2s"); // optional
   _client.begin();
   _client.addPeer(peerMacAddress);
   _client.espnowMIDI.setHandleNoteOn(onNoteOn);

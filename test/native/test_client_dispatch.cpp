@@ -4,6 +4,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
+#include <string>
+#include <vector>
 #include <cstring>
 #include <thread>
 
@@ -141,4 +143,72 @@ TEST_CASE("client: notes arriving while the pin configuration changes", "[client
     {
         REQUIRE(stubPinLevels()[pin] == HIGH);
     }
+}
+
+namespace {
+
+std::vector<midi_sysex_message> sendIoRequest(enomik::Client &client, enomik::SysExCommand cmd,
+                                              const char *payload = "")
+{
+    std::vector<midi_sysex_message> sent;
+    client.io.setOnSysExSendRequest([&sent](midi_sysex_message msg) { sent.push_back(msg); });
+    const auto request = enomik::SysExEncoder::encodeName(payload, cmd);
+    client.io.onSysEx(request.data, request.length);
+    return sent;
+}
+
+std::string namePayload(const midi_sysex_message &msg)
+{
+    return std::string(reinterpret_cast<const char *>(msg.data + 5), msg.length - 6);
+}
+
+} // namespace
+
+TEST_CASE("client name: default, sketch name and app override", "[client][name]")
+{
+    enomik::Client client;
+    client.io.begin();
+    REQUIRE(std::string(client.getName()) == "enomik");
+
+    client.setName("client_buttons");
+    REQUIRE(std::string(client.getName()) == "client_buttons");
+
+    auto sent = sendIoRequest(client, enomik::SysExCommand::GET_NAME);
+    REQUIRE(sent.size() == 1);
+    REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_NAME_RESPONSE));
+    REQUIRE(namePayload(sent[0]) == "client_buttons");
+
+    sent = sendIoRequest(client, enomik::SysExCommand::SET_NAME, "pad left");
+    REQUIRE(sent.size() == 1);
+    REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::SET_NAME_RESPONSE));
+    REQUIRE(namePayload(sent[0]) == "pad left");
+    REQUIRE(std::string(client.getName()) == "pad left");
+
+    // Sketch default changes do not hide the app override
+    client.setName("other");
+    REQUIRE(std::string(client.getName()) == "pad left");
+
+    // Empty SET_NAME clears the override
+    sent = sendIoRequest(client, enomik::SysExCommand::SET_NAME, "");
+    REQUIRE(namePayload(sent[0]) == "other");
+
+    // RESET clears it too
+    sendIoRequest(client, enomik::SysExCommand::SET_NAME, "pad left");
+    sendIoRequest(client, enomik::SysExCommand::RESET);
+    REQUIRE(std::string(client.getName()) == "other");
+}
+
+TEST_CASE("client name is part of the GET_CONFIG stream", "[client][name]")
+{
+    enomik::Client client;
+    client.io.begin();
+    client.setName("client_test");
+
+    const auto sent = sendIoRequest(client, enomik::SysExCommand::GET_CONFIG);
+    REQUIRE(sent.size() >= 2);
+    const auto &last = sent[sent.size() - 1];
+    const auto &name = sent[sent.size() - 2];
+    REQUIRE(last.data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_CONFIG_RESPONSE));
+    REQUIRE(name.data[4] == static_cast<uint8_t>(enomik::SysExCommand::GET_NAME_RESPONSE));
+    REQUIRE(namePayload(name) == "client_test");
 }

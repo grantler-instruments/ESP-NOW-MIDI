@@ -46,6 +46,7 @@ void setup() {
   DIN_MIDI.setHandleContinue(onDinContinue);
   DIN_MIDI.setHandleStop(onDinStop);
 
+  _client.setName("din_midi_bridge"); // optional
   _client.begin();
   // _client.addPeer(peerMacAddress);
 

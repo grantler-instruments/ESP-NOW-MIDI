@@ -70,6 +70,7 @@ static void maybeHandshake() {
 }
 
 void setup() {
+  _client.setName("client_test"); // optional
   _client.begin();
 
   _client.setHandleNoteOn(onNoteOn);
