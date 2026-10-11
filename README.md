@@ -1,5 +1,7 @@
 # ESP-NOW-MIDI
 
+![ESP-NOW MIDI topology: MIDI hosts connected via USB to ESP-NOW MIDI dongles, which talk wirelessly to multiple ESP32 boards](docs/images/topology.svg)
+
 Library for sending and receiving MIDI messages via the ESP-NOW protocol.
 A typical setup uses two ESP-NOW capable boards: a USB MIDI **dongle** connected to your computer (or other USB MIDI host), and one or more remote ESP boards. The dongle shows up as a class-compliant MIDI device, use it with any DAW, Max, pd, Processing, openFrameworks, game engines that support MIDI, or even in the browser or on a phone.
 

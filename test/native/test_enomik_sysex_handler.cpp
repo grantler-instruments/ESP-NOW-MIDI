@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "arduino_stubs.h"
@@ -157,6 +158,54 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
         REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::PEER_ALREADY_EXISTS));
     }
 
+    SECTION("packet longer than the buffer is rejected without copying")
+    {
+        bool called = false;
+        handler.setOnGetVersion([&]() { called = true; });
+
+        // A valid GET_VERSION request padded past SysExPacket::MAX_DATA_SIZE.
+        std::vector<uint8_t> oversize(enomik::SysExPacket::MAX_DATA_SIZE + 44, 0x00);
+        oversize[0] = enomik::SysExPacket::START_BYTE;
+        oversize[1] = enomik::SysExPacket::MANUFACTURER_ID;
+        oversize[2] = enomik::PROTOCOL_VERSION_MAJOR;
+        oversize[3] = enomik::PROTOCOL_VERSION_MINOR;
+        oversize[4] = static_cast<uint8_t>(enomik::SysExCommand::GET_VERSION);
+        oversize.back() = enomik::SysExPacket::END_BYTE;
+
+        handler.handleSysEx(oversize.data(), static_cast<uint16_t>(oversize.size()));
+
+        REQUIRE_FALSE(called);
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE));
+        REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::DECODE_FAILED));
+    }
+
+    SECTION("packet of exactly the buffer size is accepted")
+    {
+        bool called = false;
+        handler.setOnGetVersion([&]() { called = true; });
+
+        std::vector<uint8_t> full(enomik::SysExPacket::MAX_DATA_SIZE, 0x00);
+        full[0] = enomik::SysExPacket::START_BYTE;
+        full[1] = enomik::SysExPacket::MANUFACTURER_ID;
+        full[2] = enomik::PROTOCOL_VERSION_MAJOR;
+        full[3] = enomik::PROTOCOL_VERSION_MINOR;
+        full[4] = static_cast<uint8_t>(enomik::SysExCommand::GET_VERSION);
+        full.back() = enomik::SysExPacket::END_BYTE;
+
+        handler.handleSysEx(full.data(), static_cast<uint16_t>(full.size()));
+
+        REQUIRE(called);
+    }
+
+    SECTION("null data sends DECODE_FAILED error")
+    {
+        handler.handleSysEx(nullptr, 10);
+
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::DECODE_FAILED));
+    }
+
     SECTION("truncated packet sends DECODE_FAILED error")
     {
         handler.setOnGetPinConfig([](uint8_t) {});
@@ -175,6 +224,57 @@ TEST_CASE("SysExHandler decodes incoming request packets", "[sysex][decode][hand
         REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE));
         REQUIRE(sent[0].data[5] == 0);
         REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::DECODE_FAILED));
+    }
+
+    SECTION("SET_NAME invokes callback with decoded name")
+    {
+        std::string received = "unset";
+        handler.setOnSetName([&](const char *name) { received = name; });
+
+        const uint8_t payload[] = {'p', 'a', 'd', ' ', 'l', 'e', 'f', 't'};
+        const auto request = makeRequestPacket(enomik::SysExCommand::SET_NAME, payload, sizeof(payload));
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(received == "pad left");
+        REQUIRE(sent.empty());
+    }
+
+    SECTION("SET_NAME with empty payload passes empty name")
+    {
+        std::string received = "unset";
+        handler.setOnSetName([&](const char *name) { received = name; });
+
+        const auto request = makeRequestPacket(enomik::SysExCommand::SET_NAME, nullptr, 0);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(received.empty());
+    }
+
+    SECTION("SET_NAME with invalid name sends DECODE_FAILED")
+    {
+        bool called = false;
+        handler.setOnSetName([&](const char *) { called = true; });
+
+        const uint8_t tooLong[17] = {'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a'};
+        const auto request = makeRequestPacket(enomik::SysExCommand::SET_NAME, tooLong, sizeof(tooLong));
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE_FALSE(called);
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE));
+        REQUIRE(sent[0].data[5] == static_cast<uint8_t>(enomik::SysExCommand::SET_NAME));
+        REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::DECODE_FAILED));
+    }
+
+    SECTION("GET_NAME without callback sends NOT_READY")
+    {
+        const auto request = makeRequestPacket(enomik::SysExCommand::GET_NAME, nullptr, 0);
+        handler.handleSysEx(request.data, request.length);
+
+        REQUIRE(sent.size() == 1);
+        REQUIRE(sent[0].data[4] == static_cast<uint8_t>(enomik::SysExCommand::ERROR_RESPONSE));
+        REQUIRE(sent[0].data[5] == static_cast<uint8_t>(enomik::SysExCommand::GET_NAME));
+        REQUIRE(sent[0].data[6] == static_cast<uint8_t>(enomik::SysExErrorCode::NOT_READY));
     }
 
     SECTION("bad major version sends BAD_VERSION error")

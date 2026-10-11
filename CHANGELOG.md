@@ -2,10 +2,34 @@
 
 ## 0.19.0
 
-- SysEx over ESP-NOW: versioned fragment protocol (max 1024 bytes, 240-byte payloads), receive callback, Client/Dongle bridging
+- SysEx over ESP-NOW: versioned fragment protocol (max 1024 bytes, 240-byte payloads), receive callback (`setHandleSysEx`; the Client runs it in `loop()`), Client/Dongle bridging, auto-discovery accepts SysEx frames
 - Breaking: replaces the unused fixed 129-byte SysEx blob; CircuitPython `send_sysex` updated to match
-- Enomik config SysEx replies stay USB-only (no longer blasted over ESP-NOW)
+- Enomik config SysEx stays USB-only: Client config replies are no longer sent over ESP-NOW, and the Dongle does not forward host config SysEx (`F0 7D`) to clients
 - `midi_sysex_message` capacity expanded to 256 bytes for USB/config path
+- Fixed: SysEx buffer overflows. The SysEx config handler rejects packets longer than 256 bytes, and the Client no longer passes longer USB SysEx to it.
+- IO: `setAnalogReader()` / `setDigitalReader()` replace `analogRead()` / `digitalRead()` for input pins, e.g. to fake sensors in tests.
+- Fixed: Client ignored Song Position received over USB MIDI.
+- Test wizard: checks every channel voice and system message type with edge values, SysEx reads and error replies, a note burst with round-trip times, every `enomik::Client` send function, and all input types, first with fake inputs from `client_test` (channel 15), then with real buttons and a potentiometer.
+- Fixed: IO pitch-bend pins. Analog inputs send the full 14-bit range (were scaled twice and offset), buttons send `min`/`max` scaled to 14 bits, and outputs follow received pitch bend around center. `IO::onPitchBend()` now takes signed pitch bend (`-8192`..`8191`) like the other APIs.
+- Client: name per device so apps can tell clients apart. `setName("...")` in the sketch sets the default (optional, otherwise `"enomik"`); `getName()` returns the effective name. The app can override it with SysEx `SET_NAME` (`0x11`, response `0x51`) and read it with `GET_NAME` (`0x12`, response `0x52`); `GET_CONFIG` includes the name before its done marker. The override is stored in NVS and dropped by `RESET`, an empty `SET_NAME`, or flashing a new firmware. Printable ASCII, at most 16 characters. Examples set their sketch name.
+- Client and Dongle: USB serial number is the device's MAC (e.g. `48F6EE7A1CC8`; was empty on Arduino, `0` on ESP-IDF). macOS no longer reuses a cached MIDI port name from another enomik device with the same USB IDs.
+- SysEx: `GET_VERSION` response also carries the patch version (`[major, minor, patch]`); older hosts reading two bytes are unaffected.
+- Client: MIDI received over ESP-NOW is now handled in `loop()` instead of the ESP-NOW receive callback (WiFi task), so handlers and pin outputs no longer race with `loop()` (e.g. a SysEx pin configuration arriving while notes are received). **Behavior change:** handlers react as often as `loop()` is called; avoid long `delay()`s. `setDispatchInLoop(false)` restores the old immediate dispatch in the WiFi task.
+- Dongle: ESP-NOW receive (mute check, to-host filter, message history) is handled in `loop()`; the receive callback only queues.
+- Core: `setHandleMessage()` delivers every received message with its sender MAC, before the per-type handlers.
+- Hello MIDI example: sends on a `millis()` timer instead of `delay()`, so received MIDI is handled right away; fixed its inverted send-error check.
+- Core: `esp_now_midi.h` can be included from several source files (no duplicate `_instance` definition).
+- Core: auto peer discovery only adds senders of valid MIDI packets (`isMidiPacket()`), so foreign ESP-NOW traffic no longer fills the peer list.
+- Core: `MAX_PEERS` is defined once and can be overridden (e.g. `-DMAX_PEERS=10`) without redefinition warnings or mismatched peer, mute and storage lists.
+- `getPeer(index)` returning a pointer into the live peer list is deprecated (core and Dongle); use `getPeer(index, mac)` or `copyPeers()`. The Dongle gets `getPeer(index, mac)`; the Grantler dongle menu uses it.
+- Fix: calling `begin()` again emptied the peer list but left the peers registered in ESP-NOW, so adding them again failed. It now removes them from ESP-NOW too.
+- Core: `getSendStats()` (also on the Client) counts sends ESP-NOW refused (with the last error), sent, acknowledged and not acknowledged by the receiver.
+- Client: USB MIDI goes out as whole USB-MIDI packets (shared with the Dongle). When the computer reads too slowly, a message is now dropped as a whole; before, a SysEx cut off in the middle left USB output stuck in SysEx mode, so the computer ignored the following messages. Also fixes Arduino SysEx replies having a doubled `F0`/`F7`. Clock, Start, Stop and Continue use the single-byte packet type (`0x0F`) like the Dongle; pitch bend outside -8192..8191 is clamped on USB as on ESP-NOW.
+- Fix: the ESP-NOW peer list is now safe to use from the loop task and the receive callback at the same time (auto-discovery, echo handlers). Before, concurrent access could corrupt the list or leave peers registered in ESP-NOW but missing from the list, so they stopped receiving until a reboot. New `getPeer(index, mac)` and `copyPeers()` return copies.
+- Fix: the dongle sent MIDI over ESP-NOW as its internal 7-byte struct (since the peer mute feature), which every receiver ignored as SysEx. It sends the standard 1-3 byte MIDI packet again.
+- Fix: receiving a 4-128 byte ESP-NOW packet read past the end of the receive buffer (copied 129 bytes regardless of length).
+- Dongle: USB watchdog (default on). When the computer stops taking MIDI from the dongle while messages are waiting, the dongle re-attaches USB like a cable replug: when USB is suspended and the computer refuses remote wakeup (at most once per suspend), or when the MIDI IN endpoint is not read for 500 ms although the computer read from the dongle before and is not sending MIDI itself. Backs off 30 s doubling to 10 min if a re-attach did not help. Remote wakeup is now sent at most once per second instead of on every loop. `setUsbWatchdogMode(Off|Observe|Recover)`, `usbWatchdogConfig()`, `getUsbHealthStats()`, `getUsbHealthStatsPrevious()` (saved to flash only after a USB incident). Grantler dongle: new read-only USB menu page; `ENOMIK_USB_FAULT_INJECT` test flag.
+- Dongle: drop stale USB MIDI messages when the host stops reading (`USB_MIDI_STALE_MS`, default 500 ms, `setUsbStaleTimeout()`); release messages and the latest CC/pitch bend/pressure/program values are always delivered. A full queue now evicts the oldest droppable message instead of the newest. New drop counters `getUsbStaleDropCount()` / `getUsbOverflowDropCount()`.
 
 ## 0.18.0
 

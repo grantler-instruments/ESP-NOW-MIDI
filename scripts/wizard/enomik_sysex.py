@@ -39,6 +39,8 @@ CMD_SET_MIDI_LOOPBACK = 0x0D
 CMD_GET_MIDI_LOOPBACK = 0x0E
 CMD_SET_POWER_SAVE = 0x0F
 CMD_GET_POWER_SAVE = 0x10
+CMD_SET_NAME = 0x11
+CMD_GET_NAME = 0x12
 
 # Response codes (request + 64)
 RESP_SET_PIN_CONFIG = CMD_SET_PIN_CONFIG + 0x40
@@ -57,6 +59,8 @@ RESP_SET_MIDI_LOOPBACK = CMD_SET_MIDI_LOOPBACK + 0x40
 RESP_GET_MIDI_LOOPBACK = CMD_GET_MIDI_LOOPBACK + 0x40
 RESP_SET_POWER_SAVE = CMD_SET_POWER_SAVE + 0x40
 RESP_GET_POWER_SAVE = CMD_GET_POWER_SAVE + 0x40
+RESP_SET_NAME = CMD_SET_NAME + 0x40
+RESP_GET_NAME = CMD_GET_NAME + 0x40
 
 RESP_ERROR = 0x7F
 
@@ -96,6 +100,9 @@ PEER_ENTRY_RESPONSES = {
 
 PEER_ENTRY_PAYLOAD_SIZE = 13
 
+# Client name: printable ASCII (0x20-0x7E), at most 16 characters
+MAX_NAME_LENGTH = 16
+
 # Pin modes (enomik_io.h)
 MODE_INPUT = 0x00
 MODE_OUTPUT = 0x01
@@ -108,6 +115,7 @@ MODE_INPUT_TOUCH = 0x05
 MIDI_NOTE_OFF = 0x80
 MIDI_NOTE_ON = 0x90
 MIDI_CONTROL_CHANGE = 0xB0
+MIDI_PITCH_BEND = 0xE0
 
 
 def _header(cmd: int) -> list[int]:
@@ -130,6 +138,11 @@ def _nibbles_to_mac(nibbles: list[int]) -> list[int]:
 
 
 # --- Builders ----------------------------------------------------------------
+def build_raw(cmd: int, payload: list[int] | None = None, major: int = PROTOCOL_MAJOR) -> list[int]:
+    """Any command with any payload, e.g. to test the firmware's error replies."""
+    return [MANUFACTURER_ID, major, PROTOCOL_MINOR, cmd] + list(payload or [])
+
+
 def build_get_mac() -> list[int]:
     return _header(CMD_GET_MAC)
 
@@ -168,6 +181,18 @@ def build_set_power_save(enabled: bool) -> list[int]:
 
 def build_get_power_save() -> list[int]:
     return _header(CMD_GET_POWER_SAVE)
+
+
+def build_set_name(name: str) -> list[int]:
+    """Override the client name. An empty name clears the override."""
+    data = list(name.encode("ascii"))
+    if len(data) > MAX_NAME_LENGTH or any(b < 0x20 or b > 0x7E for b in data):
+        raise ValueError(f"name must be printable ASCII, at most {MAX_NAME_LENGTH} characters")
+    return _header(CMD_SET_NAME) + data
+
+
+def build_get_name() -> list[int]:
+    return _header(CMD_GET_NAME)
 
 
 def build_get_peer(index: int) -> list[int]:
@@ -269,6 +294,9 @@ def parse(data: list[int]) -> dict | None:
     if cmd in (RESP_SET_POWER_SAVE, RESP_GET_POWER_SAVE) and len(payload) >= 1:
         return {"cmd": "power_save", "enabled": bool(payload[0])}
 
+    if cmd in (RESP_SET_NAME, RESP_GET_NAME):
+        return {"cmd": "name", "name": bytes(payload).decode("ascii", errors="replace")}
+
     if cmd == RESP_CLEAR_PIN_CONFIGS:
         return {"cmd": "clear_pin_configs"}
 
@@ -283,6 +311,7 @@ def parse(data: list[int]) -> dict | None:
             "cmd": "version",
             "major": payload[0] if len(payload) > 0 else None,
             "minor": payload[1] if len(payload) > 1 else None,
+            "patch": payload[2] if len(payload) > 2 else None,
         }
 
     if cmd == RESP_ADD_PEER and len(payload) >= 1 and payload[0] == 1:

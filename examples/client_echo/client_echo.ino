@@ -48,6 +48,7 @@ void onClock() {
 
 void setup() {
   Serial.begin(115200);
+  _client.setName("client_echo"); // optional
   _client.begin();
   // _client.addPeer(peerMacAddress);
 

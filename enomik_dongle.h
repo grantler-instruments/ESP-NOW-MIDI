@@ -6,6 +6,9 @@
 #include "include/MidiMessageHistory.h"
 #include "include/UsbMidiQueue.h"
 #include "include/UsbSysExQueue.h"
+#include "include/UsbStallWatchdog.h"
+#include "include/MidiInbox.h"
+#include "include/UsbMidiPacket.h"
 #include "include/esp_now_midi_compat.h"
 #include "utils/esp.h"
 #include "utils/mac.h"
@@ -40,6 +43,12 @@ MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, g_dongle_usb_midi, DONGLE_USBMIDI);
 TinyUsbRawMidiClass g_dongle_usb_midi;
 TinyUsbMidiClass DONGLE_USBMIDI;
 #endif
+
+// Used by the USB watchdog. Weak references: if a TinyUSB build lacks either
+// symbol, the pointer is null and the watchdog falls back to queue-based
+// detection instead of failing to link.
+extern "C" bool usbd_edpt_busy(uint8_t rhport, uint8_t ep_addr) __attribute__((weak));
+extern "C" uint8_t const *tud_descriptor_configuration_cb(uint8_t index) __attribute__((weak));
 #endif
 
 namespace enomik
@@ -120,6 +129,8 @@ namespace enomik
             memset(_baseMac, 0, sizeof(_baseMac));
             memset(_messageHistory, 0, sizeof(_messageHistory));
             instancePtr = this;
+            espnowMIDI.setHandleMessage(onEspNowMessageStatic);
+            espnowMIDI.setHandleSysEx(handleSysExStatic);
         }
 
         /**
@@ -199,6 +210,7 @@ namespace enomik
 
             TinyUSBDevice.setManufacturerDescriptor(_manufacturer);
             TinyUSBDevice.setProductDescriptor(_product);
+            TinyUSBDevice.setSerialDescriptor(usbSerialFromMac());
 
             g_dongle_usb_midi.begin();
 
@@ -218,20 +230,8 @@ namespace enomik
             readMacAddress();
             EspNowMidiLog::i("Mac: %s", macToString(_baseMac).c_str());
 
-            espnowMIDI.setHandleNoteOn(handleNoteOnStatic);
-            espnowMIDI.setHandleNoteOff(handleNoteOffStatic);
-            espnowMIDI.setHandleControlChange(handleControlChangeStatic);
-            espnowMIDI.setHandleProgramChange(handleProgramChangeStatic);
-            espnowMIDI.setHandlePitchBend(handlePitchBendStatic);
-            espnowMIDI.setHandleAfterTouchChannel(handleAfterTouchChannelStatic);
-            espnowMIDI.setHandleAfterTouchPoly(handleAfterTouchPolyStatic);
-            espnowMIDI.setHandleStart(handleStartStatic);
-            espnowMIDI.setHandleStop(handleStopStatic);
-            espnowMIDI.setHandleContinue(handleContinueStatic);
-            espnowMIDI.setHandleClock(handleClockStatic);
-            espnowMIDI.setHandleSongPosition(handleSongPositionStatic);
-            espnowMIDI.setHandleSongSelect(handleSongSelectStatic);
-            espnowMIDI.setHandleSysEx(handleSysExStatic);
+            loadUsbHealthPrevious();
+
 
             if (!peerStorage.begin())
             {
@@ -306,8 +306,16 @@ namespace enomik
             {
                 EspNowMidiLog::i("USB disconnected");
                 _usbMidiInitialized = false;
-                _usbMidiQueue.clear();
-                _usbSysExQueue.clear();
+                if (_usbWatchdog.isRecovering(now))
+                {
+                    // Our own re-attach: keep what is waiting for the host.
+                    _usbClearDeferred = true;
+                }
+                else
+                {
+                    _usbMidiQueue.clear();
+                    _usbSysExQueue.clear();
+                }
             }
 
             if (!_usbMidiInitialized && TinyUSBDevice.mounted())
@@ -336,6 +344,8 @@ namespace enomik
                 EspNowMidiLog::i("USB MIDI ready!");
             }
 
+            processReceived();
+
             if (_usbMidiInitialized)
             {
                 DONGLE_USBMIDI.read();
@@ -343,6 +353,7 @@ namespace enomik
                 drainUsbSysExQueue();
             }
 
+            serviceUsbWatchdog(now);
             logUsbState(now);
             updateDisplay(now);
 #endif
@@ -370,6 +381,142 @@ namespace enomik
 #endif
         }
 
+        /**
+         * @brief Maximum age (ms) of a message waiting for the USB host.
+         *
+         * When the host stops reading for a while, messages older than this are
+         * dropped instead of being delivered late as a backlog. Release messages
+         * (Note Off, pedal off, All Notes Off, Stop, ...) are always delivered and
+         * the latest value of each CC / pitch bend / pressure / program is kept.
+         * Default `USB_MIDI_STALE_MS` (500). 0 disables dropping.
+         */
+        void setUsbStaleTimeout(uint32_t maxAgeMs)
+        {
+            _usbStaleMs = maxAgeMs;
+        }
+
+        /** @return Current stale timeout in milliseconds (0 = disabled). */
+        uint32_t getUsbStaleTimeout() const
+        {
+            return _usbStaleMs;
+        }
+
+        /** @return Messages to the USB host dropped as stale since boot. */
+        uint32_t getUsbStaleDropCount()
+        {
+            return _usbMidiQueue.staleDropCount();
+        }
+
+        /** @return Messages to the USB host dropped because the queue was full. */
+        uint32_t getUsbOverflowDropCount()
+        {
+            return _usbMidiQueue.overflowDropCount();
+        }
+
+        /**
+         * @brief Sets what the USB watchdog may do (default: Recover).
+         *
+         * The watchdog notices when the computer stops taking MIDI from the
+         * dongle while messages are waiting, and recovers by re-attaching USB,
+         * like unplugging and replugging the cable:
+         * - USB suspended and the computer refuses remote wakeup (at most once
+         *   per suspend; see UsbWatchdogConfig::recoverFromSuspend), or
+         * - the MIDI IN endpoint not read for 500 ms, but only if the computer
+         *   did read from the dongle earlier in this connection and is not
+         *   sending MIDI itself (a computer with no app listening is left alone).
+         * It backs off (30 s doubling to 10 min) when a re-attach did not get
+         * data through. `Observe` only counts, `Off` disables re-attaching.
+         */
+        void setUsbWatchdogMode(UsbWatchdogMode mode)
+        {
+            _usbWatchdog.setMode(mode);
+        }
+
+        /** @return Current USB watchdog mode. */
+        UsbWatchdogMode getUsbWatchdogMode() const
+        {
+            return _usbWatchdog.mode();
+        }
+
+        /** @brief Timing of the USB watchdog; adjust before or after begin(). */
+        UsbWatchdogConfig &usbWatchdogConfig()
+        {
+            return _usbWatchdog.config();
+        }
+
+        /** @return USB health counters since boot. */
+        const UsbHealthStats &getUsbHealthStats() const
+        {
+            return _usbWatchdog.stats();
+        }
+
+        /**
+         * @brief USB health counters of the last earlier session that had a USB
+         * incident (refused wakeup or re-attach), saved to flash.
+         * @return false when none was saved.
+         */
+        bool getUsbHealthStatsPrevious(UsbHealthStats &out) const
+        {
+            if (!_usbPrevStatsValid)
+            {
+                return false;
+            }
+            out = _usbPrevStats;
+            return true;
+        }
+
+        /** @return Value that changes whenever a USB health counter changes. */
+        uint32_t usbHealthSignature() const
+        {
+            const UsbHealthStats &st = _usbWatchdog.stats();
+            return st.suspends * 1u + st.longestSuspendMs / 1000u * 3u + st.wakeupsTried * 5u +
+                   st.wakeupsRefused * 7u + st.stalls * 11u + st.longestBusyMs * 13u +
+                   st.reattaches * 17u + st.recoveries * 19u + static_cast<uint32_t>(_usbWatchdog.mode()) * 23u;
+        }
+
+#ifdef ENOMIK_USB_FAULT_INJECT
+        /** @brief Test-only USB faults (build with ENOMIK_USB_FAULT_INJECT). */
+        enum class UsbFault : uint8_t
+        {
+            None,
+            StuckEndpoint, ///< Pretend the host stopped reading the MIDI IN endpoint.
+            Suspended,     ///< Pretend USB is suspended and remote wakeup is refused.
+        };
+
+        /** @brief Simulates a USB fault; a watchdog re-attach clears it, like a real replug. */
+        void injectUsbFault(UsbFault fault)
+        {
+            _usbFault = fault;
+        }
+
+        UsbFault getUsbFault() const
+        {
+            return _usbFault;
+        }
+#endif
+
+        /**
+         * @brief Handles MIDI received over ESP-NOW (mute, filter, history, USB queue).
+         *
+         * Called by loop(). Received messages wait in an inbox until then, so all
+         * of this runs in the loop task, not in the ESP-NOW receive callback.
+         */
+        void processReceived()
+        {
+            midi_message msg;
+            uint8_t from[6];
+            for (int i = 0; i < MIDI_INBOX_SIZE && _inbox.pop(msg, from); ++i)
+            {
+                bridgeToHost(msg, from);
+            }
+        }
+
+        /** @return ESP-NOW messages dropped because loop() fell behind (since boot). */
+        uint32_t getReceiveDropCount() const
+        {
+            return _inbox.droppedCount();
+        }
+
         /** @return true when USB is mounted and MIDI handlers are registered. */
         bool isUsbReady() const
         {
@@ -394,13 +541,24 @@ namespace enomik
         }
 
         /**
-         * @brief Gets the MAC address of a registered peer.
+         * @brief Copies the MAC address of a registered peer.
          * @param index Peer index in `[0, getPeersCount())`.
-         * @return Pointer to the 6-byte MAC, or `nullptr` when @p index is out of range.
+         * @param mac Receives the 6-byte MAC.
+         * @return `false` when @p index is out of range.
          */
+        bool getPeer(int index, uint8_t mac[6]) const
+        {
+            return espnowMIDI.getPeer(index, mac);
+        }
+
+        /** @deprecated Use getPeer(index, mac). */
+        [[deprecated("use getPeer(index, mac)")]]
         const uint8_t *getPeer(int index) const
         {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
             return espnowMIDI.getPeer(index);
+#pragma GCC diagnostic pop
         }
 
         /** @brief Force the next loop() to refresh the display (e.g. after UI input). */
@@ -451,14 +609,8 @@ namespace enomik
 
         bool removePeer(int index)
         {
-            const uint8_t *mac = espnowMIDI.getPeer(index);
-            if (!mac)
-            {
-                return false;
-            }
-            uint8_t copy[6];
-            memcpy(copy, mac, 6);
-            return removePeer(copy);
+            uint8_t mac[6];
+            return espnowMIDI.getPeer(index, mac) && removePeer(mac);
         }
 
         /**
@@ -536,7 +688,8 @@ namespace enomik
 
         bool setMuted(int index, bool muted)
         {
-            return setMuted(espnowMIDI.getPeer(index), muted);
+            uint8_t mac[6];
+            return espnowMIDI.getPeer(index, mac) && setMuted(mac, muted);
         }
 
         bool isMuted(const uint8_t mac[6]) const
@@ -546,7 +699,8 @@ namespace enomik
 
         bool isMuted(int index) const
         {
-            return isMuted(espnowMIDI.getPeer(index));
+            uint8_t mac[6];
+            return espnowMIDI.getPeer(index, mac) && isMuted(mac);
         }
 
         /**
@@ -735,6 +889,26 @@ namespace enomik
         unsigned long _lastDrawnSecond;
         UsbMidiQueue _usbMidiQueue;
         UsbSysExQueue _usbSysExQueue;
+        uint32_t _usbStaleMs = USB_MIDI_STALE_MS;
+        uint32_t _lastStaleCheckMs = 0;
+        UsbStallWatchdog _usbWatchdog;
+        MidiInbox _inbox;
+        bool _usbAgingPaused = false;
+        bool _usbClearDeferred = false;
+        bool _usbWrote = false;
+        bool _usbLastWriteFailed = false;
+        bool _usbEpLookupDone = false;
+        uint8_t _usbMidiInEp = 0;
+        bool _usbDetachedByWatchdog = false;
+        uint32_t _usbDetachedAt = 0;
+        UsbHealthStats _usbPrevStats;
+        bool _usbPrevStatsValid = false;
+        uint32_t _usbSavedIncidents = 0;
+        bool _usbStatsSavedOnce = false;
+        uint32_t _usbStatsSavedAt = 0;
+#ifdef ENOMIK_USB_FAULT_INJECT
+        UsbFault _usbFault = UsbFault::None;
+#endif
         MidiMessageHistory _messageHistory[DONGLE_MAX_HISTORY];
         int _messageIndex;
         uint8_t _baseMac[6];
@@ -765,13 +939,14 @@ namespace enomik
         }
 
         /** ESP-NOW → USB host. Drops muted senders, then toHost filter, then queues. */
-        void bridgeToHost(midi_message &msg, bool addHistory = true)
+        void bridgeToHost(midi_message &msg, const uint8_t from[6])
         {
-            const uint8_t *from = espnowMIDI.lastSenderMac();
-            if (from && isMuted(from))
+            if (!isBridgedToHost(msg.status) || isMuted(from))
             {
                 return;
             }
+            msg.firstByte &= 0x7F;
+            msg.secondByte &= 0x7F;
             if (_toHostFilter && !_toHostFilter(msg))
             {
                 return;
@@ -781,12 +956,36 @@ namespace enomik
                 _usbMidiQueue.enqueueClock();
                 return;
             }
-            queueToUsb(msg, addHistory);
+            queueToUsb(msg, msg.status != MIDI_SONG_POS_POINTER);
+        }
+
+        static bool isBridgedToHost(MidiStatus status)
+        {
+            switch (status)
+            {
+            case MIDI_NOTE_ON:
+            case MIDI_NOTE_OFF:
+            case MIDI_CONTROL_CHANGE:
+            case MIDI_PROGRAM_CHANGE:
+            case MIDI_PITCH_BEND:
+            case MIDI_AFTERTOUCH:
+            case MIDI_POLY_AFTERTOUCH:
+            case MIDI_START:
+            case MIDI_STOP:
+            case MIDI_CONTINUE:
+            case MIDI_TIME_CLOCK:
+            case MIDI_SONG_POS_POINTER:
+            case MIDI_SONG_SELECT:
+                return true;
+            default:
+                return false;
+            }
         }
 
         /** USB host → ESP-NOW. Runs fromHost filter, then history + send. */
         void bridgeFromHost(midi_message &msg, bool addHistory = true)
         {
+            _usbWatchdog.noteHostRx(millis());
             if (_fromHostFilter && !_fromHostFilter(msg))
             {
                 return;
@@ -811,7 +1010,8 @@ namespace enomik
 
         esp_err_t sendToUnmutedPeers(const uint8_t *data, size_t len)
         {
-            const int n = espnowMIDI.getPeersCount();
+            uint8_t macs[MAX_PEERS][6];
+            const int n = espnowMIDI.copyPeers(macs, MAX_PEERS);
             if (n == 0)
             {
                 return ESP_FAIL;
@@ -819,12 +1019,11 @@ namespace enomik
             esp_err_t result = ESP_OK;
             for (int i = 0; i < n; i++)
             {
-                const uint8_t *mac = espnowMIDI.getPeer(i);
-                if (!mac || isMuted(mac))
+                if (isMuted(macs[i]))
                 {
                     continue;
                 }
-                const esp_err_t err = espnowMIDI.send(mac, data, len);
+                const esp_err_t err = espnowMIDI.send(macs[i], data, len);
                 if (err != ESP_OK)
                 {
                     result = err;
@@ -835,7 +1034,11 @@ namespace enomik
 
         esp_err_t sendMidiToUnmutedPeers(const midi_message &msg)
         {
-            return sendToUnmutedPeers(reinterpret_cast<const uint8_t *>(&msg), sizeof(msg));
+            // Wire format = the 1-3 byte MIDI packet the core sends and parses,
+            // never the internal midi_message struct (7 bytes on ESP32, which
+            // receivers would treat as SysEx and ignore).
+            const midi_message_packet packet = midi_message_packet::fromMessage(msg);
+            return sendToUnmutedPeers(reinterpret_cast<const uint8_t *>(&packet), packet.getDataSize());
         }
 
         void readMacAddress()
@@ -850,83 +1053,49 @@ namespace enomik
 #ifdef HAS_USB_MIDI
         bool sendQueuedMidi(const midi_message &msg)
         {
-            const uint8_t ch = (msg.channel - 1) & 0x0F;
-            uint8_t packet[4] = {0, 0, 0, 0};
-
-            switch (msg.status)
+            uint8_t packet[4];
+            if (!toUsbMidiPacket(msg, packet))
             {
-            case MIDI_NOTE_ON:
-                packet[0] = 0x09;
-                packet[1] = MIDI_NOTE_ON | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_NOTE_OFF:
-                packet[0] = 0x08;
-                packet[1] = MIDI_NOTE_OFF | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_CONTROL_CHANGE:
-                packet[0] = 0x0B;
-                packet[1] = MIDI_CONTROL_CHANGE | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_PROGRAM_CHANGE:
-                packet[0] = 0x0C;
-                packet[1] = MIDI_PROGRAM_CHANGE | ch;
-                packet[2] = msg.firstByte;
-                break;
-            case MIDI_AFTERTOUCH:
-                packet[0] = 0x0D;
-                packet[1] = MIDI_AFTERTOUCH | ch;
-                packet[2] = msg.firstByte;
-                break;
-            case MIDI_POLY_AFTERTOUCH:
-                packet[0] = 0x0A;
-                packet[1] = MIDI_POLY_AFTERTOUCH | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_PITCH_BEND:
-                packet[0] = 0x0E;
-                packet[1] = MIDI_PITCH_BEND | ch;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_START:
-                packet[0] = 0x0F;
-                packet[1] = MIDI_START;
-                break;
-            case MIDI_STOP:
-                packet[0] = 0x0F;
-                packet[1] = MIDI_STOP;
-                break;
-            case MIDI_CONTINUE:
-                packet[0] = 0x0F;
-                packet[1] = MIDI_CONTINUE;
-                break;
-            case MIDI_TIME_CLOCK:
-                packet[0] = 0x0F;
-                packet[1] = MIDI_TIME_CLOCK;
-                break;
-            case MIDI_SONG_POS_POINTER:
-                packet[0] = 0x03;
-                packet[1] = MIDI_SONG_POS_POINTER;
-                packet[2] = msg.firstByte;
-                packet[3] = msg.secondByte;
-                break;
-            case MIDI_SONG_SELECT:
-                packet[0] = 0x02;
-                packet[1] = MIDI_SONG_SELECT;
-                packet[2] = msg.firstByte;
-                break;
-            default:
-                return true;
+                return true; // nothing to send; drop it from the queue
             }
+            const bool written = g_dongle_usb_midi.writePacket(packet);
+            if (written)
+            {
+                _usbWrote = true;
+            }
+            return written;
+        }
 
-            return g_dongle_usb_midi.writePacket(packet);
+        void dropStaleUsbMidi()
+        {
+            const uint32_t now = millis();
+            // While the watchdog re-attaches USB, waiting messages must not age
+            // out; afterwards they get a fresh stale window.
+            if (_usbWatchdog.isRecovering(now))
+            {
+                _usbAgingPaused = true;
+                return;
+            }
+            if (_usbAgingPaused)
+            {
+                _usbAgingPaused = false;
+                _usbMidiQueue.refreshTimestamps(now);
+            }
+            if (_usbStaleMs == 0)
+            {
+                return;
+            }
+            // Rate-limited: a stalled queue would otherwise be rescanned every loop.
+            if ((uint32_t)(now - _lastStaleCheckMs) < 20)
+            {
+                return;
+            }
+            _lastStaleCheckMs = now;
+            const uint16_t dropped = _usbMidiQueue.dropStale(now, _usbStaleMs);
+            if (dropped > 0)
+            {
+                EspNowMidiLog::d("USB host not reading: dropped %u stale message(s)", dropped);
+            }
         }
 
         void drainUsbMidiQueue()
@@ -936,12 +1105,12 @@ namespace enomik
                 return;
             }
 
+            dropStaleUsbMidi();
+
+            // Remote wakeup while suspended is requested by the USB watchdog
+            // (rate-limited) instead of on every loop.
             if (TinyUSBDevice.suspended())
             {
-                if (_usbMidiQueue.hasPending() || _usbSysExQueue.hasPending())
-                {
-                    TinyUSBDevice.remoteWakeup();
-                }
                 return;
             }
 
@@ -950,15 +1119,201 @@ namespace enomik
                 return;
             }
 
+#ifdef ENOMIK_USB_FAULT_INJECT
+            if (_usbFault != UsbFault::None)
+            {
+                return; // simulated: nothing reaches the host
+            }
+#endif
+
             midi_message msg;
             while (_usbMidiQueue.peek(msg))
             {
                 if (!sendQueuedMidi(msg))
                 {
-                    break;
+                    _usbLastWriteFailed = true;
+                    return;
                 }
                 _usbMidiQueue.consumeHead();
             }
+            _usbLastWriteFailed = false;
+        }
+
+        /** @return true while data handed to USB has not been read by the host. */
+        bool usbTxBlocked()
+        {
+#ifdef ENOMIK_USB_FAULT_INJECT
+            if (_usbFault == UsbFault::StuckEndpoint)
+            {
+                return _usbMidiQueue.hasPending();
+            }
+#endif
+            if (!_usbEpLookupDone && TinyUSBDevice.mounted())
+            {
+                _usbEpLookupDone = true;
+                if (tud_descriptor_configuration_cb && usbd_edpt_busy)
+                {
+                    _usbMidiInEp = findMidiInEndpoint(tud_descriptor_configuration_cb(0));
+                }
+                if (_usbMidiInEp)
+                {
+                    EspNowMidiLog::i("USB watchdog: MIDI IN endpoint 0x%02X", _usbMidiInEp);
+                }
+                else
+                {
+                    EspNowMidiLog::w("USB watchdog: MIDI IN endpoint unknown, using queue fallback");
+                }
+            }
+            if (_usbMidiInEp && usbd_edpt_busy)
+            {
+                return usbd_edpt_busy(0, _usbMidiInEp);
+            }
+            // Fallback: only a full TinyUSB buffer is visible.
+            return _usbMidiQueue.hasPending() && _usbLastWriteFailed;
+        }
+
+        void serviceUsbWatchdog(uint32_t now)
+        {
+            UsbWatchdogInputs in;
+            in.now = now;
+            in.mounted = TinyUSBDevice.mounted();
+            in.suspended = TinyUSBDevice.suspended();
+            in.pending = _usbMidiQueue.hasPending();
+            in.txBlocked = usbTxBlocked();
+            in.endpointKnown = _usbMidiInEp != 0 && usbd_edpt_busy != nullptr;
+            in.wrote = _usbWrote;
+            _usbWrote = false;
+#ifdef ENOMIK_USB_FAULT_INJECT
+            if (_usbFault == UsbFault::Suspended && in.mounted)
+            {
+                in.suspended = true;
+            }
+            if (_usbFault == UsbFault::StuckEndpoint)
+            {
+                in.endpointKnown = true;
+            }
+#endif
+
+            switch (_usbWatchdog.tick(in))
+            {
+            case UsbWatchdogAction::RemoteWakeup:
+            {
+                bool accepted = false;
+#ifdef ENOMIK_USB_FAULT_INJECT
+                if (_usbFault == UsbFault::Suspended)
+                {
+                    _usbWatchdog.noteWakeupResult(false);
+                    break;
+                }
+#endif
+                accepted = tud_remote_wakeup();
+                // false can also mean the host resumed the bus just now: only
+                // a refusal while still suspended counts.
+                _usbWatchdog.noteWakeupResult(accepted || !TinyUSBDevice.suspended());
+                EspNowMidiLog::i("USB suspended with MIDI waiting: remote wakeup %s",
+                                 accepted ? "sent" : "not allowed by host");
+                break;
+            }
+            case UsbWatchdogAction::Detach:
+                EspNowMidiLog::w("USB host stopped taking MIDI: re-attaching USB");
+                TinyUSBDevice.detach();
+                _usbDetachedByWatchdog = true;
+                _usbDetachedAt = now;
+#ifdef ENOMIK_USB_FAULT_INJECT
+                _usbFault = UsbFault::None; // a replug fixes the simulated fault
+#endif
+                break;
+            case UsbWatchdogAction::Attach:
+                TinyUSBDevice.attach();
+                _usbDetachedByWatchdog = false;
+                EspNowMidiLog::i("USB re-attached");
+                break;
+            default:
+                break;
+            }
+
+            // Failsafe: never stay detached, whatever happens above.
+            if (_usbDetachedByWatchdog && (uint32_t)(now - _usbDetachedAt) > 2000)
+            {
+                TinyUSBDevice.attach();
+                _usbDetachedByWatchdog = false;
+                EspNowMidiLog::e("USB watchdog: forced re-attach");
+            }
+
+            // A disconnect during our recovery kept the queue; if USB did not
+            // come back by the end of the recovery window, clear it as usual.
+            if (_usbClearDeferred && !_usbWatchdog.isRecovering(now))
+            {
+                _usbClearDeferred = false;
+                if (!TinyUSBDevice.mounted())
+                {
+                    _usbMidiQueue.clear();
+                    _usbSysExQueue.clear();
+                }
+            }
+
+            saveUsbHealthIfNeeded(now);
+        }
+
+        static constexpr uint32_t kUsbStatsMagic = 0x55534231; // "USB1"
+
+        struct StoredUsbHealth
+        {
+            uint32_t magic;
+            UsbHealthStats stats;
+        };
+
+        // Stalls alone are not saved: a host with no app reading the input
+        // stalls on every message without anything being wrong.
+        static uint32_t usbIncidents(const UsbHealthStats &st)
+        {
+            return st.wakeupsRefused + st.reattaches + st.recoveries;
+        }
+
+        void loadUsbHealthPrevious()
+        {
+            Preferences prefs;
+            if (!prefs.begin("enomik", true))
+            {
+                return;
+            }
+            StoredUsbHealth stored{};
+            const size_t n = prefs.getBytes("usb_health", &stored, sizeof(stored));
+            prefs.end();
+            if (n == sizeof(stored) && stored.magic == kUsbStatsMagic)
+            {
+                _usbPrevStats = stored.stats;
+                _usbPrevStatsValid = true;
+            }
+        }
+
+        // Writes only after a USB incident, at most once a minute, and not
+        // during a recovery (re-enumeration): normal operation causes no flash
+        // writes.
+        void saveUsbHealthIfNeeded(uint32_t now)
+        {
+            const UsbHealthStats &st = _usbWatchdog.stats();
+            const uint32_t incidents = usbIncidents(st);
+            if (incidents == _usbSavedIncidents || _usbWatchdog.isRecovering(now))
+            {
+                return;
+            }
+            if (_usbStatsSavedOnce && (uint32_t)(now - _usbStatsSavedAt) < 60000)
+            {
+                return;
+            }
+            StoredUsbHealth stored{};
+            stored.magic = kUsbStatsMagic;
+            stored.stats = st;
+            Preferences prefs;
+            if (prefs.begin("enomik", false))
+            {
+                prefs.putBytes("usb_health", &stored, sizeof(stored));
+                prefs.end();
+            }
+            _usbSavedIncidents = incidents;
+            _usbStatsSavedOnce = true;
+            _usbStatsSavedAt = now;
         }
 
         void drainUsbSysExQueue()
@@ -972,12 +1327,9 @@ namespace enomik
             uint16_t length = 0;
             while (_usbSysExQueue.peek(data, length))
             {
-#ifdef ARDUINO
-                // Array already includes F0/F7 boundaries.
-                DONGLE_USBMIDI.sendSysEx(length, data, true);
-#else
-                DONGLE_USBMIDI.sendSysEx(length, data);
-#endif
+                // Whole USB-MIDI packets, like the rest of the dongle's USB output
+                writeUsbMidiSysEx(data, length, [](const uint8_t packet[4])
+                                  { return g_dongle_usb_midi.writePacket(packet); });
                 _usbSysExQueue.consumeHead();
             }
         }
@@ -1043,161 +1395,13 @@ namespace enomik
 
         // --- ESP-NOW → USB host ---
 
-        static void handleNoteOnStatic(byte channel, byte note, byte velocity)
+        // Runs in the ESP-NOW receive callback (WiFi task): only hand over.
+        static void onEspNowMessageStatic(const uint8_t *mac, const midi_message &msg)
         {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_NOTE_ON;
-            msg.channel = channel;
-            msg.firstByte = note;
-            msg.secondByte = velocity;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleNoteOffStatic(byte channel, byte note, byte velocity)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_NOTE_OFF;
-            msg.channel = channel;
-            msg.firstByte = note;
-            msg.secondByte = velocity;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleControlChangeStatic(byte channel, byte control, byte value)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_CONTROL_CHANGE;
-            msg.channel = channel;
-            msg.firstByte = control;
-            msg.secondByte = value;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleProgramChangeStatic(byte channel, byte program)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_PROGRAM_CHANGE;
-            msg.channel = channel;
-            msg.firstByte = program;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleAfterTouchChannelStatic(byte channel, byte pressure)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_AFTERTOUCH;
-            msg.channel = channel;
-            msg.firstByte = pressure;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleAfterTouchPolyStatic(byte channel, byte note, byte pressure)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_POLY_AFTERTOUCH;
-            msg.channel = channel;
-            msg.firstByte = note;
-            msg.secondByte = pressure;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handlePitchBendStatic(byte channel, int value)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_PITCH_BEND;
-            msg.channel = channel;
-            const int unsignedValue = value + 8192;
-            msg.firstByte = unsignedValue & 0x7F;
-            msg.secondByte = (unsignedValue >> 7) & 0x7F;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleStartStatic()
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_START;
-            msg.channel = 0;
-            msg.firstByte = 0;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleStopStatic()
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_STOP;
-            msg.channel = 0;
-            msg.firstByte = 0;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleContinueStatic()
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_CONTINUE;
-            msg.channel = 0;
-            msg.firstByte = 0;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
-        }
-
-        static void handleClockStatic()
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_TIME_CLOCK;
-            msg.channel = 0;
-            msg.firstByte = 0;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg, false);
-        }
-
-        static void handleSongPositionStatic(uint16_t value)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_SONG_POS_POINTER;
-            msg.channel = 0;
-            msg.firstByte = value & 0x7F;
-            msg.secondByte = (value >> 7) & 0x7F;
-            instancePtr->bridgeToHost(msg, false);
-        }
-
-        static void handleSongSelectStatic(byte value)
-        {
-            if (!instancePtr)
-                return;
-            midi_message msg;
-            msg.status = MIDI_SONG_SELECT;
-            msg.channel = 0;
-            msg.firstByte = value;
-            msg.secondByte = 0;
-            instancePtr->bridgeToHost(msg);
+            if (instancePtr)
+            {
+                instancePtr->_inbox.push(msg, mac);
+            }
         }
 
         static void handleSysExStatic(uint8_t *data, uint16_t length)
@@ -1369,6 +1573,9 @@ namespace enomik
         static void onSysExStatic(byte *data, unsigned length)
         {
             if (!instancePtr || data == nullptr || length == 0)
+                return;
+            // Enomik config SysEx (manufacturer 0x7D) stays USB-only
+            if (length > 1 && data[1] == 0x7D)
                 return;
             if (length > esp_now_midi_sysex::MAX_MESSAGE)
             {

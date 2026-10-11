@@ -75,6 +75,7 @@ void setup() {
   _servo.attach(SERVO_PIN, 500, 2400);
   _servo.write(90);
 
+  _client.setName("client_servo"); // optional
   _client.begin();
   // _client.addPeer(peerMacAddress);
   _client.setHandleControlChange(onControlChange);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bump library version in version.h, library.properties, idf_component.yml, and esp_now_midi.py."""
+"""Bump library version in version.h, library.properties, library.json, idf_component.yml, and esp_now_midi.py."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 VERSION_H = REPO_ROOT / "include" / "version.h"
 LIBRARY_PROPERTIES = REPO_ROOT / "library.properties"
+LIBRARY_JSON = REPO_ROOT / "library.json"
 IDF_COMPONENT_YML = REPO_ROOT / "idf_component.yml"
 ESP_NOW_MIDI_PY = REPO_ROOT / "esp_now_midi.py"
 WIZARD_SYSEX = REPO_ROOT / "scripts" / "wizard" / "enomik_sysex.py"
@@ -52,6 +53,17 @@ def update_library_properties(major: int, minor: int, patch: int) -> None:
         flags=re.MULTILINE,
     )
     LIBRARY_PROPERTIES.write_text(text, encoding="utf-8")
+
+
+def update_library_json(major: int, minor: int, patch: int) -> None:
+    text = LIBRARY_JSON.read_text(encoding="utf-8")
+    text = re.sub(
+        r'("version":\s*)"[^"]*"',
+        rf'\g<1>"{major}.{minor}.{patch}"',
+        text,
+        count=1,
+    )
+    LIBRARY_JSON.write_text(text, encoding="utf-8")
 
 
 def update_idf_component_yml(major: int, minor: int, patch: int) -> None:
@@ -99,6 +111,7 @@ def main() -> int:
 
     update_version_h(*new)
     update_library_properties(*new)
+    update_library_json(*new)
     update_idf_component_yml(*new)
     update_esp_now_midi_py(*new)
     if args.part in ("major", "minor"):

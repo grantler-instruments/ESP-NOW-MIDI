@@ -10,6 +10,15 @@
 #include "./esp_now_midi_compat.h"
 #include "./esp_now_midi_gpio.h"
 
+// Firmware identity, used to reset the stored client name after a new flash
+#if __has_include("esp_app_desc.h")
+#include "esp_app_desc.h"
+#define ENOMIK_HAS_APP_DESC 1
+#elif __has_include("esp_ota_ops.h")
+#include "esp_ota_ops.h"
+#define ENOMIK_HAS_OTA_APP_DESC 1
+#endif
+
 // Detect ESP32 variant and set ADC resolution
 #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)
 #define ADC_RESOLUTION 13
@@ -44,6 +53,8 @@ namespace enomik
     struct PinState
     {
         int lastValue = -1;
+        /** Last raw digital reading, used to time debounce stability. */
+        int lastRawValue = -1;
         unsigned long lastChangeTime = 0;
         unsigned long lastSendTime = 0;
         float smoothedValue = 0;
@@ -80,6 +91,7 @@ namespace enomik
             _pinConfigs = loadPinConfigsFromPrefs();
             _midiLoopback = loadMidiLoopbackFromPrefs();
             _powerSave = loadPowerSaveFromPrefs();
+            loadNameFromPrefs();
             _pinStates.clear();
 
             for (const auto &config : _pinConfigs)
@@ -113,6 +125,52 @@ namespace enomik
             {
                 _onPowerSaveChanged(_powerSave);
             }
+        }
+
+        /**
+         * @brief Sets the sketch's default client name (used when the app has not set one).
+         *
+         * Printable ASCII only, at most MAX_NAME_LENGTH characters; longer names are cut,
+         * other characters are replaced with '?'.
+         */
+        void setDefaultName(const char *name)
+        {
+            copyName(_defaultName, name);
+            if (_defaultName[0] == '\0')
+            {
+                copyName(_defaultName, DEFAULT_NAME);
+            }
+        }
+
+        /** @brief Returns the effective client name: the app override if set, else the sketch default. */
+        const char *getName() const
+        {
+            return _nameOverride[0] != '\0' ? _nameOverride : _defaultName;
+        }
+
+        /** @brief Sets (or with an empty name clears) the app name override and persists it. */
+        void setNameOverride(const char *name)
+        {
+            copyName(_nameOverride, name);
+            saveNameToPrefs();
+        }
+
+        /**
+         * @brief Replaces analogRead() for analog input pins, e.g. to fake a sensor in tests.
+         * @param reader Returns the raw ADC value (`0`..`ADC_MAX_VALUE`) for a pin; `nullptr` restores analogRead().
+         */
+        void setAnalogReader(std::function<int(uint8_t pin)> reader)
+        {
+            _analogReader = reader;
+        }
+
+        /**
+         * @brief Replaces digitalRead() for digital input pins, e.g. to fake buttons in tests.
+         * @param reader Returns `HIGH` or `LOW` for a pin; `nullptr` restores digitalRead().
+         */
+        void setDigitalReader(std::function<int(uint8_t pin)> reader)
+        {
+            _digitalReader = reader;
         }
 
         /** @brief Registers a callback invoked when the power-save preference changes. */
@@ -191,7 +249,7 @@ namespace enomik
             }
         }
 
-        /** @brief Applies raw 14-bit pitch bend (`0`–`16383`, center `8192`) to matching output pins. */
+        /** @brief Applies signed pitch bend (`-8192`–`8191`, center `0`) to matching output pins. */
         void onPitchBend(byte channel, int bend)
         {
             for (auto &config : _pinConfigs)
@@ -201,11 +259,11 @@ namespace enomik
                 {
                     if (config.mode == ENOMIK_OUTPUT)
                     {
-                        digitalWrite(config.pin, bend >= 8192 ? HIGH : LOW);
+                        digitalWrite(config.pin, bend > 0 ? HIGH : LOW);
                     }
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
-                        int mappedValue = map(bend, 0, 16383, 0, PWM_MAX_VALUE);
+                        int mappedValue = map(bend + 8192, MIDI_MIN_BEND, MIDI_MAX_BEND, 0, PWM_MAX_VALUE);
                         analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
                     }
                 }
@@ -297,6 +355,10 @@ namespace enomik
         Preferences _preferences;
         bool _midiLoopback = false;
         bool _powerSave = false;
+        static constexpr const char *DEFAULT_NAME = "enomik";
+        static constexpr size_t FIRMWARE_ID_LENGTH = 8;
+        char _defaultName[MAX_NAME_LENGTH + 1] = "enomik";
+        char _nameOverride[MAX_NAME_LENGTH + 1] = "";
 
         // External callbacks
         std::function<void(midi_message)> _onMIDISendRequest;
@@ -304,6 +366,8 @@ namespace enomik
         std::function<const uint8_t *(uint8_t index)> _onGetPeerRequest;
         std::function<void()> _onResetRequest;
         std::function<void(bool)> _onPowerSaveChanged;
+        std::function<int(uint8_t)> _analogReader;
+        std::function<int(uint8_t)> _digitalReader;
 
         void setupSysExHandlers()
         {
@@ -455,6 +519,7 @@ namespace enomik
                     SysExCommand::GET_MIDI_LOOPBACK_RESPONSE, _midiLoopback);
                 _sysexHandler.sendPowerSaveResponse(
                     SysExCommand::GET_POWER_SAVE_RESPONSE, _powerSave);
+                _sysexHandler.sendNameResponse(SysExCommand::GET_NAME_RESPONSE, getName());
                 _sysexHandler.sendSimpleResponse(SysExCommand::GET_CONFIG_RESPONSE); });
 
             _sysexHandler.setOnSetMidiLoopback([this](bool enabled)
@@ -483,6 +548,17 @@ namespace enomik
                 _sysexHandler.sendPowerSaveResponse(
                     SysExCommand::GET_POWER_SAVE_RESPONSE, _powerSave); });
 
+            _sysexHandler.setOnSetName([this](const char *name)
+                                       {
+                EspNowMidiLog::d("SysEx: Setting name '%s'", name);
+                setNameOverride(name);
+                _sysexHandler.sendNameResponse(SysExCommand::SET_NAME_RESPONSE, getName()); });
+
+            _sysexHandler.setOnGetName([this]()
+                                       {
+                EspNowMidiLog::d("SysEx: Getting name");
+                _sysexHandler.sendNameResponse(SysExCommand::GET_NAME_RESPONSE, getName()); });
+
             // Handler for system reset
             _sysexHandler.setOnReset([this]()
                                      {
@@ -493,6 +569,7 @@ namespace enomik
                 _pinStates.clear();
                 _midiLoopback = false;
                 _powerSave = false;
+                _nameOverride[0] = '\0';
 
                 // Clear stored preferences
                 _preferences.begin("pinconfigs", false);
@@ -501,6 +578,7 @@ namespace enomik
                 _preferences.begin("enomik", false);
                 _preferences.clear();
                 _preferences.end();
+                saveFirmwareIdToPrefs(); // not a new flash: keep the next boot from resetting again
 
                 if (_onPowerSaveChanged)
                 {
@@ -563,15 +641,25 @@ namespace enomik
         bool processDigitalInput(const PinConfig &config, PinState &state,
                                  unsigned long now, int &currentValue)
         {
-            currentValue = digitalRead(config.pin);
+            const int reading = _digitalReader ? _digitalReader(config.pin) : digitalRead(config.pin);
 
-            if (currentValue != state.lastValue)
+            // Restart the stability window whenever the raw level flips.
+            if (reading != state.lastRawValue)
             {
+                state.lastRawValue = reading;
                 state.lastChangeTime = now;
-                return true;
             }
 
-            return false;
+            // First sample reports the initial state immediately; later
+            // changes must stay stable for DEBOUNCE_MS before being sent.
+            if (state.lastValue != -1 && now - state.lastChangeTime < DEBOUNCE_MS)
+                return false;
+
+            if (reading == state.lastValue)
+                return false;
+
+            currentValue = reading;
+            return true;
         }
 
         static int snapToEndpoints(int value, int minValue, int maxValue, int snap)
@@ -614,7 +702,7 @@ namespace enomik
         bool processAnalogInput(const PinConfig &config, PinState &state,
                                 unsigned long now, int &currentValue)
         {
-            int rawValue = analogRead(config.pin);
+            int rawValue = _analogReader ? _analogReader(config.pin) : analogRead(config.pin);
             if (!updateSmoothedAnalog(rawValue, state))
                 return false;
 
@@ -754,7 +842,13 @@ namespace enomik
 
             case MidiStatus::MIDI_PITCH_BEND:
             {
-                int pb = map(value, 0, 127, 0, 16383);
+                // Analog input is already 14-bit; digital and touch are 7-bit.
+                int pb = value;
+                if (config.mode == ENOMIK_INPUT || config.mode == ENOMIK_INPUT_PULLUP)
+                    pb = pitchBendFrom7Bit(value > 0 ? config.min_midi_value : config.max_midi_value);
+                else if (config.mode != ENOMIK_ANALOG_INPUT)
+                    pb = pitchBendFrom7Bit(value);
+                pb = constrain(pb, MIDI_MIN_BEND, MIDI_MAX_BEND);
                 msg.firstByte = pb & 0x7F;
                 msg.secondByte = (pb >> 7) & 0x7F;
                 break;
@@ -842,6 +936,90 @@ namespace enomik
         bool loadPowerSaveFromPrefs()
         {
             return loadPowerSavePreference();
+        }
+
+        // Copies a name (at most MAX_NAME_LENGTH printable ASCII characters, others become '?')
+        static void copyName(char out[MAX_NAME_LENGTH + 1], const char *name)
+        {
+            size_t i = 0;
+            for (; name && name[i] && i < MAX_NAME_LENGTH; i++)
+            {
+                const uint8_t c = static_cast<uint8_t>(name[i]);
+                out[i] = isNameChar(c) ? static_cast<char>(c) : '?';
+            }
+            out[i] = '\0';
+        }
+
+        // First bytes of the running firmware's ELF SHA-256; changes with every new build
+        static void currentFirmwareId(uint8_t id[FIRMWARE_ID_LENGTH])
+        {
+#if defined(ENOMIK_HAS_APP_DESC)
+            memcpy(id, esp_app_get_description()->app_elf_sha256, FIRMWARE_ID_LENGTH);
+#elif defined(ENOMIK_HAS_OTA_APP_DESC)
+            memcpy(id, esp_ota_get_app_description()->app_elf_sha256, FIRMWARE_ID_LENGTH);
+#else
+            // Fallback: FNV-1a of the build time
+            const char *build = __DATE__ " " __TIME__;
+            uint64_t hash = 1469598103934665603ULL;
+            for (const char *c = build; *c; c++)
+            {
+                hash = (hash ^ static_cast<uint8_t>(*c)) * 1099511628211ULL;
+            }
+            for (size_t i = 0; i < FIRMWARE_ID_LENGTH; i++)
+            {
+                id[i] = static_cast<uint8_t>(hash >> (8 * i));
+            }
+#endif
+        }
+
+        void saveFirmwareIdToPrefs()
+        {
+            uint8_t id[FIRMWARE_ID_LENGTH];
+            currentFirmwareId(id);
+            _preferences.begin("enomik", false);
+            _preferences.putBytes("name_fw", id, FIRMWARE_ID_LENGTH);
+            _preferences.end();
+        }
+
+        // Stored as a fixed MAX_NAME_LENGTH + 1 byte buffer; empty string = no override
+        void saveNameToPrefs()
+        {
+            char buf[MAX_NAME_LENGTH + 1] = {};
+            copyName(buf, _nameOverride);
+            _preferences.begin("enomik", false);
+            _preferences.putBytes("name", buf, sizeof(buf));
+            _preferences.end();
+        }
+
+        // Loads the app name override. A new firmware (different ELF hash) drops it,
+        // so the sketch's setName() default applies again after flashing.
+        void loadNameFromPrefs()
+        {
+            _nameOverride[0] = '\0';
+
+            uint8_t current[FIRMWARE_ID_LENGTH];
+            uint8_t stored[FIRMWARE_ID_LENGTH];
+            currentFirmwareId(current);
+
+            _preferences.begin("enomik", false);
+            const bool sameFirmware =
+                _preferences.getBytes("name_fw", stored, FIRMWARE_ID_LENGTH) == FIRMWARE_ID_LENGTH &&
+                memcmp(stored, current, FIRMWARE_ID_LENGTH) == 0;
+
+            if (sameFirmware)
+            {
+                char buf[MAX_NAME_LENGTH + 1] = {};
+                _preferences.getBytes("name", buf, sizeof(buf));
+                copyName(_nameOverride, buf);
+            }
+            else
+            {
+                char empty[MAX_NAME_LENGTH + 1] = {};
+                _preferences.putBytes("name", empty, sizeof(empty));
+                _preferences.putBytes("name_fw", current, FIRMWARE_ID_LENGTH);
+                EspNowMidiLog::i("New firmware: client name reset to '%s'", _defaultName);
+            }
+            _preferences.end();
         }
 
         std::vector<PinConfig> loadPinConfigsFromPrefs()

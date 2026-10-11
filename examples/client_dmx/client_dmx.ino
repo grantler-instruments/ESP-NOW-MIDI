@@ -136,6 +136,7 @@ void setup() {
   WiFi.mode(WIFI_STA);
 
 
+  _client.setName("client_dmx"); // optional
   _client.begin();
   _client.addPeer(peerMacAddress);
 

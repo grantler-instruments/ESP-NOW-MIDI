@@ -50,6 +50,7 @@ void setup() {
   Serial.begin(115200);
   Wire.begin();
 
+  _client.setName("client_mpu6500"); // optional
   _client.begin();
 
   _mpuOk = myMPU6500.init();

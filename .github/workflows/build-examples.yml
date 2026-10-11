@@ -160,16 +160,20 @@ jobs:
         run: |
           mkdir -p build
           failed=0
-          for sketch in examples/*/; do
-            if [ -d "$sketch" ]; then
-              sketch_name=$(basename "$sketch")
-              echo "Building $sketch_name for ${{ matrix.board.name }}"
-              if ! arduino-cli compile --fqbn ${{ matrix.board.fqbn }} "$sketch" --output-dir build/"$sketch_name"; then
-                echo "Failed to build $sketch_name for ${{ matrix.board.name }}"
-                failed=1
-              fi
+          while IFS= read -r -d '' ino; do
+            sketch=$(dirname "$ino")
+            sketch_name=$(basename "$sketch")
+            # Only the matching main file identifies a sketch; skip extra .ino tabs.
+            [ "$ino" = "$sketch/$sketch_name.ino" ] || continue
+            sketch_path=${sketch#examples/}
+            # Include parent folders so nested sketches get distinct build/artifact names.
+            sketch_id=${sketch_path//\//_}
+            echo "Building $sketch_path for ${{ matrix.board.name }}"
+            if ! arduino-cli compile --fqbn ${{ matrix.board.fqbn }} "$sketch" --output-dir "build/$sketch_id"; then
+              echo "Failed to build $sketch_path for ${{ matrix.board.name }}"
+              failed=1
             fi
-          done
+          done < <(find examples -type f -name '*.ino' -print0)
           exit $failed
           
       - name: Organize binaries for web embedding
@@ -237,6 +241,9 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -251,15 +258,28 @@ jobs:
           FOLDER=$(echo "${TAG}" | sed 's/\./-/g')
           git clone https://x-access-token:${PAT}@github.com/grantler-instruments/enomik-app.git enomik-app
           mkdir -p "enomik-app/app/public/firmware/${FOLDER}"
-          for board in lolin_s2_mini esp32s2 esp32s3; do
-            for sketch in client dongle print_mac; do
-              cp all-binaries/${board}_${sketch}_*.ino.bin "enomik-app/app/public/firmware/${FOLDER}/"
-            done
-          done
           python3 << 'PY'
-          import json, os
+          import json, os, shutil
 
           root = "enomik-app/app/public/firmware"
+          folder = os.path.join(root, os.environ["TAG"].replace(".", "-"))
+          with open("scripts/enomik-firmware-manifest.json", encoding="utf-8") as f:
+              manifest = json.load(f)
+
+          for board in manifest["boards"]:
+              for role in manifest["roles"]:
+                  sketch = role["sketch"]
+                  # Nested Arduino sketches retain their main .ino filename.
+                  main = "dongle" if sketch == "grantler_instruments_dongle" else sketch
+                  source = f"all-binaries/{board['id']}_{sketch}_{main}.ino.bin"
+                  # The app resolves firmware as <board>_<sketch>_<sketch>.ino.bin.
+                  destination = os.path.join(folder, f"{board['id']}_{sketch}_{sketch}.ino.bin")
+                  shutil.copyfile(source, destination)
+
+          with open(os.path.join(folder, "manifest.json"), "w", encoding="utf-8") as f:
+              json.dump(manifest, f, indent=2)
+              f.write("\n")
+
           dirs = [
               d
               for d in os.listdir(root)
@@ -282,5 +302,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "app/public/firmware/${FOLDER}" app/public/firmware/versions.json
-          git commit -m "firmware: add binaries for ${FOLDER}; refresh versions.json"
+          git commit -m "firmware: add binaries and manifest for ${FOLDER}; refresh versions.json"
           git push

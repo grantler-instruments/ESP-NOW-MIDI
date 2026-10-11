@@ -3,9 +3,7 @@
 #include <cstdint>
 #include <cstring>
 
-#ifndef MAX_PEERS
-#define MAX_PEERS 20
-#endif
+#include "./esp_now_midi_helpers.h"
 
 namespace enomik
 {

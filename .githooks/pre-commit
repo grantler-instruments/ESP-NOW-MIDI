@@ -1,0 +1,7 @@
+#!/bin/sh
+# Enable with: git config core.hooksPath .githooks
+set -e
+
+repo_root="$(git rev-parse --show-toplevel)"
+python3 "$repo_root/scripts/check_versions.py"
+python3 "$repo_root/scripts/check_sysex_constants.py"

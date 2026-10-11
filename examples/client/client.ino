@@ -6,6 +6,7 @@ enomik::Client _client;
 
 void setup() {
   Serial.begin(115200);
+  _client.setName("client"); // optional
   _client.begin();
   // _client.addPeer(peerMacAddress);
 }

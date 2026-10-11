@@ -44,6 +44,7 @@ void setup() {
     pinMode(_relayPins[i], OUTPUT);
   }
 
+  _client.setName("waveshare_relay"); // optional
   _client.begin();
   _client.addPeer(peerMacAddress);
 

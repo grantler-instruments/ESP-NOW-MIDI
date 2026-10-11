@@ -119,6 +119,7 @@ private:
   uint8_t lastAddMac_[6] = {0};
   uint32_t lastMutedMask_ = 0;
   bool lastPowerSave_ = false;
+  uint32_t lastUsbSig_ = 0;
 
   uint32_t mutedMaskFor(int peerCount) const {
     uint32_t mask = 0;
@@ -149,6 +150,8 @@ private:
     const uint8_t* addMac = menu_->addMac();
     const uint32_t mutedMask = mutedMaskFor(peerCount);
     const bool powerSave = dongle_ && dongle_->isPowerSave();
+    const uint32_t usbSig =
+        (page == GrantlerMenu::Page::Usb && dongle_) ? dongle_->usbHealthSignature() : 0;
     if (!forceFullPush_ &&
         page == lastDrawnPage_ &&
         cursor == lastCursor_ &&
@@ -157,7 +160,8 @@ private:
         addNibble == lastAddNibble_ &&
         memcmp(addMac, lastAddMac_, 6) == 0 &&
         mutedMask == lastMutedMask_ &&
-        powerSave == lastPowerSave_) {
+        powerSave == lastPowerSave_ &&
+        usbSig == lastUsbSig_) {
       return;
     }
 
@@ -169,6 +173,7 @@ private:
     memcpy(lastAddMac_, addMac, 6);
     lastMutedMask_ = mutedMask;
     lastPowerSave_ = powerSave;
+    lastUsbSig_ = usbSig;
     forceFullPush_ = false;
 
     oled_.clearDisplay();

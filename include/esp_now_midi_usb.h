@@ -29,6 +29,7 @@
 #include "tinyusb.h"
 #include "class/midi/midi_device.h"
 #include "./esp_now_midi_log.h"
+#include "./UsbMidiPacket.h"
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -76,6 +77,12 @@ inline const char *&manufacturerString()
 inline const char *&productString()
 {
     static const char *s = "enomik USB MIDI";
+    return s;
+}
+
+inline const char *&serialString()
+{
+    static const char *s = "0";
     return s;
 }
 
@@ -347,7 +354,7 @@ inline void usbInstall()
         langIdBytes, // 0: language ID
         manufacturerString(),
         productString(),
-        "0", // serial
+        serialString(),
     };
 
     tinyusb_config_t cfg = {};
@@ -387,6 +394,12 @@ public:
             esp_now_midi_usb_detail::productString() = s;
     }
 
+    void setSerialDescriptor(const char *s)
+    {
+        if (s && s[0])
+            esp_now_midi_usb_detail::serialString() = s;
+    }
+
     bool mounted() { return tud_mounted(); }
     bool suspended() { return tud_suspended(); }
     bool ready() { return tud_ready(); }
@@ -405,8 +418,8 @@ inline TinyUSBDeviceClass TinyUSBDevice;
 
 // --- USBMIDI / DONGLE_USBMIDI / CLIENT_USBMIDI-equivalent MIDI object --------
 //
-// Dongle sends via TinyUsbRawMidiClass::writePacket(); Client calls sendX()
-// on this object. Receive path: begin/read + setHandleX() registrations.
+// Dongle and Client send via TinyUsbRawMidiClass::writePacket(); the sendX()
+// methods remain for sketches. Receive path: begin/read + setHandleX() registrations.
 
 class TinyUsbMidiClass
 {
@@ -489,45 +502,11 @@ public:
                   static_cast<uint8_t>((value >> 7) & 0x7F));
     }
     void sendSongSelect(uint8_t value) { sendVoice(0x02, 0xF3, value, 0); }
-    // Best-effort SysEx TX (starts/continues/ends CIN). No-op if length is 0.
+    // Best-effort SysEx TX of a complete F0 ... F7 buffer.
     void sendSysEx(uint16_t length, const uint8_t *data)
     {
-        if (!data || length == 0)
-        {
-            return;
-        }
-        uint16_t i = 0;
-        while (i < length)
-        {
-            const uint16_t remaining = static_cast<uint16_t>(length - i);
-            uint8_t packet[4] = {0, 0, 0, 0};
-            if (remaining > 3)
-            {
-                packet[0] = (i == 0) ? 0x04 : 0x04; // sysex starts/continues
-                packet[1] = data[i++];
-                packet[2] = data[i++];
-                packet[3] = data[i++];
-            }
-            else if (remaining == 3)
-            {
-                packet[0] = 0x07;
-                packet[1] = data[i++];
-                packet[2] = data[i++];
-                packet[3] = data[i++];
-            }
-            else if (remaining == 2)
-            {
-                packet[0] = 0x06;
-                packet[1] = data[i++];
-                packet[2] = data[i++];
-            }
-            else
-            {
-                packet[0] = 0x05;
-                packet[1] = data[i++];
-            }
-            tud_midi_packet_write(packet);
-        }
+        enomik::writeUsbMidiSysEx(data, length, [](const uint8_t packet[4])
+                                  { return tud_midi_packet_write(packet); });
     }
 
 private:
