@@ -439,7 +439,8 @@ namespace enomik
                                    return AddPeerResult::OperationFailed;
                                }
 
-                               if (!espnowMIDI.addPeer(mac))
+                               // Auto-discovered peers are already live in ESP-NOW
+                               if (!espnowMIDI.hasPeer(mac) && !espnowMIDI.addPeer(mac))
                                {
                                    EspNowMidiLog::e("Failed to add peer to ESP-NOW");
                                    peerStorage.remove(mac);
@@ -871,8 +872,8 @@ namespace enomik
                 return false;
             }
 
-            // Then add to ESP-NOW
-            if (!espnowMIDI.addPeer(mac))
+            // Then add to ESP-NOW, unless auto-discovery already did
+            if (!espnowMIDI.hasPeer(mac) && !espnowMIDI.addPeer(mac))
             {
                 EspNowMidiLog::e("Failed to add peer to ESP-NOW");
                 // Rollback storage change
@@ -895,13 +896,13 @@ namespace enomik
 
         bool removePeer(const uint8_t *mac)
         {
-            if (peerStorage.remove(mac))
+            if (!mac)
             {
-                // Also remove from ESP-NOW if needed
-                // midi.removePeer(mac);  // if your midi class supports this
-                return true;
+                return false;
             }
-            return false;
+            const bool live = espnowMIDI.removePeer(mac);
+            const bool stored = peerStorage.remove(mac);
+            return live || stored;
         }
 
         bool removePeer(int index)
@@ -917,7 +918,7 @@ namespace enomik
         void clearAllPeers()
         {
             peerStorage.clear();
-            // Also clear ESP-NOW peers if needed
+            espnowMIDI.clearPeers();
         }
 
         void listPeers()
