@@ -34,6 +34,16 @@ enum MidiStatus
 #define MIDI_MIN_BEND 0
 #define MIDI_MAX_BEND 16383
 
+// 7-bit MIDI value to raw 14-bit pitch bend: 0 -> 0, 64 -> 8192 (center), 127 -> 16383.
+inline int pitchBendFrom7Bit(int value)
+{
+    if (value <= 0)
+        return MIDI_MIN_BEND;
+    if (value >= 127)
+        return MIDI_MAX_BEND;
+    return value << 7;
+}
+
 // MPE
 #define MIDI_RPN_MSB 0x65
 #define MIDI_RPN_LSB 0x64

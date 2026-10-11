@@ -21,7 +21,12 @@ inline void pinMode(uint8_t, int) {}
 inline void digitalWrite(uint8_t pin, int value) { stubPinLevels()[pin] = value; }
 inline int digitalRead(uint8_t pin) { return stubPinLevels()[pin]; }
 inline void analogWrite(uint8_t pin, int value) { stubPinLevels()[pin] = value; }
-inline int analogRead(uint8_t) { return 0; }
+inline std::map<int, int> &stubAnalogLevels()
+{
+    static std::map<int, int> levels;
+    return levels;
+}
+inline int analogRead(uint8_t pin) { return stubAnalogLevels()[pin]; }
 inline void analogReadResolution(int) {}
 inline long map(long x, long inMin, long inMax, long outMin, long outMax)
 {

@@ -322,7 +322,7 @@ namespace enomik
         }
 
     public:
-        static Client *instancePtr; ///< Active client used by static receive callbacks.
+        inline static Client *instancePtr = nullptr; ///< Active client used by static receive callbacks.
         esp_now_midi espnowMIDI;    ///< Underlying ESP-NOW MIDI transport.
         enomik::IO io;              ///< Local configurable I/O and SysEx interface.
 
@@ -366,8 +366,8 @@ namespace enomik
                                         break;
                                     case MIDI_PITCH_BEND:
                                     {
-                                        int value = (msg.secondByte << 7) | msg.firstByte;
-                                        sendPitchBend(value, msg.channel);
+                                        int raw = (msg.secondByte << 7) | msg.firstByte;
+                                        sendPitchBend(raw - 8192, msg.channel);
                                         break;
                                     }
                                     case MIDI_AFTERTOUCH:
@@ -964,5 +964,4 @@ namespace enomik
         }
     };
 
-    Client *Client::instancePtr = nullptr;
 };

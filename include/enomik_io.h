@@ -231,7 +231,7 @@ namespace enomik
             }
         }
 
-        /** @brief Applies raw 14-bit pitch bend (`0`–`16383`, center `8192`) to matching output pins. */
+        /** @brief Applies signed pitch bend (`-8192`–`8191`, center `0`) to matching output pins. */
         void onPitchBend(byte channel, int bend)
         {
             for (auto &config : _pinConfigs)
@@ -241,11 +241,11 @@ namespace enomik
                 {
                     if (config.mode == ENOMIK_OUTPUT)
                     {
-                        digitalWrite(config.pin, bend >= 8192 ? HIGH : LOW);
+                        digitalWrite(config.pin, bend > 0 ? HIGH : LOW);
                     }
                     else if (config.mode == ENOMIK_ANALOG_OUTPUT)
                     {
-                        int mappedValue = map(bend, 0, 16383, 0, PWM_MAX_VALUE);
+                        int mappedValue = map(bend + 8192, MIDI_MIN_BEND, MIDI_MAX_BEND, 0, PWM_MAX_VALUE);
                         analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
                     }
                 }
@@ -822,7 +822,13 @@ namespace enomik
 
             case MidiStatus::MIDI_PITCH_BEND:
             {
-                int pb = map(value, 0, 127, 0, 16383);
+                // Analog input is already 14-bit; digital and touch are 7-bit.
+                int pb = value;
+                if (config.mode == ENOMIK_INPUT || config.mode == ENOMIK_INPUT_PULLUP)
+                    pb = pitchBendFrom7Bit(value > 0 ? config.min_midi_value : config.max_midi_value);
+                else if (config.mode != ENOMIK_ANALOG_INPUT)
+                    pb = pitchBendFrom7Bit(value);
+                pb = constrain(pb, MIDI_MIN_BEND, MIDI_MAX_BEND);
                 msg.firstByte = pb & 0x7F;
                 msg.secondByte = (pb >> 7) & 0x7F;
                 break;

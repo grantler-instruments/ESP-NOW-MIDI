@@ -2,6 +2,7 @@
 
 ## 0.19.0
 
+- Fixed: IO pitch-bend pins. Analog inputs send the full 14-bit range (were scaled twice and offset), buttons send `min`/`max` scaled to 14 bits, and outputs follow received pitch bend around center. `IO::onPitchBend()` now takes signed pitch bend (`-8192`..`8191`) like the other APIs.
 - Client: name per device so apps can tell clients apart. `setName("...")` in the sketch sets the default (optional, otherwise `"enomik"`); `getName()` returns the effective name. The app can override it with SysEx `SET_NAME` (`0x11`, response `0x51`) and read it with `GET_NAME` (`0x12`, response `0x52`); `GET_CONFIG` includes the name before its done marker. The override is stored in NVS and dropped by `RESET`, an empty `SET_NAME`, or flashing a new firmware. Printable ASCII, at most 16 characters. Examples set their sketch name.
 - Client and Dongle: USB serial number is the device's MAC (e.g. `48F6EE7A1CC8`; was empty on Arduino, `0` on ESP-IDF). macOS no longer reuses a cached MIDI port name from another enomik device with the same USB IDs.
 - SysEx: `GET_VERSION` response also carries the patch version (`[major, minor, patch]`); older hosts reading two bytes are unaffected.
