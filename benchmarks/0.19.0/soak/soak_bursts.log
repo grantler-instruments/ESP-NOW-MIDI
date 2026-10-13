@@ -1,0 +1,613 @@
+[2026-10-12 23:51:43] started: burst of 100 every 60 s until Ctrl-C
+[2026-10-12 23:51:44] burst 1: to client 100/100 (avg 312 p95 442 max 449 ms), back 100/100 (avg 390 p95 591 max 606 ms), other from dongle 186
+[2026-10-12 23:52:15] started: burst of 100 every 60 s for 10 h
+[2026-10-12 23:52:16] burst 1: to client 100/100 (avg 133 p95 271 max 279 ms), back 100/100 (avg 208 p95 392 max 409 ms), other from dongle 99
+[2026-10-12 23:53:16] burst 2: to client 100/100 (avg 135 p95 253 max 265 ms), back 100/100 (avg 249 p95 496 max 522 ms), other from dongle 261
+[2026-10-12 23:54:16] burst 3: to client 100/100 (avg 135 p95 253 max 265 ms), back 100/100 (avg 237 p95 454 max 472 ms), other from dongle 261
+[2026-10-12 23:55:16] burst 4: to client 100/100 (avg 132 p95 247 max 257 ms), back 100/100 (avg 254 p95 483 max 504 ms), other from dongle 261
+[2026-10-12 23:56:16] burst 5: to client 100/100 (avg 125 p95 238 max 247 ms), back 100/100 (avg 226 p95 434 max 451 ms), other from dongle 261
+[2026-10-12 23:57:16] burst 6: to client 100/100 (avg 120 p95 230 max 241 ms), back 100/100 (avg 239 p95 459 max 483 ms), other from dongle 261
+[2026-10-12 23:58:16] burst 7: to client 100/100 (avg 125 p95 253 max 263 ms), back 100/100 (avg 255 p95 506 max 521 ms), other from dongle 262
+[2026-10-12 23:59:16] burst 8: to client 100/100 (avg 136 p95 269 max 281 ms), back 100/100 (avg 217 p95 421 max 421 ms), other from dongle 263
+[2026-10-13 00:00:16] burst 9: to client 100/100 (avg 145 p95 266 max 276 ms), back 100/100 (avg 281 p95 540 max 541 ms), other from dongle 7782
+[2026-10-13 00:01:16] burst 10: to client 100/100 (avg 121 p95 235 max 246 ms), back 100/100 (avg 220 p95 414 max 428 ms), other from dongle 2657
+[2026-10-13 00:02:16] burst 11: to client 100/100 (avg 144 p95 273 max 287 ms), back 100/100 (avg 249 p95 493 max 519 ms), other from dongle 261
+[2026-10-13 00:03:16] burst 12: to client 100/100 (avg 130 p95 253 max 262 ms), back 100/100 (avg 237 p95 437 max 453 ms), other from dongle 261
+[2026-10-13 00:04:16] burst 13: to client 100/100 (avg 139 p95 262 max 274 ms), back 100/100 (avg 223 p95 427 max 445 ms), other from dongle 261
+[2026-10-13 00:05:16] burst 14: to client 100/100 (avg 150 p95 277 max 284 ms), back 100/100 (avg 256 p95 505 max 521 ms), other from dongle 261
+[2026-10-13 00:06:16] burst 15: to client 100/100 (avg 130 p95 264 max 275 ms), back 100/100 (avg 212 p95 391 max 405 ms), other from dongle 261
+[2026-10-13 00:07:16] burst 16: to client 100/100 (avg 134 p95 271 max 282 ms), back 100/100 (avg 208 p95 425 max 425 ms), other from dongle 262
+[2026-10-13 00:08:16] burst 17: to client 100/100 (avg 131 p95 245 max 255 ms), back 100/100 (avg 263 p95 557 max 557 ms), other from dongle 261
+[2026-10-13 00:09:16] burst 18: to client 100/100 (avg 125 p95 235 max 244 ms), back 100/100 (avg 240 p95 497 max 521 ms), other from dongle 260
+[2026-10-13 00:10:19] burst 19: to client 100/100 (avg 140 p95 266 max 277 ms), back 92/100 (avg 318 p95 588 max 606 ms), other from dongle 8034  <-- missing
+[2026-10-13 00:11:16] burst 20: to client 100/100 (avg 123 p95 233 max 243 ms), back 100/100 (avg 262 p95 540 max 571 ms), other from dongle 1669
+[2026-10-13 00:12:16] burst 21: to client 100/100 (avg 130 p95 254 max 263 ms), back 100/100 (avg 250 p95 502 max 525 ms), other from dongle 261
+[2026-10-13 00:13:16] burst 22: to client 100/100 (avg 125 p95 247 max 257 ms), back 100/100 (avg 264 p95 511 max 535 ms), other from dongle 261
+[2026-10-13 00:14:16] burst 23: to client 100/100 (avg 139 p95 255 max 265 ms), back 100/100 (avg 240 p95 498 max 498 ms), other from dongle 262
+[2026-10-13 00:15:16] burst 24: to client 100/100 (avg 153 p95 296 max 305 ms), back 100/100 (avg 225 p95 482 max 510 ms), other from dongle 260
+[2026-10-13 00:16:16] burst 25: to client 100/100 (avg 152 p95 278 max 288 ms), back 100/100 (avg 197 p95 366 max 379 ms), other from dongle 261
+[2026-10-13 00:17:16] burst 26: to client 100/100 (avg 131 p95 256 max 264 ms), back 100/100 (avg 247 p95 487 max 520 ms), other from dongle 261
+[2026-10-13 00:18:16] burst 27: to client 100/100 (avg 134 p95 266 max 271 ms), back 100/100 (avg 242 p95 501 max 519 ms), other from dongle 262
+[2026-10-13 00:19:16] burst 28: to client 100/100 (avg 143 p95 259 max 267 ms), back 100/100 (avg 256 p95 516 max 546 ms), other from dongle 262
+[2026-10-13 00:20:19] burst 29: to client 100/100 (avg 121 p95 225 max 234 ms), back 90/100 (avg 288 p95 562 max 587 ms), other from dongle 8164  <-- missing
+[2026-10-13 00:21:16] burst 30: to client 100/100 (avg 147 p95 274 max 283 ms), back 100/100 (avg 254 p95 483 max 502 ms), other from dongle 1707
+[2026-10-13 00:22:16] burst 31: to client 100/100 (avg 133 p95 252 max 263 ms), back 100/100 (avg 259 p95 528 max 555 ms), other from dongle 261
+[2026-10-13 00:23:16] burst 32: to client 100/100 (avg 132 p95 250 max 259 ms), back 100/100 (avg 251 p95 508 max 532 ms), other from dongle 261
+[2026-10-13 00:24:16] burst 33: to client 100/100 (avg 137 p95 261 max 270 ms), back 100/100 (avg 237 p95 478 max 496 ms), other from dongle 261
+[2026-10-13 00:25:16] burst 34: to client 100/100 (avg 127 p95 245 max 254 ms), back 100/100 (avg 289 p95 585 max 610 ms), other from dongle 261
+[2026-10-13 00:26:16] burst 35: to client 100/100 (avg 124 p95 250 max 261 ms), back 100/100 (avg 269 p95 555 max 590 ms), other from dongle 261
+[2026-10-13 00:27:16] burst 36: to client 100/100 (avg 125 p95 251 max 259 ms), back 100/100 (avg 275 p95 572 max 608 ms), other from dongle 261
+[2026-10-13 00:28:16] burst 37: to client 100/100 (avg 128 p95 261 max 269 ms), back 100/100 (avg 252 p95 528 max 560 ms), other from dongle 261
+[2026-10-13 00:29:16] burst 38: to client 100/100 (avg 121 p95 228 max 237 ms), back 100/100 (avg 267 p95 556 max 579 ms), other from dongle 261
+[2026-10-13 00:30:19] burst 39: to client 100/100 (avg 138 p95 271 max 279 ms), back 92/100 (avg 317 p95 594 max 632 ms), other from dongle 7765  <-- missing
+[2026-10-13 00:31:16] burst 40: to client 100/100 (avg 141 p95 261 max 269 ms), back 100/100 (avg 254 p95 532 max 546 ms), other from dongle 1614
+[2026-10-13 00:32:16] burst 41: to client 100/100 (avg 121 p95 231 max 240 ms), back 100/100 (avg 243 p95 486 max 511 ms), other from dongle 261
+[2026-10-13 00:33:16] burst 42: to client 100/100 (avg 130 p95 249 max 257 ms), back 100/100 (avg 255 p95 524 max 548 ms), other from dongle 261
+[2026-10-13 00:34:16] burst 43: to client 100/100 (avg 134 p95 259 max 269 ms), back 100/100 (avg 247 p95 499 max 523 ms), other from dongle 261
+[2026-10-13 00:35:16] burst 44: to client 100/100 (avg 130 p95 251 max 260 ms), back 100/100 (avg 253 p95 500 max 521 ms), other from dongle 261
+[2026-10-13 00:36:16] burst 45: to client 100/100 (avg 141 p95 248 max 273 ms), back 100/100 (avg 258 p95 509 max 533 ms), other from dongle 261
+[2026-10-13 00:37:16] burst 46: to client 100/100 (avg 140 p95 275 max 285 ms), back 100/100 (avg 273 p95 545 max 567 ms), other from dongle 262
+[2026-10-13 00:38:16] burst 47: to client 100/100 (avg 119 p95 228 max 236 ms), back 100/100 (avg 244 p95 482 max 498 ms), other from dongle 262
+[2026-10-13 00:39:16] burst 48: to client 100/100 (avg 143 p95 273 max 282 ms), back 100/100 (avg 272 p95 523 max 552 ms), other from dongle 262
+[2026-10-13 00:40:19] burst 49: to client 100/100 (avg 129 p95 250 max 267 ms), back 93/100 (avg 310 p95 606 max 627 ms), other from dongle 8058  <-- missing
+[2026-10-13 00:41:16] burst 50: to client 100/100 (avg 141 p95 254 max 266 ms), back 100/100 (avg 245 p95 511 max 528 ms), other from dongle 1640
+[2026-10-13 00:42:16] burst 51: to client 100/100 (avg 129 p95 257 max 266 ms), back 100/100 (avg 237 p95 479 max 501 ms), other from dongle 261
+[2026-10-13 00:43:16] burst 52: to client 100/100 (avg 135 p95 248 max 257 ms), back 100/100 (avg 261 p95 528 max 544 ms), other from dongle 261
+[2026-10-13 00:44:16] burst 53: to client 100/100 (avg 135 p95 247 max 255 ms), back 100/100 (avg 259 p95 491 max 528 ms), other from dongle 262
+[2026-10-13 00:45:16] burst 54: to client 100/100 (avg 136 p95 247 max 257 ms), back 100/100 (avg 261 p95 546 max 549 ms), other from dongle 260
+[2026-10-13 00:46:16] burst 55: to client 100/100 (avg 139 p95 256 max 295 ms), back 100/100 (avg 244 p95 492 max 523 ms), other from dongle 261
+[2026-10-13 00:47:16] burst 56: to client 100/100 (avg 134 p95 246 max 253 ms), back 100/100 (avg 264 p95 515 max 540 ms), other from dongle 261
+[2026-10-13 00:48:16] burst 57: to client 100/100 (avg 142 p95 282 max 291 ms), back 100/100 (avg 249 p95 472 max 493 ms), other from dongle 261
+[2026-10-13 00:49:16] burst 58: to client 100/100 (avg 143 p95 257 max 265 ms), back 100/100 (avg 250 p95 496 max 524 ms), other from dongle 261
+[2026-10-13 00:50:19] burst 59: to client 100/100 (avg 117 p95 226 max 234 ms), back 95/100 (avg 299 p95 569 max 600 ms), other from dongle 8036  <-- missing
+[2026-10-13 00:51:16] burst 60: to client 100/100 (avg 126 p95 243 max 257 ms), back 100/100 (avg 277 p95 579 max 586 ms), other from dongle 1580
+[2026-10-13 00:52:16] burst 61: to client 100/100 (avg 143 p95 275 max 284 ms), back 100/100 (avg 265 p95 516 max 545 ms), other from dongle 261
+[2026-10-13 00:52:16] hour: bursts=61 to client 6100/6100 (avg 133 p95 254 max 305 ms), back 6062/6100 (avg 253 p95 511 max 632 ms)
+[2026-10-13 00:53:16] burst 62: to client 100/100 (avg 124 p95 254 max 265 ms), back 100/100 (avg 262 p95 542 max 569 ms), other from dongle 261
+[2026-10-13 00:54:16] burst 63: to client 100/100 (avg 121 p95 231 max 241 ms), back 100/100 (avg 239 p95 480 max 511 ms), other from dongle 261
+[2026-10-13 00:55:16] burst 64: to client 100/100 (avg 127 p95 258 max 267 ms), back 100/100 (avg 256 p95 504 max 522 ms), other from dongle 261
+[2026-10-13 00:56:16] burst 65: to client 100/100 (avg 125 p95 259 max 270 ms), back 100/100 (avg 247 p95 485 max 534 ms), other from dongle 261
+[2026-10-13 00:57:16] burst 66: to client 100/100 (avg 128 p95 261 max 269 ms), back 100/100 (avg 251 p95 513 max 544 ms), other from dongle 262
+[2026-10-13 00:58:16] burst 67: to client 100/100 (avg 124 p95 237 max 246 ms), back 100/100 (avg 245 p95 501 max 520 ms), other from dongle 263
+[2026-10-13 00:59:16] burst 68: to client 100/100 (avg 122 p95 257 max 266 ms), back 100/100 (avg 258 p95 534 max 565 ms), other from dongle 262
+[2026-10-13 01:00:19] burst 69: to client 100/100 (avg 128 p95 255 max 264 ms), back 94/100 (avg 309 p95 588 max 600 ms), other from dongle 7947  <-- missing
+[2026-10-13 01:01:16] burst 70: to client 100/100 (avg 130 p95 259 max 270 ms), back 100/100 (avg 252 p95 506 max 532 ms), other from dongle 1555
+[2026-10-13 01:02:16] burst 71: to client 100/100 (avg 127 p95 247 max 256 ms), back 100/100 (avg 279 p95 541 max 577 ms), other from dongle 262
+[2026-10-13 01:03:16] burst 72: to client 100/100 (avg 134 p95 263 max 272 ms), back 100/100 (avg 257 p95 531 max 550 ms), other from dongle 260
+[2026-10-13 01:04:16] burst 73: to client 100/100 (avg 125 p95 238 max 248 ms), back 100/100 (avg 243 p95 484 max 505 ms), other from dongle 261
+[2026-10-13 01:05:16] burst 74: to client 100/100 (avg 126 p95 248 max 258 ms), back 100/100 (avg 276 p95 536 max 571 ms), other from dongle 262
+[2026-10-13 01:06:16] burst 75: to client 100/100 (avg 134 p95 258 max 267 ms), back 100/100 (avg 249 p95 513 max 535 ms), other from dongle 260
+[2026-10-13 01:07:16] burst 76: to client 100/100 (avg 133 p95 259 max 269 ms), back 100/100 (avg 253 p95 497 max 516 ms), other from dongle 261
+[2026-10-13 01:08:16] burst 77: to client 100/100 (avg 133 p95 259 max 270 ms), back 100/100 (avg 249 p95 514 max 547 ms), other from dongle 261
+[2026-10-13 01:09:16] burst 78: to client 100/100 (avg 138 p95 262 max 269 ms), back 100/100 (avg 251 p95 512 max 539 ms), other from dongle 265
+[2026-10-13 01:10:19] burst 79: to client 100/100 (avg 141 p95 275 max 282 ms), back 93/100 (avg 312 p95 585 max 604 ms), other from dongle 7975  <-- missing
+[2026-10-13 01:11:16] burst 80: to client 100/100 (avg 125 p95 239 max 246 ms), back 100/100 (avg 249 p95 519 max 556 ms), other from dongle 1488
+[2026-10-13 01:12:16] burst 81: to client 100/100 (avg 130 p95 248 max 258 ms), back 100/100 (avg 274 p95 537 max 557 ms), other from dongle 261
+[2026-10-13 01:13:16] burst 82: to client 100/100 (avg 138 p95 256 max 265 ms), back 100/100 (avg 250 p95 480 max 504 ms), other from dongle 261
+[2026-10-13 01:14:16] burst 83: to client 100/100 (avg 126 p95 256 max 264 ms), back 100/100 (avg 260 p95 531 max 551 ms), other from dongle 261
+[2026-10-13 01:15:16] burst 84: to client 100/100 (avg 138 p95 255 max 263 ms), back 100/100 (avg 270 p95 542 max 570 ms), other from dongle 261
+[2026-10-13 01:16:16] burst 85: to client 100/100 (avg 145 p95 265 max 273 ms), back 100/100 (avg 244 p95 483 max 519 ms), other from dongle 265
+[2026-10-13 01:17:16] burst 86: to client 100/100 (avg 133 p95 263 max 269 ms), back 100/100 (avg 254 p95 502 max 526 ms), other from dongle 259
+[2026-10-13 01:18:16] burst 87: to client 100/100 (avg 133 p95 266 max 274 ms), back 100/100 (avg 261 p95 528 max 561 ms), other from dongle 263
+[2026-10-13 01:19:16] burst 88: to client 100/100 (avg 134 p95 271 max 279 ms), back 100/100 (avg 250 p95 511 max 534 ms), other from dongle 262
+[2026-10-13 01:20:19] burst 89: to client 100/100 (avg 156 p95 284 max 294 ms), back 97/100 (avg 335 p95 630 max 643 ms), other from dongle 8145  <-- missing
+[2026-10-13 01:21:16] burst 90: to client 100/100 (avg 119 p95 229 max 238 ms), back 100/100 (avg 252 p95 518 max 539 ms), other from dongle 1527
+[2026-10-13 01:22:16] burst 91: to client 100/100 (avg 149 p95 282 max 289 ms), back 100/100 (avg 272 p95 554 max 569 ms), other from dongle 261
+[2026-10-13 01:23:16] burst 92: to client 100/100 (avg 145 p95 259 max 294 ms), back 100/100 (avg 264 p95 511 max 535 ms), other from dongle 261
+[2026-10-13 01:24:16] burst 93: to client 100/100 (avg 137 p95 261 max 270 ms), back 100/100 (avg 241 p95 479 max 503 ms), other from dongle 261
+[2026-10-13 01:25:16] burst 94: to client 100/100 (avg 152 p95 278 max 286 ms), back 100/100 (avg 268 p95 524 max 548 ms), other from dongle 261
+[2026-10-13 01:26:16] burst 95: to client 100/100 (avg 143 p95 273 max 283 ms), back 100/100 (avg 274 p95 549 max 573 ms), other from dongle 261
+[2026-10-13 01:27:16] burst 96: to client 100/100 (avg 146 p95 257 max 266 ms), back 100/100 (avg 265 p95 510 max 537 ms), other from dongle 261
+[2026-10-13 01:28:16] burst 97: to client 100/100 (avg 137 p95 258 max 266 ms), back 100/100 (avg 260 p95 546 max 571 ms), other from dongle 261
+[2026-10-13 01:29:16] burst 98: to client 100/100 (avg 125 p95 254 max 264 ms), back 100/100 (avg 251 p95 513 max 530 ms), other from dongle 262
+[2026-10-13 01:30:19] burst 99: to client 100/100 (avg 141 p95 252 max 260 ms), back 90/100 (avg 324 p95 624 max 641 ms), other from dongle 7949  <-- missing
+[2026-10-13 01:31:16] burst 100: to client 100/100 (avg 138 p95 257 max 265 ms), back 100/100 (avg 256 p95 495 max 525 ms), other from dongle 1474
+[2026-10-13 01:32:16] burst 101: to client 100/100 (avg 134 p95 249 max 257 ms), back 100/100 (avg 264 p95 515 max 546 ms), other from dongle 261
+[2026-10-13 01:33:16] burst 102: to client 100/100 (avg 127 p95 251 max 260 ms), back 100/100 (avg 251 p95 512 max 540 ms), other from dongle 261
+[2026-10-13 01:34:16] burst 103: to client 100/100 (avg 130 p95 255 max 266 ms), back 100/100 (avg 251 p95 519 max 551 ms), other from dongle 261
+[2026-10-13 01:35:16] burst 104: to client 100/100 (avg 132 p95 250 max 260 ms), back 100/100 (avg 238 p95 468 max 490 ms), other from dongle 261
+[2026-10-13 01:36:16] burst 105: to client 100/100 (avg 131 p95 256 max 265 ms), back 100/100 (avg 246 p95 491 max 511 ms), other from dongle 262
+[2026-10-13 01:37:16] burst 106: to client 100/100 (avg 142 p95 257 max 268 ms), back 100/100 (avg 246 p95 492 max 508 ms), other from dongle 263
+[2026-10-13 01:38:16] burst 107: to client 100/100 (avg 144 p95 277 max 286 ms), back 100/100 (avg 273 p95 534 max 573 ms), other from dongle 263
+[2026-10-13 01:39:16] burst 108: to client 100/100 (avg 148 p95 258 max 267 ms), back 100/100 (avg 255 p95 494 max 509 ms), other from dongle 261
+[2026-10-13 01:40:19] burst 109: to client 100/100 (avg 143 p95 268 max 276 ms), back 97/100 (avg 311 p95 575 max 586 ms), other from dongle 8021  <-- missing
+[2026-10-13 01:41:16] burst 110: to client 100/100 (avg 119 p95 229 max 238 ms), back 100/100 (avg 263 p95 535 max 557 ms), other from dongle 1519
+[2026-10-13 01:42:16] burst 111: to client 100/100 (avg 129 p95 250 max 255 ms), back 100/100 (avg 255 p95 497 max 519 ms), other from dongle 261
+[2026-10-13 01:43:16] burst 112: to client 100/100 (avg 134 p95 250 max 260 ms), back 100/100 (avg 259 p95 522 max 537 ms), other from dongle 261
+[2026-10-13 01:44:16] burst 113: to client 100/100 (avg 128 p95 255 max 268 ms), back 100/100 (avg 251 p95 529 max 562 ms), other from dongle 261
+[2026-10-13 01:45:16] burst 114: to client 100/100 (avg 127 p95 257 max 265 ms), back 100/100 (avg 254 p95 516 max 546 ms), other from dongle 261
+[2026-10-13 01:46:16] burst 115: to client 100/100 (avg 122 p95 250 max 262 ms), back 100/100 (avg 265 p95 531 max 559 ms), other from dongle 261
+[2026-10-13 01:47:16] burst 116: to client 100/100 (avg 121 p95 230 max 240 ms), back 100/100 (avg 252 p95 529 max 568 ms), other from dongle 263
+[2026-10-13 01:48:16] burst 117: to client 100/100 (avg 130 p95 249 max 257 ms), back 100/100 (avg 268 p95 537 max 570 ms), other from dongle 260
+[2026-10-13 01:49:16] burst 118: to client 100/100 (avg 134 p95 264 max 275 ms), back 100/100 (avg 242 p95 510 max 526 ms), other from dongle 263
+[2026-10-13 01:50:19] burst 119: to client 100/100 (avg 133 p95 257 max 266 ms), back 94/100 (avg 325 p95 651 max 672 ms), other from dongle 8164  <-- missing
+[2026-10-13 01:51:16] burst 120: to client 100/100 (avg 136 p95 253 max 261 ms), back 100/100 (avg 255 p95 497 max 518 ms), other from dongle 1502
+[2026-10-13 01:52:16] burst 121: to client 100/100 (avg 122 p95 228 max 239 ms), back 100/100 (avg 252 p95 515 max 544 ms), other from dongle 261
+[2026-10-13 01:52:16] hour: bursts=60 to client 6000/6000 (avg 133 p95 255 max 294 ms), back 5965/6000 (avg 262 p95 522 max 672 ms)
+[2026-10-13 01:53:16] burst 122: to client 100/100 (avg 142 p95 276 max 284 ms), back 100/100 (avg 253 p95 510 max 524 ms), other from dongle 261
+[2026-10-13 01:54:16] burst 123: to client 100/100 (avg 125 p95 233 max 241 ms), back 100/100 (avg 243 p95 508 max 534 ms), other from dongle 261
+[2026-10-13 01:55:16] burst 124: to client 100/100 (avg 132 p95 251 max 260 ms), back 100/100 (avg 258 p95 510 max 535 ms), other from dongle 262
+[2026-10-13 01:56:16] burst 125: to client 100/100 (avg 148 p95 280 max 288 ms), back 100/100 (avg 258 p95 526 max 545 ms), other from dongle 262
+[2026-10-13 01:57:16] burst 126: to client 100/100 (avg 123 p95 258 max 267 ms), back 100/100 (avg 244 p95 480 max 509 ms), other from dongle 262
+[2026-10-13 01:58:16] burst 127: to client 100/100 (avg 146 p95 275 max 285 ms), back 100/100 (avg 267 p95 503 max 522 ms), other from dongle 262
+[2026-10-13 01:59:16] burst 128: to client 100/100 (avg 154 p95 281 max 290 ms), back 100/100 (avg 263 p95 505 max 528 ms), other from dongle 261
+[2026-10-13 02:00:19] burst 129: to client 100/100 (avg 139 p95 246 max 280 ms), back 93/100 (avg 318 p95 579 max 611 ms), other from dongle 8195  <-- missing
+[2026-10-13 02:01:16] burst 130: to client 100/100 (avg 127 p95 256 max 266 ms), back 100/100 (avg 238 p95 476 max 505 ms), other from dongle 1431
+[2026-10-13 02:02:17] burst 131: to client 100/100 (avg 123 p95 237 max 244 ms), back 100/100 (avg 249 p95 512 max 539 ms), other from dongle 261
+[2026-10-13 02:03:17] burst 132: to client 100/100 (avg 122 p95 247 max 255 ms), back 100/100 (avg 260 p95 510 max 549 ms), other from dongle 261
+[2026-10-13 02:04:16] burst 133: to client 100/100 (avg 127 p95 254 max 264 ms), back 100/100 (avg 242 p95 474 max 500 ms), other from dongle 261
+[2026-10-13 02:05:17] burst 134: to client 100/100 (avg 118 p95 225 max 237 ms), back 100/100 (avg 251 p95 502 max 537 ms), other from dongle 261
+[2026-10-13 02:06:17] burst 135: to client 100/100 (avg 128 p95 252 max 260 ms), back 100/100 (avg 257 p95 526 max 545 ms), other from dongle 261
+[2026-10-13 02:07:17] burst 136: to client 100/100 (avg 136 p95 253 max 261 ms), back 100/100 (avg 252 p95 520 max 522 ms), other from dongle 261
+[2026-10-13 02:08:17] burst 137: to client 100/100 (avg 123 p95 250 max 259 ms), back 100/100 (avg 263 p95 531 max 549 ms), other from dongle 263
+[2026-10-13 02:09:17] burst 138: to client 100/100 (avg 139 p95 249 max 257 ms), back 100/100 (avg 272 p95 549 max 583 ms), other from dongle 263
+[2026-10-13 02:10:19] burst 139: to client 100/100 (avg 128 p95 256 max 263 ms), back 96/100 (avg 299 p95 597 max 609 ms), other from dongle 8147  <-- missing
+[2026-10-13 02:11:17] burst 140: to client 100/100 (avg 123 p95 258 max 266 ms), back 100/100 (avg 249 p95 492 max 518 ms), other from dongle 1421
+[2026-10-13 02:12:17] burst 141: to client 100/100 (avg 134 p95 255 max 267 ms), back 100/100 (avg 260 p95 526 max 556 ms), other from dongle 262
+[2026-10-13 02:13:17] burst 142: to client 100/100 (avg 122 p95 232 max 243 ms), back 100/100 (avg 241 p95 484 max 513 ms), other from dongle 260
+[2026-10-13 02:14:17] burst 143: to client 100/100 (avg 120 p95 232 max 239 ms), back 100/100 (avg 245 p95 485 max 510 ms), other from dongle 262
+[2026-10-13 02:15:16] burst 144: to client 100/100 (avg 138 p95 268 max 277 ms), back 100/100 (avg 231 p95 460 max 482 ms), other from dongle 262
+[2026-10-13 02:16:17] burst 145: to client 100/100 (avg 144 p95 277 max 285 ms), back 100/100 (avg 255 p95 492 max 510 ms), other from dongle 262
+[2026-10-13 02:17:17] burst 146: to client 100/100 (avg 129 p95 234 max 245 ms), back 100/100 (avg 279 p95 543 max 557 ms), other from dongle 262
+[2026-10-13 02:18:17] burst 147: to client 100/100 (avg 131 p95 262 max 274 ms), back 100/100 (avg 245 p95 482 max 503 ms), other from dongle 261
+[2026-10-13 02:19:17] burst 148: to client 100/100 (avg 126 p95 240 max 249 ms), back 100/100 (avg 235 p95 488 max 526 ms), other from dongle 262
+[2026-10-13 02:20:19] burst 149: to client 100/100 (avg 124 p95 233 max 243 ms), back 93/100 (avg 285 p95 574 max 609 ms), other from dongle 8322  <-- missing
+[2026-10-13 02:21:17] burst 150: to client 100/100 (avg 130 p95 251 max 260 ms), back 100/100 (avg 251 p95 500 max 519 ms), other from dongle 1429
+[2026-10-13 02:22:17] burst 151: to client 100/100 (avg 138 p95 249 max 259 ms), back 100/100 (avg 256 p95 499 max 524 ms), other from dongle 261
+[2026-10-13 02:23:17] burst 152: to client 100/100 (avg 146 p95 287 max 295 ms), back 100/100 (avg 243 p95 473 max 497 ms), other from dongle 261
+[2026-10-13 02:24:17] burst 153: to client 100/100 (avg 138 p95 266 max 275 ms), back 100/100 (avg 235 p95 467 max 489 ms), other from dongle 261
+[2026-10-13 02:25:17] burst 154: to client 100/100 (avg 126 p95 232 max 240 ms), back 100/100 (avg 254 p95 547 max 562 ms), other from dongle 261
+[2026-10-13 02:26:17] burst 155: to client 100/100 (avg 137 p95 260 max 270 ms), back 100/100 (avg 249 p95 472 max 498 ms), other from dongle 261
+[2026-10-13 02:27:17] burst 156: to client 100/100 (avg 146 p95 278 max 287 ms), back 100/100 (avg 258 p95 499 max 519 ms), other from dongle 262
+[2026-10-13 02:28:17] burst 157: to client 100/100 (avg 150 p95 280 max 291 ms), back 100/100 (avg 268 p95 521 max 542 ms), other from dongle 262
+[2026-10-13 02:29:17] burst 158: to client 100/100 (avg 152 p95 290 max 302 ms), back 100/100 (avg 246 p95 492 max 517 ms), other from dongle 263
+[2026-10-13 02:30:19] burst 159: to client 100/100 (avg 140 p95 268 max 276 ms), back 97/100 (avg 291 p95 578 max 621 ms), other from dongle 8497  <-- missing
+[2026-10-13 02:31:17] burst 160: to client 100/100 (avg 126 p95 235 max 249 ms), back 100/100 (avg 229 p95 456 max 472 ms), other from dongle 1420
+[2026-10-13 02:32:17] burst 161: to client 100/100 (avg 130 p95 255 max 266 ms), back 100/100 (avg 245 p95 490 max 508 ms), other from dongle 261
+[2026-10-13 02:33:17] burst 162: to client 100/100 (avg 129 p95 253 max 264 ms), back 100/100 (avg 240 p95 477 max 506 ms), other from dongle 262
+[2026-10-13 02:34:17] burst 163: to client 100/100 (avg 125 p95 248 max 259 ms), back 100/100 (avg 264 p95 537 max 570 ms), other from dongle 261
+[2026-10-13 02:35:17] burst 164: to client 100/100 (avg 128 p95 254 max 264 ms), back 100/100 (avg 245 p95 482 max 508 ms), other from dongle 262
+[2026-10-13 02:36:17] burst 165: to client 100/100 (avg 122 p95 235 max 243 ms), back 100/100 (avg 243 p95 509 max 512 ms), other from dongle 262
+[2026-10-13 02:37:17] burst 166: to client 100/100 (avg 131 p95 254 max 264 ms), back 100/100 (avg 236 p95 465 max 485 ms), other from dongle 262
+[2026-10-13 02:38:17] burst 167: to client 100/100 (avg 137 p95 264 max 274 ms), back 100/100 (avg 214 p95 405 max 422 ms), other from dongle 261
+[2026-10-13 02:39:17] burst 168: to client 100/100 (avg 142 p95 259 max 293 ms), back 100/100 (avg 235 p95 451 max 478 ms), other from dongle 261
+[2026-10-13 02:40:19] burst 169: to client 100/100 (avg 144 p95 270 max 281 ms), back 98/100 (avg 290 p95 540 max 555 ms), other from dongle 8900  <-- missing
+[2026-10-13 02:41:17] burst 170: to client 100/100 (avg 149 p95 286 max 298 ms), back 100/100 (avg 233 p95 458 max 461 ms), other from dongle 1454
+[2026-10-13 02:42:17] burst 171: to client 100/100 (avg 136 p95 265 max 276 ms), back 100/100 (avg 218 p95 411 max 424 ms), other from dongle 261
+[2026-10-13 02:43:17] burst 172: to client 100/100 (avg 142 p95 266 max 275 ms), back 100/100 (avg 208 p95 402 max 420 ms), other from dongle 261
+[2026-10-13 02:44:17] burst 173: to client 100/100 (avg 127 p95 261 max 269 ms), back 100/100 (avg 228 p95 450 max 473 ms), other from dongle 261
+[2026-10-13 02:45:17] burst 174: to client 100/100 (avg 124 p95 252 max 262 ms), back 100/100 (avg 247 p95 494 max 519 ms), other from dongle 261
+[2026-10-13 02:46:17] burst 175: to client 100/100 (avg 128 p95 257 max 267 ms), back 100/100 (avg 235 p95 474 max 495 ms), other from dongle 262
+[2026-10-13 02:47:17] burst 176: to client 100/100 (avg 121 p95 233 max 242 ms), back 100/100 (avg 246 p95 514 max 537 ms), other from dongle 262
+[2026-10-13 02:48:17] burst 177: to client 100/100 (avg 138 p95 245 max 254 ms), back 100/100 (avg 271 p95 528 max 546 ms), other from dongle 262
+[2026-10-13 02:49:17] burst 178: to client 100/100 (avg 153 p95 287 max 295 ms), back 100/100 (avg 254 p95 518 max 544 ms), other from dongle 262
+[2026-10-13 02:50:19] burst 179: to client 100/100 (avg 122 p95 227 max 239 ms), back 94/100 (avg 280 p95 539 max 571 ms), other from dongle 8489  <-- missing
+[2026-10-13 02:51:17] burst 180: to client 100/100 (avg 135 p95 262 max 271 ms), back 100/100 (avg 231 p95 461 max 481 ms), other from dongle 1392
+[2026-10-13 02:52:17] burst 181: to client 100/100 (avg 143 p95 260 max 270 ms), back 100/100 (avg 240 p95 502 max 536 ms), other from dongle 261
+[2026-10-13 02:52:17] hour: bursts=60 to client 6000/6000 (avg 133 p95 257 max 302 ms), back 5971/6000 (avg 251 p95 502 max 621 ms)
+[2026-10-13 02:53:17] burst 182: to client 100/100 (avg 119 p95 223 max 233 ms), back 100/100 (avg 262 p95 520 max 545 ms), other from dongle 262
+[2026-10-13 02:54:17] burst 183: to client 100/100 (avg 144 p95 273 max 283 ms), back 100/100 (avg 246 p95 480 max 516 ms), other from dongle 262
+[2026-10-13 02:55:17] burst 184: to client 100/100 (avg 131 p95 256 max 265 ms), back 100/100 (avg 249 p95 492 max 524 ms), other from dongle 262
+[2026-10-13 02:56:17] burst 185: to client 100/100 (avg 137 p95 264 max 274 ms), back 100/100 (avg 244 p95 478 max 500 ms), other from dongle 262
+[2026-10-13 02:57:17] burst 186: to client 100/100 (avg 148 p95 278 max 287 ms), back 100/100 (avg 242 p95 481 max 505 ms), other from dongle 261
+[2026-10-13 02:58:17] burst 187: to client 100/100 (avg 145 p95 270 max 282 ms), back 100/100 (avg 253 p95 490 max 505 ms), other from dongle 261
+[2026-10-13 02:59:17] burst 188: to client 100/100 (avg 121 p95 232 max 242 ms), back 100/100 (avg 241 p95 485 max 503 ms), other from dongle 261
+[2026-10-13 03:00:19] burst 189: to client 100/100 (avg 139 p95 262 max 271 ms), back 99/100 (avg 292 p95 541 max 576 ms), other from dongle 8729  <-- missing
+[2026-10-13 03:01:17] burst 190: to client 100/100 (avg 135 p95 251 max 261 ms), back 100/100 (avg 253 p95 506 max 531 ms), other from dongle 1394
+[2026-10-13 03:02:17] burst 191: to client 100/100 (avg 125 p95 253 max 264 ms), back 100/100 (avg 248 p95 488 max 508 ms), other from dongle 261
+[2026-10-13 03:03:17] burst 192: to client 100/100 (avg 136 p95 252 max 262 ms), back 100/100 (avg 243 p95 468 max 495 ms), other from dongle 261
+[2026-10-13 03:04:17] burst 193: to client 100/100 (avg 117 p95 226 max 236 ms), back 100/100 (avg 245 p95 474 max 490 ms), other from dongle 261
+[2026-10-13 03:05:17] burst 194: to client 100/100 (avg 129 p95 254 max 262 ms), back 100/100 (avg 242 p95 470 max 492 ms), other from dongle 262
+[2026-10-13 03:06:17] burst 195: to client 100/100 (avg 134 p95 259 max 268 ms), back 100/100 (avg 234 p95 468 max 482 ms), other from dongle 263
+[2026-10-13 03:07:17] burst 196: to client 100/100 (avg 121 p95 248 max 257 ms), back 100/100 (avg 255 p95 490 max 505 ms), other from dongle 261
+[2026-10-13 03:08:17] burst 197: to client 100/100 (avg 141 p95 250 max 257 ms), back 100/100 (avg 265 p95 498 max 520 ms), other from dongle 262
+[2026-10-13 03:09:17] burst 198: to client 100/100 (avg 129 p95 254 max 261 ms), back 100/100 (avg 245 p95 494 max 517 ms), other from dongle 261
+[2026-10-13 03:10:19] burst 199: to client 100/100 (avg 139 p95 259 max 266 ms), back 94/100 (avg 309 p95 595 max 607 ms), other from dongle 8462  <-- missing
+[2026-10-13 03:11:17] burst 200: to client 100/100 (avg 118 p95 227 max 235 ms), back 100/100 (avg 254 p95 504 max 525 ms), other from dongle 1325
+[2026-10-13 03:12:17] burst 201: to client 100/100 (avg 129 p95 251 max 262 ms), back 100/100 (avg 241 p95 473 max 502 ms), other from dongle 262
+[2026-10-13 03:13:17] burst 202: to client 100/100 (avg 148 p95 279 max 289 ms), back 100/100 (avg 255 p95 511 max 541 ms), other from dongle 262
+[2026-10-13 03:14:17] burst 203: to client 100/100 (avg 137 p95 263 max 272 ms), back 100/100 (avg 235 p95 457 max 481 ms), other from dongle 262
+[2026-10-13 03:15:17] burst 204: to client 100/100 (avg 125 p95 236 max 246 ms), back 100/100 (avg 236 p95 488 max 503 ms), other from dongle 262
+[2026-10-13 03:16:17] burst 205: to client 100/100 (avg 137 p95 257 max 268 ms), back 100/100 (avg 246 p95 485 max 501 ms), other from dongle 261
+[2026-10-13 03:17:17] burst 206: to client 100/100 (avg 131 p95 248 max 258 ms), back 100/100 (avg 257 p95 498 max 524 ms), other from dongle 261
+[2026-10-13 03:18:17] burst 207: to client 100/100 (avg 125 p95 253 max 265 ms), back 100/100 (avg 240 p95 473 max 505 ms), other from dongle 261
+[2026-10-13 03:19:17] burst 208: to client 100/100 (avg 126 p95 257 max 268 ms), back 100/100 (avg 244 p95 457 max 484 ms), other from dongle 261
+[2026-10-13 03:20:19] burst 209: to client 100/100 (avg 135 p95 251 max 261 ms), back 95/100 (avg 297 p95 574 max 589 ms), other from dongle 8446  <-- missing
+[2026-10-13 03:21:17] burst 210: to client 100/100 (avg 141 p95 250 max 291 ms), back 100/100 (avg 255 p95 511 max 533 ms), other from dongle 1328
+[2026-10-13 03:22:17] burst 211: to client 100/100 (avg 119 p95 231 max 242 ms), back 100/100 (avg 242 p95 480 max 509 ms), other from dongle 261
+[2026-10-13 03:23:17] burst 212: to client 100/100 (avg 126 p95 249 max 258 ms), back 100/100 (avg 240 p95 472 max 488 ms), other from dongle 261
+[2026-10-13 03:24:17] burst 213: to client 100/100 (avg 147 p95 293 max 301 ms), back 100/100 (avg 243 p95 477 max 492 ms), other from dongle 261
+[2026-10-13 03:25:17] burst 214: to client 100/100 (avg 142 p95 263 max 273 ms), back 100/100 (avg 252 p95 506 max 525 ms), other from dongle 263
+[2026-10-13 03:26:17] burst 215: to client 100/100 (avg 148 p95 284 max 294 ms), back 100/100 (avg 244 p95 474 max 514 ms), other from dongle 262
+[2026-10-13 03:27:17] burst 216: to client 100/100 (avg 133 p95 253 max 263 ms), back 100/100 (avg 251 p95 499 max 524 ms), other from dongle 262
+[2026-10-13 03:28:17] burst 217: to client 100/100 (avg 135 p95 258 max 268 ms), back 100/100 (avg 248 p95 481 max 511 ms), other from dongle 261
+[2026-10-13 03:29:17] burst 218: to client 100/100 (avg 138 p95 255 max 263 ms), back 100/100 (avg 245 p95 486 max 515 ms), other from dongle 261
+[2026-10-13 03:30:19] burst 219: to client 100/100 (avg 148 p95 284 max 293 ms), back 93/100 (avg 314 p95 594 max 617 ms), other from dongle 8568  <-- missing
+[2026-10-13 03:31:17] burst 220: to client 100/100 (avg 125 p95 235 max 275 ms), back 100/100 (avg 255 p95 535 max 558 ms), other from dongle 1300
+[2026-10-13 03:32:17] burst 221: to client 100/100 (avg 122 p95 236 max 245 ms), back 100/100 (avg 256 p95 508 max 527 ms), other from dongle 262
+[2026-10-13 03:33:17] burst 222: to client 100/100 (avg 131 p95 258 max 265 ms), back 100/100 (avg 267 p95 529 max 552 ms), other from dongle 263
+[2026-10-13 03:34:17] burst 223: to client 100/100 (avg 123 p95 239 max 247 ms), back 100/100 (avg 245 p95 485 max 508 ms), other from dongle 260
+[2026-10-13 03:35:17] burst 224: to client 100/100 (avg 149 p95 286 max 295 ms), back 100/100 (avg 257 p95 497 max 515 ms), other from dongle 262
+[2026-10-13 03:36:17] burst 225: to client 100/100 (avg 127 p95 253 max 264 ms), back 100/100 (avg 256 p95 516 max 548 ms), other from dongle 261
+[2026-10-13 03:37:17] burst 226: to client 100/100 (avg 145 p95 292 max 302 ms), back 100/100 (avg 245 p95 485 max 503 ms), other from dongle 261
+[2026-10-13 03:38:17] burst 227: to client 100/100 (avg 135 p95 261 max 273 ms), back 100/100 (avg 238 p95 485 max 502 ms), other from dongle 261
+[2026-10-13 03:39:17] burst 228: to client 100/100 (avg 121 p95 228 max 238 ms), back 100/100 (avg 248 p95 525 max 548 ms), other from dongle 261
+[2026-10-13 03:40:19] burst 229: to client 100/100 (avg 149 p95 283 max 292 ms), back 96/100 (avg 318 p95 625 max 634 ms), other from dongle 8309  <-- missing
+[2026-10-13 03:41:17] burst 230: to client 100/100 (avg 122 p95 237 max 247 ms), back 100/100 (avg 259 p95 539 max 562 ms), other from dongle 1248
+[2026-10-13 03:42:17] burst 231: to client 100/100 (avg 146 p95 285 max 295 ms), back 100/100 (avg 248 p95 490 max 512 ms), other from dongle 261
+[2026-10-13 03:43:17] burst 232: to client 100/100 (avg 136 p95 263 max 271 ms), back 100/100 (avg 238 p95 453 max 477 ms), other from dongle 261
+[2026-10-13 03:44:17] burst 233: to client 100/100 (avg 148 p95 284 max 293 ms), back 100/100 (avg 260 p95 515 max 535 ms), other from dongle 262
+[2026-10-13 03:45:17] burst 234: to client 100/100 (avg 140 p95 261 max 273 ms), back 100/100 (avg 253 p95 519 max 549 ms), other from dongle 262
+[2026-10-13 03:46:17] burst 235: to client 100/100 (avg 141 p95 273 max 280 ms), back 100/100 (avg 269 p95 521 max 555 ms), other from dongle 262
+[2026-10-13 03:47:17] burst 236: to client 100/100 (avg 148 p95 281 max 288 ms), back 100/100 (avg 267 p95 530 max 567 ms), other from dongle 263
+[2026-10-13 03:48:17] burst 237: to client 100/100 (avg 124 p95 237 max 245 ms), back 100/100 (avg 252 p95 503 max 524 ms), other from dongle 261
+[2026-10-13 03:49:17] burst 238: to client 100/100 (avg 130 p95 262 max 270 ms), back 100/100 (avg 255 p95 503 max 530 ms), other from dongle 261
+[2026-10-13 03:50:19] burst 239: to client 100/100 (avg 137 p95 263 max 272 ms), back 95/100 (avg 305 p95 606 max 619 ms), other from dongle 8577  <-- missing
+[2026-10-13 03:51:17] burst 240: to client 100/100 (avg 121 p95 232 max 244 ms), back 100/100 (avg 249 p95 504 max 533 ms), other from dongle 1242
+[2026-10-13 03:52:17] burst 241: to client 100/100 (avg 145 p95 267 max 278 ms), back 100/100 (avg 255 p95 493 max 515 ms), other from dongle 262
+[2026-10-13 03:52:17] hour: bursts=60 to client 6000/6000 (avg 134 p95 258 max 302 ms), back 5972/6000 (avg 255 p95 499 max 634 ms)
+[2026-10-13 03:53:17] burst 242: to client 100/100 (avg 142 p95 261 max 271 ms), back 100/100 (avg 258 p95 525 max 542 ms), other from dongle 263
+[2026-10-13 03:54:17] burst 243: to client 100/100 (avg 130 p95 261 max 270 ms), back 100/100 (avg 244 p95 471 max 486 ms), other from dongle 261
+[2026-10-13 03:55:17] burst 244: to client 100/100 (avg 125 p95 249 max 258 ms), back 100/100 (avg 264 p95 516 max 538 ms), other from dongle 261
+[2026-10-13 03:56:17] burst 245: to client 100/100 (avg 127 p95 258 max 268 ms), back 100/100 (avg 263 p95 552 max 580 ms), other from dongle 261
+[2026-10-13 03:57:17] burst 246: to client 100/100 (avg 138 p95 254 max 263 ms), back 100/100 (avg 255 p95 536 max 538 ms), other from dongle 261
+[2026-10-13 03:58:17] burst 247: to client 100/100 (avg 135 p95 269 max 279 ms), back 100/100 (avg 228 p95 447 max 464 ms), other from dongle 261
+[2026-10-13 03:59:17] burst 248: to client 100/100 (avg 144 p95 258 max 290 ms), back 100/100 (avg 246 p95 489 max 500 ms), other from dongle 261
+[2026-10-13 04:00:19] burst 249: to client 100/100 (avg 145 p95 271 max 280 ms), back 99/100 (avg 288 p95 552 max 578 ms), other from dongle 8616  <-- missing
+[2026-10-13 04:01:17] burst 250: to client 100/100 (avg 123 p95 240 max 248 ms), back 100/100 (avg 241 p95 485 max 511 ms), other from dongle 1240
+[2026-10-13 04:02:17] burst 251: to client 100/100 (avg 126 p95 241 max 251 ms), back 100/100 (avg 235 p95 467 max 494 ms), other from dongle 261
+[2026-10-13 04:03:17] burst 252: to client 100/100 (avg 143 p95 252 max 260 ms), back 100/100 (avg 266 p95 505 max 524 ms), other from dongle 261
+[2026-10-13 04:04:17] burst 253: to client 100/100 (avg 133 p95 263 max 271 ms), back 100/100 (avg 235 p95 467 max 483 ms), other from dongle 263
+[2026-10-13 04:05:17] burst 254: to client 100/100 (avg 155 p95 284 max 292 ms), back 100/100 (avg 253 p95 495 max 522 ms), other from dongle 262
+[2026-10-13 04:06:17] burst 255: to client 100/100 (avg 154 p95 285 max 295 ms), back 100/100 (avg 258 p95 521 max 551 ms), other from dongle 263
+[2026-10-13 04:07:17] burst 256: to client 100/100 (avg 143 p95 263 max 271 ms), back 100/100 (avg 242 p95 495 max 534 ms), other from dongle 262
+[2026-10-13 04:08:17] burst 257: to client 100/100 (avg 127 p95 241 max 251 ms), back 100/100 (avg 241 p95 483 max 513 ms), other from dongle 260
+[2026-10-13 04:09:17] burst 258: to client 100/100 (avg 128 p95 258 max 273 ms), back 100/100 (avg 228 p95 441 max 462 ms), other from dongle 261
+[2026-10-13 04:10:17] burst 259: to client 100/100 (avg 161 p95 295 max 303 ms), back 100/100 (avg 294 p95 568 max 584 ms), other from dongle 8044
+[2026-10-13 04:11:17] burst 260: to client 100/100 (avg 128 p95 257 max 267 ms), back 100/100 (avg 248 p95 487 max 505 ms), other from dongle 2061
+[2026-10-13 04:12:17] burst 261: to client 100/100 (avg 149 p95 271 max 285 ms), back 100/100 (avg 236 p95 470 max 504 ms), other from dongle 265
+[2026-10-13 04:13:17] burst 262: to client 100/100 (avg 151 p95 291 max 300 ms), back 100/100 (avg 250 p95 492 max 506 ms), other from dongle 259
+[2026-10-13 04:14:17] burst 263: to client 100/100 (avg 149 p95 282 max 293 ms), back 100/100 (avg 238 p95 491 max 492 ms), other from dongle 261
+[2026-10-13 04:15:17] burst 264: to client 100/100 (avg 132 p95 256 max 266 ms), back 100/100 (avg 248 p95 504 max 529 ms), other from dongle 261
+[2026-10-13 04:16:17] burst 265: to client 100/100 (avg 159 p95 302 max 310 ms), back 100/100 (avg 226 p95 439 max 466 ms), other from dongle 262
+[2026-10-13 04:17:17] burst 266: to client 100/100 (avg 126 p95 236 max 245 ms), back 100/100 (avg 246 p95 508 max 531 ms), other from dongle 260
+[2026-10-13 04:18:17] burst 267: to client 100/100 (avg 139 p95 264 max 276 ms), back 100/100 (avg 231 p95 459 max 477 ms), other from dongle 261
+[2026-10-13 04:19:17] burst 268: to client 100/100 (avg 151 p95 286 max 294 ms), back 100/100 (avg 248 p95 491 max 514 ms), other from dongle 261
+[2026-10-13 04:20:19] burst 269: to client 100/100 (avg 144 p95 270 max 279 ms), back 98/100 (avg 292 p95 578 max 599 ms), other from dongle 8907  <-- missing
+[2026-10-13 04:21:17] burst 270: to client 100/100 (avg 129 p95 258 max 268 ms), back 100/100 (avg 242 p95 496 max 516 ms), other from dongle 1226
+[2026-10-13 04:22:17] burst 271: to client 100/100 (avg 141 p95 257 max 268 ms), back 100/100 (avg 244 p95 467 max 486 ms), other from dongle 261
+[2026-10-13 04:23:17] burst 272: to client 100/100 (avg 140 p95 260 max 269 ms), back 100/100 (avg 233 p95 460 max 481 ms), other from dongle 262
+[2026-10-13 04:24:17] burst 273: to client 100/100 (avg 139 p95 251 max 258 ms), back 100/100 (avg 249 p95 507 max 518 ms), other from dongle 263
+[2026-10-13 04:25:17] burst 274: to client 100/100 (avg 132 p95 258 max 269 ms), back 100/100 (avg 238 p95 475 max 503 ms), other from dongle 263
+[2026-10-13 04:26:17] burst 275: to client 100/100 (avg 137 p95 246 max 280 ms), back 100/100 (avg 262 p95 504 max 525 ms), other from dongle 262
+[2026-10-13 04:27:17] burst 276: to client 100/100 (avg 139 p95 252 max 262 ms), back 100/100 (avg 261 p95 541 max 567 ms), other from dongle 261
+[2026-10-13 04:28:17] burst 277: to client 100/100 (avg 125 p95 236 max 245 ms), back 100/100 (avg 235 p95 466 max 489 ms), other from dongle 261
+[2026-10-13 04:29:17] burst 278: to client 100/100 (avg 139 p95 256 max 266 ms), back 100/100 (avg 232 p95 448 max 465 ms), other from dongle 261
+[2026-10-13 04:30:20] burst 279: to client 100/100 (avg 146 p95 283 max 294 ms), back 97/100 (avg 305 p95 593 max 625 ms), other from dongle 8667  <-- missing
+[2026-10-13 04:31:17] burst 280: to client 100/100 (avg 150 p95 279 max 287 ms), back 100/100 (avg 268 p95 510 max 534 ms), other from dongle 1177
+[2026-10-13 04:32:17] burst 281: to client 100/100 (avg 140 p95 271 max 279 ms), back 100/100 (avg 235 p95 472 max 497 ms), other from dongle 262
+[2026-10-13 04:33:17] burst 282: to client 100/100 (avg 160 p95 295 max 305 ms), back 100/100 (avg 232 p95 470 max 495 ms), other from dongle 261
+[2026-10-13 04:34:17] burst 283: to client 100/100 (avg 158 p95 288 max 299 ms), back 100/100 (avg 254 p95 489 max 506 ms), other from dongle 261
+[2026-10-13 04:35:17] burst 284: to client 100/100 (avg 138 p95 261 max 269 ms), back 100/100 (avg 233 p95 455 max 477 ms), other from dongle 261
+[2026-10-13 04:36:17] burst 285: to client 100/100 (avg 126 p95 252 max 265 ms), back 100/100 (avg 260 p95 523 max 546 ms), other from dongle 261
+[2026-10-13 04:37:17] burst 286: to client 100/100 (avg 136 p95 254 max 265 ms), back 100/100 (avg 258 p95 516 max 541 ms), other from dongle 261
+[2026-10-13 04:38:17] burst 287: to client 100/100 (avg 129 p95 249 max 262 ms), back 100/100 (avg 258 p95 485 max 507 ms), other from dongle 261
+[2026-10-13 04:39:17] burst 288: to client 100/100 (avg 134 p95 270 max 277 ms), back 100/100 (avg 229 p95 490 max 522 ms), other from dongle 261
+[2026-10-13 04:40:20] burst 289: to client 100/100 (avg 137 p95 258 max 267 ms), back 95/100 (avg 292 p95 573 max 590 ms), other from dongle 8500  <-- missing
+[2026-10-13 04:41:17] burst 290: to client 100/100 (avg 127 p95 255 max 265 ms), back 100/100 (avg 253 p95 513 max 539 ms), other from dongle 1159
+[2026-10-13 04:42:17] burst 291: to client 100/100 (avg 121 p95 230 max 240 ms), back 100/100 (avg 242 p95 478 max 510 ms), other from dongle 263
+[2026-10-13 04:43:17] burst 292: to client 100/100 (avg 125 p95 244 max 252 ms), back 100/100 (avg 270 p95 516 max 547 ms), other from dongle 260
+[2026-10-13 04:44:17] burst 293: to client 100/100 (avg 156 p95 291 max 299 ms), back 100/100 (avg 238 p95 460 max 476 ms), other from dongle 263
+[2026-10-13 04:45:17] burst 294: to client 100/100 (avg 145 p95 271 max 282 ms), back 100/100 (avg 265 p95 501 max 519 ms), other from dongle 263
+[2026-10-13 04:46:17] burst 295: to client 100/100 (avg 140 p95 252 max 287 ms), back 100/100 (avg 253 p95 479 max 494 ms), other from dongle 261
+[2026-10-13 04:47:17] burst 296: to client 100/100 (avg 134 p95 259 max 267 ms), back 100/100 (avg 238 p95 457 max 481 ms), other from dongle 261
+[2026-10-13 04:48:17] burst 297: to client 100/100 (avg 148 p95 283 max 293 ms), back 100/100 (avg 233 p95 475 max 480 ms), other from dongle 261
+[2026-10-13 04:49:17] burst 298: to client 100/100 (avg 130 p95 252 max 260 ms), back 100/100 (avg 251 p95 494 max 508 ms), other from dongle 261
+[2026-10-13 04:50:20] burst 299: to client 100/100 (avg 127 p95 258 max 267 ms), back 98/100 (avg 287 p95 582 max 602 ms), other from dongle 8912  <-- missing
+[2026-10-13 04:51:17] burst 300: to client 100/100 (avg 144 p95 272 max 283 ms), back 100/100 (avg 252 p95 463 max 478 ms), other from dongle 1168
+[2026-10-13 04:52:17] burst 301: to client 100/100 (avg 149 p95 279 max 288 ms), back 100/100 (avg 256 p95 504 max 518 ms), other from dongle 263
+[2026-10-13 04:52:17] hour: bursts=60 to client 6000/6000 (avg 139 p95 263 max 310 ms), back 5987/6000 (avg 251 p95 494 max 625 ms)
+[2026-10-13 04:53:17] burst 302: to client 100/100 (avg 153 p95 284 max 293 ms), back 100/100 (avg 244 p95 473 max 497 ms), other from dongle 261
+[2026-10-13 04:54:17] burst 303: to client 100/100 (avg 136 p95 258 max 268 ms), back 100/100 (avg 233 p95 457 max 473 ms), other from dongle 261
+[2026-10-13 04:55:17] burst 304: to client 100/100 (avg 129 p95 249 max 257 ms), back 100/100 (avg 259 p95 511 max 526 ms), other from dongle 261
+[2026-10-13 04:56:17] burst 305: to client 100/100 (avg 136 p95 257 max 267 ms), back 100/100 (avg 232 p95 451 max 474 ms), other from dongle 261
+[2026-10-13 04:57:17] burst 306: to client 100/100 (avg 127 p95 254 max 264 ms), back 100/100 (avg 227 p95 438 max 451 ms), other from dongle 261
+[2026-10-13 04:58:17] burst 307: to client 100/100 (avg 141 p95 258 max 267 ms), back 100/100 (avg 233 p95 461 max 487 ms), other from dongle 261
+[2026-10-13 04:59:17] burst 308: to client 100/100 (avg 130 p95 257 max 265 ms), back 100/100 (avg 253 p95 518 max 543 ms), other from dongle 261
+[2026-10-13 05:00:20] burst 309: to client 100/100 (avg 131 p95 250 max 257 ms), back 90/100 (avg 297 p95 573 max 585 ms), other from dongle 8470  <-- missing
+[2026-10-13 05:01:17] burst 310: to client 100/100 (avg 128 p95 252 max 260 ms), back 100/100 (avg 254 p95 482 max 506 ms), other from dongle 1078
+[2026-10-13 05:02:17] burst 311: to client 100/100 (avg 115 p95 221 max 231 ms), back 100/100 (avg 260 p95 510 max 535 ms), other from dongle 262
+[2026-10-13 05:03:17] burst 312: to client 100/100 (avg 138 p95 268 max 276 ms), back 100/100 (avg 272 p95 531 max 559 ms), other from dongle 262
+[2026-10-13 05:04:17] burst 313: to client 100/100 (avg 147 p95 278 max 287 ms), back 100/100 (avg 269 p95 534 max 555 ms), other from dongle 262
+[2026-10-13 05:05:17] burst 314: to client 100/100 (avg 141 p95 268 max 277 ms), back 100/100 (avg 244 p95 553 max 570 ms), other from dongle 261
+[2026-10-13 05:06:17] burst 315: to client 100/100 (avg 143 p95 269 max 277 ms), back 100/100 (avg 268 p95 530 max 549 ms), other from dongle 261
+[2026-10-13 05:07:17] burst 316: to client 100/100 (avg 123 p95 249 max 259 ms), back 100/100 (avg 265 p95 530 max 557 ms), other from dongle 261
+[2026-10-13 05:08:17] burst 317: to client 100/100 (avg 130 p95 253 max 263 ms), back 100/100 (avg 254 p95 522 max 546 ms), other from dongle 261
+[2026-10-13 05:09:17] burst 318: to client 100/100 (avg 125 p95 253 max 262 ms), back 100/100 (avg 241 p95 486 max 506 ms), other from dongle 261
+[2026-10-13 05:10:20] burst 319: to client 100/100 (avg 120 p95 226 max 236 ms), back 90/100 (avg 288 p95 565 max 575 ms), other from dongle 8680  <-- missing
+[2026-10-13 05:11:17] burst 320: to client 100/100 (avg 131 p95 256 max 266 ms), back 100/100 (avg 241 p95 474 max 503 ms), other from dongle 1071
+[2026-10-13 05:12:17] burst 321: to client 100/100 (avg 122 p95 232 max 243 ms), back 100/100 (avg 244 p95 486 max 522 ms), other from dongle 263
+[2026-10-13 05:13:17] burst 322: to client 100/100 (avg 121 p95 228 max 240 ms), back 100/100 (avg 245 p95 485 max 503 ms), other from dongle 260
+[2026-10-13 05:14:17] burst 323: to client 100/100 (avg 128 p95 253 max 262 ms), back 100/100 (avg 255 p95 525 max 549 ms), other from dongle 261
+[2026-10-13 05:15:17] burst 324: to client 100/100 (avg 124 p95 231 max 241 ms), back 100/100 (avg 261 p95 566 max 602 ms), other from dongle 261
+[2026-10-13 05:16:17] burst 325: to client 100/100 (avg 141 p95 258 max 292 ms), back 100/100 (avg 232 p95 453 max 474 ms), other from dongle 261
+[2026-10-13 05:17:17] burst 326: to client 100/100 (avg 127 p95 249 max 258 ms), back 100/100 (avg 250 p95 507 max 528 ms), other from dongle 261
+[2026-10-13 05:18:17] burst 327: to client 100/100 (avg 135 p95 260 max 269 ms), back 100/100 (avg 236 p95 477 max 491 ms), other from dongle 261
+[2026-10-13 05:19:17] burst 328: to client 100/100 (avg 130 p95 255 max 263 ms), back 100/100 (avg 248 p95 501 max 522 ms), other from dongle 261
+[2026-10-13 05:20:20] burst 329: to client 100/100 (avg 140 p95 256 max 265 ms), back 95/100 (avg 305 p95 573 max 586 ms), other from dongle 8798  <-- missing
+[2026-10-13 05:21:17] burst 330: to client 100/100 (avg 132 p95 255 max 265 ms), back 100/100 (avg 254 p95 525 max 578 ms), other from dongle 1089
+[2026-10-13 05:22:17] burst 331: to client 100/100 (avg 149 p95 285 max 294 ms), back 100/100 (avg 263 p95 547 max 584 ms), other from dongle 259
+[2026-10-13 05:23:17] burst 332: to client 100/100 (avg 147 p95 278 max 288 ms), back 100/100 (avg 263 p95 554 max 578 ms), other from dongle 262
+[2026-10-13 05:24:17] burst 333: to client 100/100 (avg 118 p95 228 max 238 ms), back 100/100 (avg 272 p95 578 max 600 ms), other from dongle 262
+[2026-10-13 05:25:17] burst 334: to client 100/100 (avg 126 p95 233 max 261 ms), back 100/100 (avg 239 p95 469 max 498 ms), other from dongle 261
+[2026-10-13 05:26:17] burst 335: to client 100/100 (avg 121 p95 232 max 242 ms), back 100/100 (avg 256 p95 530 max 550 ms), other from dongle 261
+[2026-10-13 05:27:17] burst 336: to client 100/100 (avg 118 p95 222 max 231 ms), back 100/100 (avg 265 p95 537 max 551 ms), other from dongle 261
+[2026-10-13 05:28:17] burst 337: to client 100/100 (avg 123 p95 251 max 265 ms), back 100/100 (avg 259 p95 518 max 569 ms), other from dongle 261
+[2026-10-13 05:29:17] burst 338: to client 100/100 (avg 121 p95 247 max 255 ms), back 100/100 (avg 265 p95 528 max 545 ms), other from dongle 261
+[2026-10-13 05:30:20] burst 339: to client 100/100 (avg 126 p95 251 max 262 ms), back 93/100 (avg 284 p95 571 max 606 ms), other from dongle 8483  <-- missing
+[2026-10-13 05:31:17] burst 340: to client 100/100 (avg 117 p95 226 max 236 ms), back 100/100 (avg 275 p95 563 max 614 ms), other from dongle 1060
+[2026-10-13 05:32:17] burst 341: to client 100/100 (avg 125 p95 232 max 241 ms), back 100/100 (avg 264 p95 566 max 595 ms), other from dongle 261
+[2026-10-13 05:33:17] burst 342: to client 100/100 (avg 137 p95 249 max 258 ms), back 100/100 (avg 276 p95 560 max 593 ms), other from dongle 260
+[2026-10-13 05:34:17] burst 343: to client 100/100 (avg 130 p95 251 max 260 ms), back 100/100 (avg 254 p95 524 max 552 ms), other from dongle 261
+[2026-10-13 05:35:17] burst 344: to client 100/100 (avg 141 p95 252 max 260 ms), back 100/100 (avg 257 p95 499 max 517 ms), other from dongle 261
+[2026-10-13 05:36:17] burst 345: to client 100/100 (avg 146 p95 278 max 285 ms), back 100/100 (avg 256 p95 494 max 512 ms), other from dongle 261
+[2026-10-13 05:37:17] burst 346: to client 100/100 (avg 122 p95 231 max 241 ms), back 100/100 (avg 252 p95 514 max 568 ms), other from dongle 262
+[2026-10-13 05:38:17] burst 347: to client 100/100 (avg 131 p95 262 max 272 ms), back 100/100 (avg 248 p95 515 max 535 ms), other from dongle 260
+[2026-10-13 05:39:17] burst 348: to client 100/100 (avg 129 p95 259 max 269 ms), back 100/100 (avg 251 p95 490 max 509 ms), other from dongle 261
+[2026-10-13 05:40:20] burst 349: to client 100/100 (avg 141 p95 251 max 260 ms), back 91/100 (avg 337 p95 611 max 630 ms), other from dongle 8505  <-- missing
+[2026-10-13 05:41:17] burst 350: to client 100/100 (avg 141 p95 262 max 272 ms), back 100/100 (avg 245 p95 534 max 555 ms), other from dongle 1016
+[2026-10-13 05:42:20] burst 351: to client 100/100 (avg 115 p95 220 max 228 ms), back 99/100 (avg 297 p95 603 max 629 ms), other from dongle 270  <-- missing
+[2026-10-13 05:43:17] burst 352: to client 100/100 (avg 143 p95 263 max 271 ms), back 100/100 (avg 255 p95 528 max 555 ms), other from dongle 253
+[2026-10-13 05:44:17] burst 353: to client 100/100 (avg 138 p95 259 max 269 ms), back 100/100 (avg 244 p95 483 max 514 ms), other from dongle 262
+[2026-10-13 05:45:17] burst 354: to client 100/100 (avg 128 p95 252 max 261 ms), back 100/100 (avg 258 p95 524 max 545 ms), other from dongle 260
+[2026-10-13 05:46:17] burst 355: to client 100/100 (avg 135 p95 262 max 269 ms), back 100/100 (avg 238 p95 486 max 504 ms), other from dongle 261
+[2026-10-13 05:47:17] burst 356: to client 100/100 (avg 128 p95 252 max 261 ms), back 100/100 (avg 247 p95 500 max 517 ms), other from dongle 261
+[2026-10-13 05:48:17] burst 357: to client 100/100 (avg 127 p95 246 max 257 ms), back 100/100 (avg 254 p95 493 max 527 ms), other from dongle 261
+[2026-10-13 05:49:17] burst 358: to client 100/100 (avg 132 p95 255 max 263 ms), back 100/100 (avg 245 p95 489 max 509 ms), other from dongle 261
+[2026-10-13 05:50:20] burst 359: to client 100/100 (avg 123 p95 239 max 248 ms), back 89/100 (avg 295 p95 557 max 577 ms), other from dongle 8438  <-- missing
+[2026-10-13 05:51:17] burst 360: to client 100/100 (avg 121 p95 257 max 266 ms), back 100/100 (avg 259 p95 530 max 558 ms), other from dongle 992
+[2026-10-13 05:52:17] burst 361: to client 100/100 (avg 147 p95 273 max 283 ms), back 100/100 (avg 270 p95 520 max 536 ms), other from dongle 261
+[2026-10-13 05:52:17] hour: bursts=60 to client 6000/6000 (avg 131 p95 254 max 294 ms), back 5947/6000 (avg 258 p95 520 max 630 ms)
+[2026-10-13 05:53:17] burst 362: to client 100/100 (avg 131 p95 250 max 259 ms), back 100/100 (avg 261 p95 520 max 567 ms), other from dongle 262
+[2026-10-13 05:54:17] burst 363: to client 100/100 (avg 120 p95 234 max 241 ms), back 100/100 (avg 255 p95 503 max 535 ms), other from dongle 260
+[2026-10-13 05:55:17] burst 364: to client 100/100 (avg 120 p95 227 max 240 ms), back 100/100 (avg 255 p95 522 max 541 ms), other from dongle 261
+[2026-10-13 05:56:17] burst 365: to client 100/100 (avg 119 p95 248 max 255 ms), back 100/100 (avg 275 p95 548 max 576 ms), other from dongle 261
+[2026-10-13 05:57:17] burst 366: to client 100/100 (avg 133 p95 249 max 257 ms), back 100/100 (avg 269 p95 538 max 562 ms), other from dongle 261
+[2026-10-13 05:58:17] burst 367: to client 100/100 (avg 123 p95 230 max 238 ms), back 100/100 (avg 253 p95 513 max 546 ms), other from dongle 262
+[2026-10-13 05:59:17] burst 368: to client 100/100 (avg 136 p95 248 max 260 ms), back 100/100 (avg 271 p95 541 max 563 ms), other from dongle 260
+[2026-10-13 06:00:20] burst 369: to client 100/100 (avg 130 p95 260 max 269 ms), back 96/100 (avg 290 p95 566 max 596 ms), other from dongle 8436  <-- missing
+[2026-10-13 06:01:17] burst 370: to client 100/100 (avg 146 p95 291 max 300 ms), back 100/100 (avg 249 p95 488 max 500 ms), other from dongle 1002
+[2026-10-13 06:02:17] burst 371: to client 100/100 (avg 151 p95 284 max 293 ms), back 100/100 (avg 254 p95 517 max 536 ms), other from dongle 263
+[2026-10-13 06:03:17] burst 372: to client 100/100 (avg 145 p95 281 max 292 ms), back 100/100 (avg 262 p95 530 max 550 ms), other from dongle 262
+[2026-10-13 06:04:17] burst 373: to client 100/100 (avg 131 p95 274 max 282 ms), back 100/100 (avg 237 p95 463 max 483 ms), other from dongle 261
+[2026-10-13 06:05:17] burst 374: to client 100/100 (avg 149 p95 296 max 306 ms), back 100/100 (avg 226 p95 426 max 450 ms), other from dongle 261
+[2026-10-13 06:06:17] burst 375: to client 100/100 (avg 134 p95 259 max 268 ms), back 100/100 (avg 241 p95 468 max 502 ms), other from dongle 261
+[2026-10-13 06:07:17] burst 376: to client 100/100 (avg 142 p95 267 max 277 ms), back 100/100 (avg 215 p95 436 max 450 ms), other from dongle 261
+[2026-10-13 06:08:17] burst 377: to client 100/100 (avg 142 p95 272 max 282 ms), back 100/100 (avg 213 p95 409 max 426 ms), other from dongle 261
+[2026-10-13 06:09:17] burst 378: to client 100/100 (avg 149 p95 262 max 273 ms), back 100/100 (avg 250 p95 493 max 512 ms), other from dongle 261
+[2026-10-13 06:10:20] burst 379: to client 100/100 (avg 143 p95 260 max 271 ms), back 97/100 (avg 293 p95 543 max 559 ms), other from dongle 9209  <-- missing
+[2026-10-13 06:11:17] burst 380: to client 100/100 (avg 143 p95 264 max 274 ms), back 100/100 (avg 220 p95 428 max 460 ms), other from dongle 1009
+[2026-10-13 06:12:17] burst 381: to client 100/100 (avg 140 p95 265 max 275 ms), back 100/100 (avg 231 p95 432 max 453 ms), other from dongle 261
+[2026-10-13 06:13:17] burst 382: to client 100/100 (avg 126 p95 240 max 251 ms), back 100/100 (avg 232 p95 461 max 483 ms), other from dongle 261
+[2026-10-13 06:14:17] burst 383: to client 100/100 (avg 139 p95 260 max 270 ms), back 100/100 (avg 237 p95 457 max 480 ms), other from dongle 261
+[2026-10-13 06:15:17] burst 384: to client 100/100 (avg 137 p95 269 max 274 ms), back 100/100 (avg 241 p95 484 max 509 ms), other from dongle 261
+[2026-10-13 06:16:17] burst 385: to client 100/100 (avg 125 p95 239 max 250 ms), back 100/100 (avg 243 p95 484 max 508 ms), other from dongle 261
+[2026-10-13 06:17:17] burst 386: to client 100/100 (avg 126 p95 237 max 247 ms), back 100/100 (avg 239 p95 506 max 536 ms), other from dongle 261
+[2026-10-13 06:18:17] burst 387: to client 100/100 (avg 131 p95 257 max 268 ms), back 100/100 (avg 247 p95 492 max 512 ms), other from dongle 261
+[2026-10-13 06:19:17] burst 388: to client 100/100 (avg 135 p95 264 max 273 ms), back 100/100 (avg 244 p95 509 max 523 ms), other from dongle 261
+[2026-10-13 06:20:20] burst 389: to client 100/100 (avg 146 p95 287 max 296 ms), back 99/100 (avg 289 p95 543 max 568 ms), other from dongle 9043  <-- missing
+[2026-10-13 06:21:17] burst 390: to client 100/100 (avg 149 p95 282 max 292 ms), back 100/100 (avg 270 p95 505 max 529 ms), other from dongle 988
+[2026-10-13 06:22:17] burst 391: to client 100/100 (avg 141 p95 257 max 297 ms), back 100/100 (avg 244 p95 486 max 500 ms), other from dongle 262
+[2026-10-13 06:23:17] burst 392: to client 100/100 (avg 149 p95 276 max 286 ms), back 100/100 (avg 266 p95 493 max 515 ms), other from dongle 261
+[2026-10-13 06:24:17] burst 393: to client 100/100 (avg 128 p95 266 max 277 ms), back 100/100 (avg 230 p95 462 max 483 ms), other from dongle 261
+[2026-10-13 06:25:17] burst 394: to client 100/100 (avg 125 p95 241 max 253 ms), back 100/100 (avg 226 p95 455 max 460 ms), other from dongle 261
+[2026-10-13 06:26:17] burst 395: to client 100/100 (avg 120 p95 233 max 244 ms), back 100/100 (avg 246 p95 483 max 501 ms), other from dongle 261
+[2026-10-13 06:27:17] burst 396: to client 100/100 (avg 140 p95 268 max 275 ms), back 100/100 (avg 245 p95 472 max 489 ms), other from dongle 261
+[2026-10-13 06:28:17] burst 397: to client 100/100 (avg 147 p95 274 max 281 ms), back 100/100 (avg 220 p95 434 max 460 ms), other from dongle 261
+[2026-10-13 06:29:17] burst 398: to client 100/100 (avg 140 p95 262 max 272 ms), back 100/100 (avg 237 p95 485 max 515 ms), other from dongle 262
+[2026-10-13 06:30:20] burst 399: to client 100/100 (avg 127 p95 235 max 243 ms), back 91/100 (avg 290 p95 555 max 579 ms), other from dongle 8873  <-- missing
+[2026-10-13 06:31:17] burst 400: to client 100/100 (avg 149 p95 263 max 297 ms), back 100/100 (avg 234 p95 457 max 494 ms), other from dongle 948
+[2026-10-13 06:32:17] burst 401: to client 100/100 (avg 126 p95 256 max 264 ms), back 100/100 (avg 265 p95 533 max 569 ms), other from dongle 261
+[2026-10-13 06:33:17] burst 402: to client 100/100 (avg 130 p95 258 max 268 ms), back 100/100 (avg 252 p95 504 max 531 ms), other from dongle 261
+[2026-10-13 06:34:17] burst 403: to client 100/100 (avg 148 p95 290 max 300 ms), back 100/100 (avg 241 p95 469 max 496 ms), other from dongle 261
+[2026-10-13 06:35:17] burst 404: to client 100/100 (avg 152 p95 288 max 297 ms), back 100/100 (avg 246 p95 487 max 514 ms), other from dongle 261
+[2026-10-13 06:36:17] burst 405: to client 100/100 (avg 132 p95 257 max 266 ms), back 100/100 (avg 250 p95 506 max 528 ms), other from dongle 261
+[2026-10-13 06:37:17] burst 406: to client 100/100 (avg 145 p95 275 max 284 ms), back 100/100 (avg 256 p95 489 max 506 ms), other from dongle 261
+[2026-10-13 06:38:17] burst 407: to client 100/100 (avg 139 p95 259 max 268 ms), back 100/100 (avg 240 p95 472 max 493 ms), other from dongle 261
+[2026-10-13 06:39:17] burst 408: to client 100/100 (avg 140 p95 257 max 267 ms), back 100/100 (avg 256 p95 512 max 531 ms), other from dongle 262
+[2026-10-13 06:40:20] burst 409: to client 100/100 (avg 151 p95 263 max 273 ms), back 94/100 (avg 293 p95 570 max 594 ms), other from dongle 8980  <-- missing
+[2026-10-13 06:41:17] burst 410: to client 100/100 (avg 153 p95 286 max 297 ms), back 100/100 (avg 254 p95 489 max 513 ms), other from dongle 915
+[2026-10-13 06:42:17] burst 411: to client 100/100 (avg 144 p95 257 max 267 ms), back 100/100 (avg 262 p95 510 max 534 ms), other from dongle 261
+[2026-10-13 06:43:17] burst 412: to client 100/100 (avg 142 p95 263 max 273 ms), back 100/100 (avg 237 p95 482 max 499 ms), other from dongle 261
+[2026-10-13 06:44:17] burst 413: to client 100/100 (avg 129 p95 258 max 268 ms), back 100/100 (avg 241 p95 494 max 513 ms), other from dongle 261
+[2026-10-13 06:45:17] burst 414: to client 100/100 (avg 145 p95 263 max 273 ms), back 100/100 (avg 256 p95 535 max 545 ms), other from dongle 261
+[2026-10-13 06:46:17] burst 415: to client 100/100 (avg 140 p95 256 max 266 ms), back 100/100 (avg 268 p95 525 max 540 ms), other from dongle 261
+[2026-10-13 06:47:17] burst 416: to client 100/100 (avg 141 p95 260 max 272 ms), back 100/100 (avg 250 p95 457 max 485 ms), other from dongle 261
+[2026-10-13 06:48:17] burst 417: to client 100/100 (avg 130 p95 245 max 254 ms), back 100/100 (avg 236 p95 453 max 470 ms), other from dongle 261
+[2026-10-13 06:49:17] burst 418: to client 100/100 (avg 148 p95 269 max 277 ms), back 100/100 (avg 237 p95 463 max 494 ms), other from dongle 261
+[2026-10-13 06:50:20] burst 419: to client 100/100 (avg 132 p95 250 max 259 ms), back 97/100 (avg 278 p95 536 max 556 ms), other from dongle 9282  <-- missing
+[2026-10-13 06:51:17] burst 420: to client 100/100 (avg 136 p95 264 max 274 ms), back 100/100 (avg 227 p95 463 max 489 ms), other from dongle 916
+[2026-10-13 06:52:17] burst 421: to client 100/100 (avg 131 p95 268 max 277 ms), back 100/100 (avg 236 p95 472 max 493 ms), other from dongle 261
+[2026-10-13 06:52:17] hour: bursts=60 to client 6000/6000 (avg 137 p95 260 max 306 ms), back 5974/6000 (avg 249 p95 495 max 596 ms)
+[2026-10-13 06:53:18] burst 422: to client 100/100 (avg 134 p95 258 max 266 ms), back 100/100 (avg 239 p95 481 max 526 ms), other from dongle 261
+[2026-10-13 06:54:17] burst 423: to client 100/100 (avg 123 p95 238 max 249 ms), back 100/100 (avg 230 p95 451 max 473 ms), other from dongle 261
+[2026-10-13 06:55:18] burst 424: to client 100/100 (avg 117 p95 225 max 237 ms), back 100/100 (avg 248 p95 495 max 520 ms), other from dongle 261
+[2026-10-13 06:56:18] burst 425: to client 100/100 (avg 128 p95 257 max 265 ms), back 100/100 (avg 260 p95 529 max 548 ms), other from dongle 261
+[2026-10-13 06:57:18] burst 426: to client 100/100 (avg 136 p95 257 max 266 ms), back 100/100 (avg 258 p95 521 max 550 ms), other from dongle 264
+[2026-10-13 06:58:18] burst 427: to client 100/100 (avg 134 p95 250 max 258 ms), back 100/100 (avg 255 p95 507 max 540 ms), other from dongle 263
+[2026-10-13 06:59:18] burst 428: to client 100/100 (avg 135 p95 247 max 257 ms), back 100/100 (avg 251 p95 513 max 534 ms), other from dongle 259
+[2026-10-13 07:00:20] burst 429: to client 100/100 (avg 133 p95 258 max 267 ms), back 95/100 (avg 306 p95 593 max 615 ms), other from dongle 8562  <-- missing
+[2026-10-13 07:01:18] burst 430: to client 100/100 (avg 125 p95 251 max 262 ms), back 100/100 (avg 249 p95 492 max 521 ms), other from dongle 834
+[2026-10-13 07:02:18] burst 431: to client 100/100 (avg 128 p95 249 max 259 ms), back 100/100 (avg 284 p95 595 max 626 ms), other from dongle 261
+[2026-10-13 07:03:18] burst 432: to client 100/100 (avg 133 p95 261 max 270 ms), back 100/100 (avg 240 p95 475 max 503 ms), other from dongle 261
+[2026-10-13 07:04:18] burst 433: to client 100/100 (avg 129 p95 257 max 266 ms), back 100/100 (avg 251 p95 489 max 508 ms), other from dongle 261
+[2026-10-13 07:05:18] burst 434: to client 100/100 (avg 139 p95 253 max 262 ms), back 100/100 (avg 263 p95 530 max 558 ms), other from dongle 261
+[2026-10-13 07:06:18] burst 435: to client 100/100 (avg 120 p95 232 max 243 ms), back 100/100 (avg 238 p95 478 max 497 ms), other from dongle 261
+[2026-10-13 07:07:18] burst 436: to client 100/100 (avg 125 p95 237 max 269 ms), back 100/100 (avg 234 p95 464 max 481 ms), other from dongle 261
+[2026-10-13 07:08:18] burst 437: to client 100/100 (avg 127 p95 260 max 272 ms), back 100/100 (avg 232 p95 470 max 500 ms), other from dongle 261
+[2026-10-13 07:09:18] burst 438: to client 100/100 (avg 119 p95 226 max 259 ms), back 100/100 (avg 246 p95 471 max 489 ms), other from dongle 261
+[2026-10-13 07:10:20] burst 439: to client 100/100 (avg 134 p95 242 max 252 ms), back 88/100 (avg 306 p95 605 max 630 ms), other from dongle 8823  <-- missing
+[2026-10-13 07:11:18] burst 440: to client 100/100 (avg 128 p95 261 max 269 ms), back 100/100 (avg 233 p95 479 max 500 ms), other from dongle 839
+[2026-10-13 07:12:18] burst 441: to client 100/100 (avg 136 p95 254 max 265 ms), back 100/100 (avg 253 p95 509 max 533 ms), other from dongle 261
+[2026-10-13 07:13:18] burst 442: to client 100/100 (avg 140 p95 248 max 258 ms), back 100/100 (avg 268 p95 539 max 571 ms), other from dongle 261
+[2026-10-13 07:14:18] burst 443: to client 100/100 (avg 139 p95 258 max 268 ms), back 100/100 (avg 232 p95 460 max 476 ms), other from dongle 261
+[2026-10-13 07:15:18] burst 444: to client 100/100 (avg 129 p95 259 max 269 ms), back 100/100 (avg 242 p95 485 max 516 ms), other from dongle 261
+[2026-10-13 07:16:18] burst 445: to client 100/100 (avg 122 p95 235 max 244 ms), back 100/100 (avg 239 p95 476 max 516 ms), other from dongle 263
+[2026-10-13 07:17:18] burst 446: to client 100/100 (avg 137 p95 254 max 265 ms), back 100/100 (avg 248 p95 490 max 506 ms), other from dongle 259
+[2026-10-13 07:18:18] burst 447: to client 100/100 (avg 127 p95 251 max 261 ms), back 100/100 (avg 249 p95 503 max 520 ms), other from dongle 262
+[2026-10-13 07:19:18] burst 448: to client 100/100 (avg 146 p95 278 max 286 ms), back 100/100 (avg 273 p95 541 max 562 ms), other from dongle 264
+[2026-10-13 07:20:20] burst 449: to client 100/100 (avg 136 p95 254 max 264 ms), back 95/100 (avg 299 p95 570 max 582 ms), other from dongle 9140  <-- missing
+[2026-10-13 07:21:18] burst 450: to client 100/100 (avg 142 p95 279 max 287 ms), back 100/100 (avg 240 p95 475 max 484 ms), other from dongle 840
+[2026-10-13 07:22:18] burst 451: to client 100/100 (avg 147 p95 259 max 269 ms), back 100/100 (avg 240 p95 470 max 491 ms), other from dongle 261
+[2026-10-13 07:23:18] burst 452: to client 100/100 (avg 131 p95 257 max 267 ms), back 100/100 (avg 240 p95 473 max 491 ms), other from dongle 261
+[2026-10-13 07:24:18] burst 453: to client 100/100 (avg 138 p95 264 max 272 ms), back 100/100 (avg 225 p95 441 max 465 ms), other from dongle 261
+[2026-10-13 07:25:18] burst 454: to client 100/100 (avg 129 p95 252 max 259 ms), back 100/100 (avg 249 p95 468 max 482 ms), other from dongle 261
+[2026-10-13 07:26:18] burst 455: to client 100/100 (avg 123 p95 258 max 266 ms), back 100/100 (avg 249 p95 500 max 518 ms), other from dongle 261
+[2026-10-13 07:27:18] burst 456: to client 100/100 (avg 120 p95 245 max 254 ms), back 100/100 (avg 257 p95 505 max 539 ms), other from dongle 261
+[2026-10-13 07:28:18] burst 457: to client 100/100 (avg 131 p95 255 max 266 ms), back 100/100 (avg 247 p95 486 max 511 ms), other from dongle 261
+[2026-10-13 07:29:18] burst 458: to client 100/100 (avg 123 p95 252 max 263 ms), back 100/100 (avg 242 p95 464 max 493 ms), other from dongle 261
+[2026-10-13 07:30:20] burst 459: to client 100/100 (avg 133 p95 255 max 265 ms), back 95/100 (avg 287 p95 568 max 568 ms), other from dongle 9250  <-- missing
+[2026-10-13 07:31:18] burst 460: to client 100/100 (avg 128 p95 240 max 251 ms), back 100/100 (avg 220 p95 434 max 457 ms), other from dongle 833
+[2026-10-13 07:32:18] burst 461: to client 100/100 (avg 143 p95 266 max 275 ms), back 100/100 (avg 229 p95 456 max 489 ms), other from dongle 261
+[2026-10-13 07:33:18] burst 462: to client 100/100 (avg 134 p95 265 max 274 ms), back 100/100 (avg 236 p95 468 max 484 ms), other from dongle 261
+[2026-10-13 07:34:18] burst 463: to client 100/100 (avg 133 p95 258 max 268 ms), back 100/100 (avg 234 p95 475 max 495 ms), other from dongle 261
+[2026-10-13 07:35:18] burst 464: to client 100/100 (avg 148 p95 290 max 297 ms), back 100/100 (avg 235 p95 484 max 510 ms), other from dongle 261
+[2026-10-13 07:36:18] burst 465: to client 100/100 (avg 134 p95 262 max 273 ms), back 100/100 (avg 224 p95 438 max 462 ms), other from dongle 261
+[2026-10-13 07:37:18] burst 466: to client 100/100 (avg 131 p95 255 max 264 ms), back 100/100 (avg 249 p95 499 max 524 ms), other from dongle 263
+[2026-10-13 07:38:18] burst 467: to client 100/100 (avg 136 p95 263 max 273 ms), back 100/100 (avg 233 p95 476 max 492 ms), other from dongle 262
+[2026-10-13 07:39:18] burst 468: to client 100/100 (avg 149 p95 287 max 297 ms), back 100/100 (avg 226 p95 439 max 466 ms), other from dongle 265
+[2026-10-13 07:40:20] burst 469: to client 100/100 (avg 140 p95 267 max 274 ms), back 98/100 (avg 286 p95 561 max 589 ms), other from dongle 9305  <-- missing
+[2026-10-13 07:41:18] burst 470: to client 100/100 (avg 134 p95 266 max 276 ms), back 100/100 (avg 237 p95 465 max 483 ms), other from dongle 818
+[2026-10-13 07:42:18] burst 471: to client 100/100 (avg 136 p95 259 max 267 ms), back 100/100 (avg 229 p95 435 max 453 ms), other from dongle 261
+[2026-10-13 07:43:18] burst 472: to client 100/100 (avg 147 p95 279 max 288 ms), back 100/100 (avg 253 p95 477 max 493 ms), other from dongle 261
+[2026-10-13 07:44:18] burst 473: to client 100/100 (avg 121 p95 231 max 238 ms), back 100/100 (avg 246 p95 505 max 520 ms), other from dongle 261
+[2026-10-13 07:45:18] burst 474: to client 100/100 (avg 122 p95 257 max 264 ms), back 100/100 (avg 242 p95 475 max 492 ms), other from dongle 261
+[2026-10-13 07:46:18] burst 475: to client 100/100 (avg 120 p95 233 max 240 ms), back 100/100 (avg 248 p95 505 max 540 ms), other from dongle 261
+[2026-10-13 07:47:18] burst 476: to client 100/100 (avg 137 p95 258 max 267 ms), back 100/100 (avg 240 p95 497 max 518 ms), other from dongle 261
+[2026-10-13 07:48:18] burst 477: to client 100/100 (avg 124 p95 250 max 258 ms), back 100/100 (avg 260 p95 542 max 569 ms), other from dongle 261
+[2026-10-13 07:49:18] burst 478: to client 100/100 (avg 130 p95 255 max 263 ms), back 100/100 (avg 257 p95 519 max 539 ms), other from dongle 262
+[2026-10-13 07:50:20] burst 479: to client 100/100 (avg 124 p95 229 max 237 ms), back 91/100 (avg 317 p95 634 max 649 ms), other from dongle 8651  <-- missing
+[2026-10-13 07:51:18] burst 480: to client 100/100 (avg 133 p95 261 max 271 ms), back 100/100 (avg 239 p95 496 max 532 ms), other from dongle 754
+[2026-10-13 07:52:18] burst 481: to client 100/100 (avg 145 p95 278 max 288 ms), back 100/100 (avg 263 p95 532 max 553 ms), other from dongle 261
+[2026-10-13 07:52:18] hour: bursts=60 to client 6000/6000 (avg 132 p95 255 max 297 ms), back 5962/6000 (avg 250 p95 496 max 649 ms)
+[2026-10-13 07:53:18] burst 482: to client 100/100 (avg 126 p95 237 max 271 ms), back 100/100 (avg 249 p95 522 max 539 ms), other from dongle 261
+[2026-10-13 07:54:18] burst 483: to client 100/100 (avg 126 p95 240 max 252 ms), back 100/100 (avg 242 p95 496 max 532 ms), other from dongle 261
+[2026-10-13 07:55:18] burst 484: to client 100/100 (avg 145 p95 285 max 295 ms), back 100/100 (avg 249 p95 485 max 504 ms), other from dongle 261
+[2026-10-13 07:56:18] burst 485: to client 100/100 (avg 148 p95 279 max 288 ms), back 100/100 (avg 274 p95 552 max 576 ms), other from dongle 262
+[2026-10-13 07:57:18] burst 486: to client 100/100 (avg 121 p95 256 max 265 ms), back 100/100 (avg 267 p95 545 max 578 ms), other from dongle 262
+[2026-10-13 07:58:18] burst 487: to client 100/100 (avg 147 p95 260 max 275 ms), back 100/100 (avg 251 p95 486 max 505 ms), other from dongle 263
+[2026-10-13 07:59:18] burst 488: to client 100/100 (avg 138 p95 265 max 276 ms), back 100/100 (avg 272 p95 539 max 566 ms), other from dongle 262
+[2026-10-13 08:00:20] burst 489: to client 100/100 (avg 136 p95 256 max 263 ms), back 93/100 (avg 293 p95 551 max 570 ms), other from dongle 8867  <-- missing
+[2026-10-13 08:01:18] burst 490: to client 100/100 (avg 121 p95 232 max 241 ms), back 100/100 (avg 248 p95 502 max 541 ms), other from dongle 735
+[2026-10-13 08:02:18] burst 491: to client 100/100 (avg 136 p95 252 max 260 ms), back 100/100 (avg 258 p95 519 max 546 ms), other from dongle 260
+[2026-10-13 08:03:18] burst 492: to client 100/100 (avg 118 p95 227 max 238 ms), back 100/100 (avg 249 p95 500 max 533 ms), other from dongle 262
+[2026-10-13 08:04:18] burst 493: to client 100/100 (avg 135 p95 247 max 258 ms), back 100/100 (avg 269 p95 526 max 558 ms), other from dongle 260
+[2026-10-13 08:05:18] burst 494: to client 100/100 (avg 142 p95 281 max 292 ms), back 100/100 (avg 246 p95 489 max 513 ms), other from dongle 261
+[2026-10-13 08:06:18] burst 495: to client 100/100 (avg 138 p95 252 max 261 ms), back 100/100 (avg 255 p95 522 max 553 ms), other from dongle 261
+[2026-10-13 08:07:18] burst 496: to client 100/100 (avg 134 p95 241 max 250 ms), back 100/100 (avg 281 p95 570 max 598 ms), other from dongle 261
+[2026-10-13 08:08:18] burst 497: to client 100/100 (avg 143 p95 276 max 287 ms), back 100/100 (avg 259 p95 520 max 565 ms), other from dongle 261
+[2026-10-13 08:09:18] burst 498: to client 100/100 (avg 137 p95 262 max 273 ms), back 100/100 (avg 242 p95 495 max 524 ms), other from dongle 263
+[2026-10-13 08:10:20] burst 499: to client 100/100 (avg 120 p95 228 max 236 ms), back 91/100 (avg 302 p95 601 max 619 ms), other from dongle 8478  <-- missing
+[2026-10-13 08:11:18] burst 500: to client 100/100 (avg 126 p95 239 max 248 ms), back 100/100 (avg 291 p95 552 max 573 ms), other from dongle 702
+[2026-10-13 08:12:18] burst 501: to client 100/100 (avg 129 p95 262 max 272 ms), back 100/100 (avg 236 p95 475 max 508 ms), other from dongle 261
+[2026-10-13 08:13:18] burst 502: to client 100/100 (avg 120 p95 228 max 237 ms), back 100/100 (avg 237 p95 470 max 496 ms), other from dongle 261
+[2026-10-13 08:14:18] burst 503: to client 100/100 (avg 123 p95 236 max 245 ms), back 100/100 (avg 225 p95 445 max 466 ms), other from dongle 261
+[2026-10-13 08:15:18] burst 504: to client 100/100 (avg 123 p95 230 max 240 ms), back 100/100 (avg 238 p95 479 max 502 ms), other from dongle 261
+[2026-10-13 08:16:18] burst 505: to client 100/100 (avg 127 p95 238 max 247 ms), back 100/100 (avg 227 p95 455 max 474 ms), other from dongle 262
+[2026-10-13 08:17:18] burst 506: to client 100/100 (avg 122 p95 238 max 246 ms), back 100/100 (avg 227 p95 438 max 460 ms), other from dongle 262
+[2026-10-13 08:18:18] burst 507: to client 100/100 (avg 133 p95 260 max 271 ms), back 100/100 (avg 232 p95 456 max 474 ms), other from dongle 264
+[2026-10-13 08:19:18] burst 508: to client 100/100 (avg 135 p95 254 max 261 ms), back 100/100 (avg 246 p95 474 max 502 ms), other from dongle 261
+[2026-10-13 08:20:20] burst 509: to client 100/100 (avg 136 p95 259 max 271 ms), back 99/100 (avg 297 p95 587 max 604 ms), other from dongle 9045  <-- missing
+[2026-10-13 08:21:18] burst 510: to client 100/100 (avg 120 p95 231 max 241 ms), back 100/100 (avg 253 p95 532 max 550 ms), other from dongle 719
+[2026-10-13 08:22:18] burst 511: to client 100/100 (avg 136 p95 268 max 278 ms), back 100/100 (avg 221 p95 451 max 467 ms), other from dongle 261
+[2026-10-13 08:23:18] burst 512: to client 100/100 (avg 149 p95 290 max 300 ms), back 100/100 (avg 223 p95 440 max 461 ms), other from dongle 261
+[2026-10-13 08:24:18] burst 513: to client 100/100 (avg 126 p95 253 max 265 ms), back 100/100 (avg 251 p95 497 max 502 ms), other from dongle 261
+[2026-10-13 08:25:18] burst 514: to client 100/100 (avg 129 p95 254 max 266 ms), back 100/100 (avg 251 p95 505 max 527 ms), other from dongle 261
+[2026-10-13 08:26:18] burst 515: to client 100/100 (avg 133 p95 252 max 259 ms), back 100/100 (avg 247 p95 475 max 498 ms), other from dongle 261
+[2026-10-13 08:27:18] burst 516: to client 100/100 (avg 133 p95 254 max 265 ms), back 100/100 (avg 244 p95 476 max 497 ms), other from dongle 261
+[2026-10-13 08:28:18] burst 517: to client 100/100 (avg 134 p95 247 max 259 ms), back 100/100 (avg 254 p95 510 max 527 ms), other from dongle 262
+[2026-10-13 08:29:18] burst 518: to client 100/100 (avg 139 p95 266 max 274 ms), back 100/100 (avg 242 p95 493 max 520 ms), other from dongle 262
+[2026-10-13 08:30:18] burst 519: to client 100/100 (avg 156 p95 292 max 304 ms), back 100/100 (avg 308 p95 579 max 605 ms), other from dongle 8407
+[2026-10-13 08:31:18] burst 520: to client 100/100 (avg 124 p95 231 max 241 ms), back 100/100 (avg 242 p95 493 max 540 ms), other from dongle 1477
+[2026-10-13 08:32:18] burst 521: to client 100/100 (avg 123 p95 235 max 244 ms), back 100/100 (avg 236 p95 469 max 486 ms), other from dongle 260
+[2026-10-13 08:33:18] burst 522: to client 100/100 (avg 140 p95 260 max 272 ms), back 100/100 (avg 237 p95 453 max 468 ms), other from dongle 261
+[2026-10-13 08:34:18] burst 523: to client 100/100 (avg 120 p95 226 max 237 ms), back 100/100 (avg 249 p95 463 max 500 ms), other from dongle 264
+[2026-10-13 08:35:18] burst 524: to client 100/100 (avg 145 p95 258 max 298 ms), back 100/100 (avg 275 p95 554 max 554 ms), other from dongle 264
+[2026-10-13 08:36:18] burst 525: to client 100/100 (avg 152 p95 286 max 297 ms), back 100/100 (avg 260 p95 503 max 530 ms), other from dongle 259
+[2026-10-13 08:37:18] burst 526: to client 100/100 (avg 124 p95 231 max 241 ms), back 100/100 (avg 244 p95 501 max 522 ms), other from dongle 262
+[2026-10-13 08:38:18] burst 527: to client 100/100 (avg 119 p95 226 max 234 ms), back 100/100 (avg 252 p95 487 max 520 ms), other from dongle 262
+[2026-10-13 08:39:18] burst 528: to client 100/100 (avg 139 p95 268 max 278 ms), back 100/100 (avg 262 p95 495 max 521 ms), other from dongle 261
+[2026-10-13 08:40:18] burst 529: to client 100/100 (avg 144 p95 284 max 296 ms), back 100/100 (avg 307 p95 588 max 617 ms), other from dongle 8370
+[2026-10-13 08:41:18] burst 530: to client 100/100 (avg 132 p95 255 max 267 ms), back 100/100 (avg 240 p95 472 max 512 ms), other from dongle 1473
+[2026-10-13 08:42:18] burst 531: to client 100/100 (avg 118 p95 228 max 235 ms), back 100/100 (avg 249 p95 476 max 493 ms), other from dongle 261
+[2026-10-13 08:43:18] burst 532: to client 100/100 (avg 131 p95 254 max 263 ms), back 100/100 (avg 253 p95 513 max 532 ms), other from dongle 261
+[2026-10-13 08:44:18] burst 533: to client 100/100 (avg 136 p95 257 max 269 ms), back 100/100 (avg 240 p95 483 max 499 ms), other from dongle 261
+[2026-10-13 08:45:18] burst 534: to client 100/100 (avg 122 p95 227 max 237 ms), back 100/100 (avg 262 p95 522 max 563 ms), other from dongle 262
+[2026-10-13 08:46:18] burst 535: to client 100/100 (avg 132 p95 258 max 266 ms), back 100/100 (avg 251 p95 500 max 528 ms), other from dongle 260
+[2026-10-13 08:47:18] burst 536: to client 100/100 (avg 135 p95 256 max 264 ms), back 100/100 (avg 244 p95 485 max 504 ms), other from dongle 261
+[2026-10-13 08:48:18] burst 537: to client 100/100 (avg 125 p95 241 max 254 ms), back 100/100 (avg 241 p95 493 max 512 ms), other from dongle 262
+[2026-10-13 08:49:18] burst 538: to client 100/100 (avg 147 p95 263 max 271 ms), back 100/100 (avg 237 p95 437 max 452 ms), other from dongle 263
+[2026-10-13 08:50:20] burst 539: to client 100/100 (avg 122 p95 233 max 245 ms), back 94/100 (avg 299 p95 560 max 587 ms), other from dongle 9033  <-- missing
+[2026-10-13 08:51:18] burst 540: to client 100/100 (avg 124 p95 253 max 263 ms), back 100/100 (avg 256 p95 504 max 521 ms), other from dongle 643
+[2026-10-13 08:52:18] burst 541: to client 100/100 (avg 144 p95 285 max 295 ms), back 100/100 (avg 196 p95 365 max 401 ms), other from dongle 262
+[2026-10-13 08:52:18] hour: bursts=60 to client 6000/6000 (avg 132 p95 253 max 304 ms), back 5977/6000 (avg 253 p95 507 max 619 ms)
+[2026-10-13 08:53:18] burst 542: to client 100/100 (avg 136 p95 269 max 281 ms), back 100/100 (avg 237 p95 481 max 499 ms), other from dongle 260
+[2026-10-13 08:54:18] burst 543: to client 100/100 (avg 129 p95 256 max 266 ms), back 100/100 (avg 279 p95 578 max 625 ms), other from dongle 261
+[2026-10-13 08:55:18] burst 544: to client 100/100 (avg 124 p95 245 max 254 ms), back 100/100 (avg 307 p95 612 max 637 ms), other from dongle 262
+[2026-10-13 08:56:18] burst 545: to client 100/100 (avg 144 p95 275 max 290 ms), back 100/100 (avg 289 p95 590 max 618 ms), other from dongle 262
+[2026-10-13 08:57:18] burst 546: to client 100/100 (avg 126 p95 254 max 267 ms), back 100/100 (avg 282 p95 569 max 589 ms), other from dongle 261
+[2026-10-13 08:58:18] burst 547: to client 100/100 (avg 149 p95 288 max 299 ms), back 100/100 (avg 241 p95 455 max 455 ms), other from dongle 262
+[2026-10-13 08:59:18] burst 548: to client 100/100 (avg 147 p95 281 max 291 ms), back 100/100 (avg 213 p95 409 max 431 ms), other from dongle 260
+[2026-10-13 09:00:18] burst 549: to client 100/100 (avg 156 p95 305 max 313 ms), back 100/100 (avg 279 p95 532 max 546 ms), other from dongle 8976
+[2026-10-13 09:01:18] burst 550: to client 100/100 (avg 143 p95 273 max 284 ms), back 100/100 (avg 224 p95 434 max 448 ms), other from dongle 1518
+[2026-10-13 09:02:18] burst 551: to client 100/100 (avg 142 p95 290 max 300 ms), back 100/100 (avg 222 p95 427 max 448 ms), other from dongle 261
+[2026-10-13 09:03:18] burst 552: to client 100/100 (avg 154 p95 292 max 308 ms), back 100/100 (avg 228 p95 427 max 454 ms), other from dongle 262
+[2026-10-13 09:04:18] burst 553: to client 100/100 (avg 129 p95 267 max 278 ms), back 100/100 (avg 216 p95 400 max 434 ms), other from dongle 261
+[2026-10-13 09:05:18] burst 554: to client 100/100 (avg 131 p95 269 max 277 ms), back 100/100 (avg 228 p95 443 max 449 ms), other from dongle 260
+[2026-10-13 09:06:18] burst 555: to client 100/100 (avg 133 p95 254 max 262 ms), back 100/100 (avg 209 p95 402 max 433 ms), other from dongle 263
+[2026-10-13 09:07:18] burst 556: to client 100/100 (avg 141 p95 265 max 273 ms), back 100/100 (avg 225 p95 418 max 441 ms), other from dongle 261
+[2026-10-13 09:08:18] burst 557: to client 100/100 (avg 150 p95 284 max 294 ms), back 100/100 (avg 237 p95 438 max 444 ms), other from dongle 261
+[2026-10-13 09:09:18] burst 558: to client 100/100 (avg 142 p95 263 max 272 ms), back 100/100 (avg 227 p95 427 max 448 ms), other from dongle 262
+[2026-10-13 09:10:18] burst 559: to client 100/100 (avg 139 p95 272 max 281 ms), back 100/100 (avg 276 p95 524 max 536 ms), other from dongle 8975
+[2026-10-13 09:11:18] burst 560: to client 100/100 (avg 129 p95 249 max 259 ms), back 100/100 (avg 218 p95 415 max 429 ms), other from dongle 1493
+[2026-10-13 09:12:18] burst 561: to client 100/100 (avg 132 p95 246 max 255 ms), back 100/100 (avg 214 p95 418 max 438 ms), other from dongle 261
+[2026-10-13 09:13:18] burst 562: to client 100/100 (avg 128 p95 263 max 275 ms), back 100/100 (avg 232 p95 440 max 453 ms), other from dongle 261
+[2026-10-13 09:14:18] burst 563: to client 100/100 (avg 126 p95 240 max 253 ms), back 100/100 (avg 235 p95 453 max 472 ms), other from dongle 263
+[2026-10-13 09:15:18] burst 564: to client 100/100 (avg 147 p95 269 max 279 ms), back 100/100 (avg 232 p95 450 max 463 ms), other from dongle 263
+[2026-10-13 09:16:18] burst 565: to client 100/100 (avg 140 p95 281 max 289 ms), back 100/100 (avg 218 p95 412 max 430 ms), other from dongle 263
+[2026-10-13 09:17:18] burst 566: to client 100/100 (avg 140 p95 275 max 287 ms), back 100/100 (avg 220 p95 419 max 433 ms), other from dongle 262
+[2026-10-13 09:18:18] burst 567: to client 100/100 (avg 157 p95 300 max 308 ms), back 100/100 (avg 214 p95 401 max 416 ms), other from dongle 261
+[2026-10-13 09:19:18] burst 568: to client 100/100 (avg 150 p95 291 max 304 ms), back 100/100 (avg 228 p95 415 max 441 ms), other from dongle 261
+[2026-10-13 09:20:18] burst 569: to client 100/100 (avg 137 p95 270 max 282 ms), back 100/100 (avg 284 p95 540 max 563 ms), other from dongle 8923
+[2026-10-13 09:21:18] burst 570: to client 100/100 (avg 158 p95 290 max 303 ms), back 100/100 (avg 244 p95 458 max 471 ms), other from dongle 1471
+[2026-10-13 09:22:18] burst 571: to client 100/100 (avg 139 p95 276 max 286 ms), back 100/100 (avg 218 p95 429 max 454 ms), other from dongle 261
+[2026-10-13 09:23:18] burst 572: to client 100/100 (avg 124 p95 249 max 257 ms), back 100/100 (avg 232 p95 434 max 449 ms), other from dongle 261
+[2026-10-13 09:24:18] burst 573: to client 100/100 (avg 132 p95 266 max 274 ms), back 100/100 (avg 220 p95 435 max 453 ms), other from dongle 261
+[2026-10-13 09:25:18] burst 574: to client 100/100 (avg 143 p95 272 max 281 ms), back 100/100 (avg 220 p95 427 max 452 ms), other from dongle 261
+[2026-10-13 09:26:18] burst 575: to client 100/100 (avg 130 p95 262 max 273 ms), back 100/100 (avg 225 p95 434 max 456 ms), other from dongle 262
+[2026-10-13 09:27:18] burst 576: to client 100/100 (avg 128 p95 259 max 269 ms), back 100/100 (avg 234 p95 457 max 477 ms), other from dongle 262
+[2026-10-13 09:28:18] burst 577: to client 100/100 (avg 143 p95 266 max 276 ms), back 100/100 (avg 223 p95 430 max 449 ms), other from dongle 262
+[2026-10-13 09:29:18] burst 578: to client 100/100 (avg 132 p95 259 max 267 ms), back 100/100 (avg 229 p95 437 max 457 ms), other from dongle 263
+[2026-10-13 09:30:18] burst 579: to client 100/100 (avg 150 p95 275 max 286 ms), back 100/100 (avg 271 p95 515 max 539 ms), other from dongle 8983
+[2026-10-13 09:31:18] burst 580: to client 100/100 (avg 130 p95 248 max 256 ms), back 100/100 (avg 208 p95 403 max 421 ms), other from dongle 1448
+[2026-10-13 09:32:18] burst 581: to client 100/100 (avg 143 p95 282 max 292 ms), back 100/100 (avg 238 p95 444 max 463 ms), other from dongle 261
+[2026-10-13 09:33:18] burst 582: to client 100/100 (avg 126 p95 242 max 250 ms), back 100/100 (avg 231 p95 444 max 460 ms), other from dongle 262
+[2026-10-13 09:34:18] burst 583: to client 100/100 (avg 140 p95 272 max 282 ms), back 100/100 (avg 220 p95 429 max 447 ms), other from dongle 263
+[2026-10-13 09:35:18] burst 584: to client 100/100 (avg 161 p95 296 max 308 ms), back 100/100 (avg 228 p95 396 max 432 ms), other from dongle 264
+[2026-10-13 09:36:18] burst 585: to client 100/100 (avg 132 p95 253 max 264 ms), back 100/100 (avg 201 p95 376 max 389 ms), other from dongle 262
+[2026-10-13 09:37:18] burst 586: to client 100/100 (avg 161 p95 281 max 292 ms), back 100/100 (avg 216 p95 382 max 396 ms), other from dongle 261
+[2026-10-13 09:38:18] burst 587: to client 100/100 (avg 162 p95 304 max 314 ms), back 100/100 (avg 216 p95 385 max 398 ms), other from dongle 261
+[2026-10-13 09:39:18] burst 588: to client 100/100 (avg 145 p95 279 max 287 ms), back 100/100 (avg 201 p95 366 max 382 ms), other from dongle 261
+[2026-10-13 09:40:18] burst 589: to client 100/100 (avg 163 p95 310 max 319 ms), back 100/100 (avg 252 p95 473 max 478 ms), other from dongle 9194
+[2026-10-13 09:41:18] burst 590: to client 100/100 (avg 147 p95 275 max 286 ms), back 100/100 (avg 201 p95 371 max 387 ms), other from dongle 1473
+[2026-10-13 09:42:18] burst 591: to client 100/100 (avg 148 p95 278 max 289 ms), back 100/100 (avg 198 p95 363 max 382 ms), other from dongle 261
+[2026-10-13 09:43:18] burst 592: to client 100/100 (avg 147 p95 272 max 282 ms), back 100/100 (avg 203 p95 375 max 391 ms), other from dongle 261
+[2026-10-13 09:44:18] burst 593: to client 100/100 (avg 129 p95 244 max 257 ms), back 100/100 (avg 200 p95 367 max 380 ms), other from dongle 261
+[2026-10-13 09:45:18] burst 594: to client 100/100 (avg 153 p95 303 max 313 ms), back 100/100 (avg 199 p95 369 max 382 ms), other from dongle 261
+[2026-10-13 09:46:18] burst 595: to client 100/100 (avg 141 p95 275 max 286 ms), back 100/100 (avg 198 p95 366 max 391 ms), other from dongle 264
+[2026-10-13 09:47:18] burst 596: to client 100/100 (avg 152 p95 279 max 290 ms), back 100/100 (avg 197 p95 366 max 379 ms), other from dongle 262
+[2026-10-13 09:48:18] burst 597: to client 100/100 (avg 138 p95 266 max 276 ms), back 100/100 (avg 205 p95 389 max 389 ms), other from dongle 264
+[2026-10-13 09:49:18] burst 598: to client 100/100 (avg 168 p95 308 max 320 ms), back 100/100 (avg 224 p95 392 max 405 ms), other from dongle 261
+[2026-10-13 09:50:18] burst 599: to client 100/100 (avg 157 p95 275 max 283 ms), back 100/100 (avg 261 p95 455 max 469 ms), other from dongle 9193
+[2026-10-13 09:51:18] burst 600: to client 100/100 (avg 140 p95 272 max 283 ms), back 100/100 (avg 200 p95 389 max 389 ms), other from dongle 1454
+[2026-10-13 09:52:18] TOTAL: bursts=600 to client 60000/60000 (avg 135 p95 258 max 320 ms), back 59717/60000 (avg 251 p95 503 max 672 ms)

@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 40 1620 560" role="img" aria-labelledby="title desc">
+  <title id="title">Round-trip benchmark setup</title>
+  <desc id="desc">Pure Data on the MIDI host sends a note over USB MIDI to the ESP-NOW MIDI dongle, which sends it over ESP-NOW to a client running client_echo. The client sends it back the same way; Pure Data measures the round-trip time, 1,000 notes per run, at distances from 1 to 75 m.</desc>
+  <style>
+    .label { fill: #000; font: 600 25px system-ui, sans-serif; letter-spacing: .5px; }
+    .small-label { fill: #e5a3bd; font: 600 22px system-ui, sans-serif; letter-spacing: 1px; }
+    .note { fill: #000; font: 500 20px system-ui, sans-serif; letter-spacing: .5px; }
+    .outline { fill: none; stroke: #000; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+    .wireless { fill: none; stroke: #e5a3bd; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 12 12; }
+    .flow { fill: none; stroke: #000; stroke-width: 3; stroke-linejoin: round; }
+    .flow-head { fill: #000; }
+    .serial { fill: none; stroke: #000; stroke-width: 3; stroke-dasharray: 4 8; stroke-linecap: round; stroke-linejoin: round; }
+    .board { fill: #fff; stroke: #000; stroke-width: 4; }
+    .detail { fill: none; stroke: #000; stroke-width: 3; stroke-linejoin: round; }
+    .pin { fill: #e5a3bd; }
+    @media (prefers-color-scheme: dark) {
+      .label, .note, .flow-head { fill: #6e7781; }
+      .outline, .detail, .flow, .serial { stroke: #6e7781; }
+      .board { fill: none; stroke: #6e7781; }
+    }
+  </style>
+  <defs>
+    <g id="board">
+      <rect class="board" width="135" height="70" rx="8"/>
+      <rect class="detail" x="14" y="22" width="20" height="27"/>
+      <rect class="detail" x="56" y="18" width="31" height="34"/>
+      <path class="detail" d="M111 17v36l12-7V24z"/>
+      <g class="pin">
+        <circle cx="10" cy="10" r="3"/><circle cx="25" cy="10" r="3"/><circle cx="40" cy="10" r="3"/><circle cx="55" cy="10" r="3"/><circle cx="70" cy="10" r="3"/><circle cx="85" cy="10" r="3"/><circle cx="100" cy="10" r="3"/>
+        <circle cx="10" cy="60" r="3"/><circle cx="25" cy="60" r="3"/><circle cx="40" cy="60" r="3"/><circle cx="55" cy="60" r="3"/><circle cx="70" cy="60" r="3"/><circle cx="85" cy="60" r="3"/><circle cx="100" cy="60" r="3"/>
+      </g>
+    </g>
+  </defs>
+
+  <g aria-label="MIDI host laptop">
+    <rect class="outline" x="105" y="218" width="258" height="150" rx="10"/>
+    <path class="outline" d="M78 400h312l-32-32H110zM204 400h60"/>
+    <text class="label" x="234" y="462" text-anchor="middle">MIDI HOST</text>
+    <text class="small-label" x="234" y="497" text-anchor="middle">PURE DATA TIMER</text>
+  </g>
+
+  <g aria-label="USB MIDI connection">
+    <path d="M432 320h177" stroke="#e5a3bd" stroke-width="5"/>
+    <path d="m432 320 18-11v22zM609 320l-18-11v22z" fill="#e5a3bd"/>
+    <text class="small-label" x="520" y="290" text-anchor="middle">USB MIDI</text>
+  </g>
+
+  <g aria-label="ESP-NOW MIDI dongle">
+    <rect class="board" x="628" y="227" width="103" height="160" rx="14"/>
+    <path class="detail" d="M648 227v-38h63v38M650 279h60v73h-60z"/>
+    <circle class="pin" cx="680" cy="362" r="5"/>
+    <text class="label" x="680" y="440" text-anchor="middle">ESP-NOW</text>
+    <text class="label" x="680" y="473" text-anchor="middle">MIDI DONGLE</text>
+  </g>
+
+  <g aria-label="ESP-NOW link">
+    <path class="wireless" d="M731 320H1420"/>
+    <text class="small-label" x="1075" y="295" text-anchor="middle">ESP-NOW</text>
+    <text class="small-label" x="1075" y="362" text-anchor="middle">1–75 M, 0–2 OBSTACLES</text>
+  </g>
+
+  <g aria-label="Client board">
+    <use href="#board" transform="translate(1430 275) scale(1.3)"/>
+    <text class="label" x="1518" y="440" text-anchor="middle">CLIENT</text>
+    <text class="small-label" x="1518" y="473" text-anchor="middle">CLIENT_ECHO</text>
+  </g>
+
+  <g aria-label="Round trip">
+    <path class="flow" d="M220 208V90H1530V258"/>
+    <path class="flow-head" d="m1530 268-10-18h20z"/>
+    <path class="flow" d="M1500 258V140H250V198"/>
+    <path class="flow-head" d="m250 208-10-18h20z"/>
+    <text class="note" x="875" y="78" text-anchor="middle">NOTE →  (next one only after the echo arrived, 1,000 per run)</text>
+    <text class="note" x="875" y="122" text-anchor="middle">←  ECHO, round-trip time measured in Pure Data</text>
+  </g>
+</svg>

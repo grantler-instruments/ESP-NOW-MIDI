@@ -27,11 +27,12 @@ to catch the hang where `esp_now_send()` refuses every send with
 3. Log both boards to a file (Ctrl+C to stop, survives replugging):
 
    ```sh
-   python3 examples/client_soak_test/soak_logger.py soak.log \
+   python3 examples/client_soak_test/soak_logger.py benchmarks/0.19.0/soak/soak.log \
      client=/dev/cu.usbmodem1201 dongle=/dev/cu.usbmodem1301
    ```
 
    The terminal shows the minute summary and events; the file has everything.
+   Keep results under `benchmarks/<library version>/soak/`.
 
 4. Optional, to load the other direction too: send a burst of 100 notes from
    the computer through the dongle to the client every 60 s; the client sends
@@ -40,7 +41,7 @@ to catch the hang where `esp_now_send()` refuses every send with
 
    ```sh
    scripts/wizard/.venv/bin/python examples/client_soak_test/soak_bursts.py \
-     soak_bursts.log 60
+     benchmarks/0.19.0/soak/soak_bursts.log 60
    ```
 
    One line per burst (arrived at the client, came back, times), a summary per

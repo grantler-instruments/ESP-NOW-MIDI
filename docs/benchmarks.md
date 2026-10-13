@@ -1,5 +1,7 @@
 # Benchmarks
 
+![Round-trip benchmark setup: Pure Data on the host sends a note over USB MIDI and the dongle to a client running client_echo, which sends it back](images/benchmark-rtt.svg)
+
 The benchmarks measure round-trip time across the complete stack: computer,
 Pure Data, USB MIDI, ESP-NOW transmission, ESP32 processing, the return ESP-NOW
 transmission, ESP32 processing, USB MIDI, and finally Pure Data on the computer.
@@ -23,9 +25,12 @@ BLE MIDI in these tests. Its latency is well suited to musical applications,
 though it shows somewhat more jitter than BLE MIDI, as the spread values in
 the tables below indicate.
 
+The round-trip results below were measured with library version 0.10.7.
 Benchmark data and analysis live in the repository's
 [`benchmarks/`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/benchmarks)
-and `scripts/` directories.
+directory, one subdirectory per library version (these:
+[`benchmarks/0.10.7/`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/benchmarks/0.10.7)),
+and the analysis script in `scripts/`.
 
 ## ESP-NOW MIDI results by distance
 
@@ -59,3 +64,12 @@ baseline for the host-side measurement stack.
 | BLE MIDI | 5 m | 1 | 32.67 | 43.33 | 44.20 | 54.00 | 59.33 | 70.00 | 4.13 | 0.00 |
 | BLE MIDI | 10 m | 2 | 32.67 | 43.33 | 47.22 | 64.67 | 80.67 | 107.33 | 7.89 | 0.00 |
 | RTP-MIDI | 1 m | 0 | 16.67 | 22.00 | 30.86 | 59.33 | 118.00 | 139.33 | 19.01 | 0.00 |
+
+## Soak test (0.19.0)
+
+![Soak test setup: the host sends 100-note bursts through the dongle to a client running client_soak_test, which echoes them and sends its own load; both boards log over USB serial](images/benchmark-soak.svg)
+
+A 10 h run of `client_soak_test` with 100-note bursts from the computer every
+60 s: no stalls or ESP-NOW restarts, all 60,000 notes reached the client and
+99.5 % came back. Details and logs:
+[`benchmarks/0.19.0/soak/`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/benchmarks/0.19.0/soak).
