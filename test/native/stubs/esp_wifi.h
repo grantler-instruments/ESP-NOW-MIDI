@@ -13,6 +13,13 @@ enum
     WIFI_IF_STA = 0,
 };
 inline esp_err_t esp_wifi_set_channel(int, int) { return ESP_OK; }
+inline esp_err_t esp_wifi_stop()
+{
+    stubEspNow().deepStalled = false;
+    stubEspNow().wifiStops++;
+    return ESP_OK;
+}
+inline esp_err_t esp_wifi_start() { return ESP_OK; }
 inline esp_err_t esp_wifi_set_ps(int) { return ESP_OK; }
 inline esp_err_t esp_wifi_set_max_tx_power(int) { return ESP_OK; }
 inline esp_err_t esp_wifi_get_mac(int, uint8_t mac[6])

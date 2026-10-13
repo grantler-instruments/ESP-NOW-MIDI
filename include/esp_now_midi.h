@@ -17,6 +17,14 @@
 #include "./esp_now_midi_lock.h"
 #include "./esp_now_midi_log.h"
 #include "./esp_now_midi_wifi.h"
+#include "./esp_now_midi_send_queue.h"
+
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
+#include "freertos/task.h"
+#define ESP_NOW_MIDI_HAS_TASKS 1
+#else
+#define ESP_NOW_MIDI_HAS_TASKS 0 // host tests: the queue is sent from service()
+#endif
 
 #ifndef ARDUINO
 using byte = uint8_t;
@@ -29,6 +37,9 @@ struct PeerInfo
   uint64_t packed_mac; ///< MAC address packed into the lower 48 bits.
   uint32_t lastSeenMs; ///< millis() of the last valid packet from this peer.
   bool seen;           ///< A valid packet arrived since the peer was added.
+  uint8_t missed;      ///< Sends in a row the peer did not acknowledge.
+  bool unreachable;    ///< Skipped by sends, except one probe per ESP_NOW_MIDI_PROBE_INTERVAL_MS.
+  uint32_t nextProbeMs; ///< millis() of the next probe while unreachable.
 
   /**
    * @brief Packs a six-byte MAC address for fast comparisons.
@@ -54,7 +65,93 @@ struct EspNowSendStats
   uint32_t delivered = 0;    ///< Packets the receiver acknowledged.
   uint32_t notDelivered = 0; ///< Packets sent but not acknowledged.
   esp_err_t lastError = ESP_OK; ///< Last refusal (`ESP_FAIL`: no peers).
+  uint32_t throttled = 0;    ///< Sends dropped after waiting for a pending confirmation (also in `failed`).
+  uint32_t restarts = 0;     ///< ESP-NOW restarts after the driver stopped confirming sends.
+  uint32_t wifiRestarts = 0; ///< Of those, restarts that also stopped and started Wi-Fi.
+  uint32_t skipped = 0;      ///< Packets not sent to a peer marked unreachable (see isPeerReachable()).
+  uint32_t dropped = 0;      ///< Packets the full send queue refused (also in `failed`).
+  uint32_t replaced = 0;     ///< Controller values that replaced a waiting one for the same controller.
+  uint32_t queuePeak = 0;    ///< Most packets waiting in the send queue at once.
 };
+
+#ifndef ESP_NOW_MIDI_SEND_QUEUE
+/**
+ * 1: sends only queue the packet and return; a sender task sends the queue,
+ * one packet at a time. This also works from receive handlers, which run in
+ * the task that reports send results. 0: every send waits for the previous
+ * confirmation itself (up to ESP_NOW_MIDI_SEND_WAIT_MS, then drops).
+ */
+#define ESP_NOW_MIDI_SEND_QUEUE 1
+#endif
+
+#ifndef ESP_NOW_MIDI_QUEUE_SHORT
+/** Send queue slots for short MIDI messages (one per message and peer). */
+#define ESP_NOW_MIDI_QUEUE_SHORT 128
+#endif
+
+#ifndef ESP_NOW_MIDI_QUEUE_FRAMES
+/** Send queue slots for SysEx frames (one per frame and peer). */
+#define ESP_NOW_MIDI_QUEUE_FRAMES 8
+#endif
+
+#ifndef ESP_NOW_MIDI_FRAME_WAIT_MS
+/** How long sendSysex() waits for a free frame slot before it gives up. */
+#define ESP_NOW_MIDI_FRAME_WAIT_MS 200
+#endif
+
+#ifndef ESP_NOW_MIDI_SENDER_PRIORITY
+/** FreeRTOS priority of the sender task: above loop(), below Wi-Fi and USB. */
+#define ESP_NOW_MIDI_SENDER_PRIORITY 3
+#endif
+
+#ifndef ESP_NOW_MIDI_SENDER_STACK
+/** Stack of the sender task, in bytes. */
+#define ESP_NOW_MIDI_SENDER_STACK 3072
+#endif
+
+#ifndef ESP_NOW_MIDI_MAX_IN_FLIGHT
+/**
+ * Sent packets that may wait for their confirmation at once. With more than
+ * one, a sustained load (hundreds of packets per second) made the ESP-NOW
+ * driver stop confirming sends for good on ESP32-S2; with one it did not.
+ */
+#define ESP_NOW_MIDI_MAX_IN_FLIGHT 1
+#endif
+
+#ifndef ESP_NOW_MIDI_SEND_WAIT_MS
+/**
+ * Without the send queue: how long a send waits for a pending confirmation
+ * before it is dropped. With it: how long a note off (or another High
+ * priority message, see esp_now_midi_queue::classify()) waits for a free slot.
+ */
+#define ESP_NOW_MIDI_SEND_WAIT_MS 5
+#endif
+
+#ifndef ESP_NOW_MIDI_STALL_MS
+/** Without a confirmation for this long while sending, ESP-NOW is restarted. */
+#define ESP_NOW_MIDI_STALL_MS 1000
+#endif
+
+#ifndef ESP_NOW_MIDI_UNREACHABLE_AFTER
+/**
+ * A peer that acknowledged none of this many sends in a row is skipped,
+ * except for a probe every ESP_NOW_MIDI_PROBE_INTERVAL_MS, until it
+ * acknowledges or sends again. Waiting for a missing peer's "not delivered"
+ * takes up to ~90 ms, which with ESP_NOW_MIDI_MAX_IN_FLIGHT = 1 held back the
+ * sends to every other peer. 0 = never skip.
+ */
+#define ESP_NOW_MIDI_UNREACHABLE_AFTER 5
+#endif
+
+#ifndef ESP_NOW_MIDI_PROBE_INTERVAL_MS
+/** How often an unreachable peer still gets a packet, to notice it is back. */
+#define ESP_NOW_MIDI_PROBE_INTERVAL_MS 2000
+#endif
+
+#ifndef ESP_NOW_MIDI_RESTART_BACKOFF_MS
+/** Minimum time between two ESP-NOW restarts. */
+#define ESP_NOW_MIDI_RESTART_BACKOFF_MS 5000
+#endif
 
 /**
  * @brief Sends and receives MIDI messages over ESP-NOW.
@@ -98,10 +195,23 @@ public:
       return;
     }
     {
+      const uint32_t now = static_cast<uint32_t>(millis());
       EspNowMidiLock lock(_instance->_statsMux);
       EspNowSendStats &stats = _instance->_stats;
       ++(status == ESP_NOW_SEND_SUCCESS ? stats.delivered : stats.notDelivered);
+      _instance->noteDelivery(info && info->des_addr ? PeerInfo::packMac(info->des_addr)
+                                                     : _instance->_lastSentPacked,
+                              status == ESP_NOW_SEND_SUCCESS, now);
+      if (_instance->_inFlight > 0)
+      {
+        --_instance->_inFlight;
+      }
+      _instance->_lastConfirmMs = now;
+      _instance->_refusedSinceConfirm = false;
+      _instance->_confirmedSinceRestart = true;
     }
+    _instance->noteWifiTask();
+    _instance->wakeSender();
     if (_instance->userDataSentCallback)
     {
       _instance->userDataSentCallback(info, status);
@@ -115,6 +225,7 @@ public:
   {
     if (_instance)
     {
+      _instance->noteWifiTask();
       _instance->OnDataRecv(recv_info->src_addr, incomingData, len);
     }
   }
@@ -179,6 +290,7 @@ public:
     // Register callbacks
     esp_now_register_send_cb(SendCallbackAdapter);
     esp_now_register_recv_cb(OnDataRecvStatic);
+    startSender();
     return true;
   }
 
@@ -241,13 +353,7 @@ public:
 
     EspNowMidiLog::mac("Adding peer: ", macAddress);
 
-    esp_now_peer_info_t peerInfo;
-    memset(&peerInfo, 0, sizeof(peerInfo));
-    memcpy(peerInfo.peer_addr, macAddress, 6);
-    peerInfo.channel = ESP_NOW_MIDI_CHANNEL;
-    peerInfo.encrypt = false;
-
-    if (esp_now_add_peer(&peerInfo) != ESP_OK)
+    if (addDriverPeer(macAddress) != ESP_OK)
     {
       EspNowMidiLog::e("Failed to add peer");
       return false;
@@ -264,6 +370,9 @@ public:
         _peers[count].packed_mac = PeerInfo::packMac(macAddress);
         _peers[count].lastSeenMs = 0;
         _peers[count].seen = false;
+        _peers[count].missed = 0;
+        _peers[count].unreachable = false;
+        _peers[count].nextProbeMs = 0;
         count = ++_peersCount;
       }
       else
@@ -429,29 +538,66 @@ public:
 
   /**
    * @brief Sends raw data to every registered ESP-NOW peer.
+   *
+   * Peers marked unreachable are skipped, except for a probe now and then
+   * (see isPeerReachable()).
    * @param data Bytes to transmit.
    * @param len Number of bytes in @p data.
-   * @return `ESP_OK` when all sends are accepted, `ESP_FAIL` when no peers are
-   * registered, or the last ESP-NOW error encountered.
+   * @return `ESP_OK` when all sends are accepted (with the send queue: queued),
+   * `ESP_FAIL` when no peers are registered or all are unreachable,
+   * `ESP_ERR_ESPNOW_NO_MEM` when the send queue is full, or the last ESP-NOW
+   * error encountered.
    */
   esp_err_t sendToAllPeers(const uint8_t *data, size_t len)
   {
+    return sendToPeersExcept(data, len, [](const uint8_t *) { return false; });
+  }
+
+  /**
+   * @brief Like sendToAllPeers(), but leaves out peers for which
+   * @p exclude(mac) returns `true` (e.g. muted ones).
+   */
+  template <typename Exclude>
+  esp_err_t sendToPeersExcept(const uint8_t *data, size_t len, Exclude exclude)
+  {
+    if (!ESP_NOW_MIDI_SEND_QUEUE)
+    {
+      service();
+    }
     uint8_t macs[MAX_PEERS][6];
-    const int count = copyPeers(macs, MAX_PEERS);
+    int reachable = 0;
+    int probes = 0;
+    const int count = copySendTargets(macs, reachable, probes);
     if (count == 0)
     {
       countSend(ESP_FAIL);
       return ESP_FAIL;
     }
 
+    // Reachable peers come first, so a probe's slow "not delivered" never
+    // holds them up. Probe results only count when nothing else went out.
     esp_err_t result = ESP_OK;
-    for (int i = 0; i < count; i++)
+    for (int i = 0; i < reachable + probes; i++)
     {
-      const esp_err_t err = countSend(esp_now_send(macs[i], data, len));
-      if (err != ESP_OK)
+      if (exclude(macs[i]))
+      {
+        continue;
+      }
+      const esp_err_t err = deliver(macs[i], data, len, i >= reachable);
+      if (err != ESP_OK && (i < reachable || reachable == 0))
       {
         result = err; // Return last error if any
       }
+    }
+    kickSender();
+    if (reachable + probes < count)
+    {
+      EspNowMidiLock lock(_statsMux);
+      _stats.skipped += count - reachable - probes;
+    }
+    if (reachable == 0 && probes == 0)
+    {
+      return ESP_FAIL; // every peer unreachable, no probe due
     }
     return result;
   }
@@ -461,7 +607,7 @@ public:
    * @param macAddress Six-byte Wi-Fi MAC address of the peer.
    * @param data Bytes to transmit.
    * @param len Number of bytes in @p data.
-   * @return ESP-NOW send result.
+   * @return ESP-NOW send result (with the send queue: whether it was queued).
    */
   esp_err_t send(const uint8_t macAddress[6], const uint8_t *data, size_t len)
   {
@@ -469,7 +615,47 @@ public:
     {
       return ESP_ERR_INVALID_ARG;
     }
-    return countSend(esp_now_send(macAddress, data, len));
+    if (!ESP_NOW_MIDI_SEND_QUEUE)
+    {
+      service();
+    }
+    else if (!hasPeer(macAddress))
+    {
+      return countSend(ESP_ERR_ESPNOW_NOT_FOUND); // as the driver would say
+    }
+    const esp_err_t err = deliver(macAddress, data, len, false);
+    kickSender();
+    return err;
+  }
+
+  /**
+   * @brief Waits until every queued packet was sent and confirmed, e.g.
+   * before deep sleep or a restart.
+   * @param timeoutMs Longest wait.
+   * @return `true` when nothing is left to send.
+   */
+  bool flush(uint32_t timeoutMs = 500)
+  {
+    const uint32_t start = static_cast<uint32_t>(millis());
+    for (;;)
+    {
+      kickSender();
+      if (pendingSends() == 0 && inFlightCount() == 0)
+      {
+        return true;
+      }
+      if (static_cast<uint32_t>(millis()) - start >= timeoutMs || !pauseForSender())
+      {
+        return pendingSends() == 0 && inFlightCount() == 0;
+      }
+    }
+  }
+
+  /** @brief Packets waiting in the send queue (0 without the queue). */
+  size_t pendingSends() const
+  {
+    EspNowMidiLock lock(_queueMux);
+    return _queue.size();
   }
 
   /**
@@ -1131,6 +1317,26 @@ public:
   }
 
   /**
+   * @brief Whether sends still go to a peer.
+   *
+   * After ESP_NOW_MIDI_UNREACHABLE_AFTER unacknowledged sends in a row, sends
+   * skip the peer (counted in getSendStats().skipped) except for a probe every
+   * ESP_NOW_MIDI_PROBE_INTERVAL_MS. It is reachable again as soon as it
+   * acknowledges a packet or sends one.
+   * @return `false` when @p mac is unreachable or not a peer.
+   */
+  bool isPeerReachable(const uint8_t mac[6]) const
+  {
+    if (!mac)
+    {
+      return false;
+    }
+    EspNowMidiLock lock(_peersMux);
+    const int index = indexOfLocked(PeerInfo::packMac(mac));
+    return index >= 0 && !_peers[index].unreachable;
+  }
+
+  /**
    * @brief When a peer last sent a valid packet.
    * @param mac Peer MAC address.
    * @param ms Set to the millis() of the last packet.
@@ -1163,6 +1369,59 @@ public:
     ms = _lastSendMs;
     return _hasSent;
   }
+
+  /**
+   * @brief Restarts ESP-NOW when the driver stopped confirming sends.
+   *
+   * Under sustained load the ESP-NOW driver can stop calling the send callback;
+   * it then keeps refusing every send (`ESP_ERR_ESPNOW_NO_MEM`) until reboot.
+   * When packets wait for ESP_NOW_MIDI_STALL_MS without any confirmation, this
+   * restarts ESP-NOW and registers the peers again (see getSendStats().restarts).
+   * If no send was confirmed since the previous restart either, it also stops
+   * and starts Wi-Fi: on hardware the stuck state survives an ESP-NOW restart.
+   * With the send queue (ESP_NOW_MIDI_SEND_QUEUE) the sender task does this
+   * check, and this only wakes it. Without the queue it is called by every
+   * send and by enomik::Client / enomik::Dongle loop(); call it from loop()
+   * yourself when using esp_now_midi directly and sending rarely.
+   */
+  void service()
+  {
+#if ESP_NOW_MIDI_HAS_TASKS
+    if (_senderTask)
+    {
+      wakeSender(); // the sender task restarts ESP-NOW itself
+      return;
+    }
+#endif
+    checkStall();
+    if (ESP_NOW_MIDI_SEND_QUEUE)
+    {
+      while (sendQueued())
+      {
+      }
+    }
+  }
+
+private:
+  void checkStall()
+  {
+    const uint32_t now = static_cast<uint32_t>(millis());
+    {
+      EspNowMidiLock lock(_statsMux);
+      const bool waiting = _inFlight > 0 || _refusedSinceConfirm;
+      if (!waiting || now - _lastConfirmMs < ESP_NOW_MIDI_STALL_MS)
+      {
+        return;
+      }
+      if (_stats.restarts > 0 && now - _lastRestartMs < ESP_NOW_MIDI_RESTART_BACKOFF_MS)
+      {
+        return;
+      }
+    }
+    restartEspNow(_stats.restarts > 0 && !_confirmedSinceRestart);
+  }
+
+public:
 
   /**
    * @brief Registers one handler for every received MIDI message.
@@ -1287,6 +1546,333 @@ private:
   int _peersCount = 0;            // Guarded by _peersMux
   mutable portMUX_TYPE _peersMux = portMUX_INITIALIZER_UNLOCKED;
 
+  bool inFlightFull() const
+  {
+    EspNowMidiLock lock(_statsMux);
+    return _inFlight >= ESP_NOW_MIDI_MAX_IN_FLIGHT;
+  }
+
+  int inFlightCount() const
+  {
+    EspNowMidiLock lock(_statsMux);
+    return _inFlight;
+  }
+
+  using SendQueue = esp_now_midi_queue::SendQueue<ESP_NOW_MIDI_QUEUE_SHORT, ESP_NOW_MIDI_QUEUE_FRAMES,
+                                                  esp_now_midi_sysex::MAX_FRAME>;
+  static constexpr uint8_t kProbe = 1; // queue flag: send even though the peer is unreachable
+  SendQueue _queue;                    // Guarded by _queueMux
+  mutable portMUX_TYPE _queueMux = portMUX_INITIALIZER_UNLOCKED;
+#if ESP_NOW_MIDI_HAS_TASKS
+  TaskHandle_t _senderTask = nullptr;
+  TaskHandle_t _wifiTask = nullptr; // runs the ESP-NOW callbacks
+#endif
+
+  // Queues a packet (or, without the queue, sends it right away).
+  esp_err_t deliver(const uint8_t mac[6], const uint8_t *data, size_t len, bool probe)
+  {
+    if (!ESP_NOW_MIDI_SEND_QUEUE)
+    {
+      return sendOne(mac, data, len);
+    }
+    // A note off waits a little for a free slot, a SysEx frame longer; but
+    // never in the task that reports send results, which would wait for itself.
+    const bool frame = len > 3;
+    const uint32_t waitMs =
+        !canWaitForSender() ? 0
+        : frame             ? ESP_NOW_MIDI_FRAME_WAIT_MS
+        : esp_now_midi_queue::classify(data, len) == esp_now_midi_queue::Priority::High
+            ? ESP_NOW_MIDI_SEND_WAIT_MS
+            : 0;
+    const uint32_t start = static_cast<uint32_t>(millis());
+    for (;;)
+    {
+      SendQueue::Result result;
+      size_t waiting;
+      {
+        EspNowMidiLock lock(_queueMux);
+        result = _queue.push(mac, data, len, probe ? kProbe : 0);
+        waiting = _queue.size();
+      }
+      if (result != SendQueue::Result::Full)
+      {
+        EspNowMidiLock lock(_statsMux);
+        if (result == SendQueue::Result::Replaced)
+        {
+          ++_stats.replaced;
+        }
+        else if (result == SendQueue::Result::TooLong)
+        {
+          ++_stats.failed;
+          _stats.lastError = ESP_ERR_INVALID_ARG;
+          return ESP_ERR_INVALID_ARG;
+        }
+        if (waiting > _stats.queuePeak)
+        {
+          _stats.queuePeak = static_cast<uint32_t>(waiting);
+        }
+        return ESP_OK;
+      }
+      if (static_cast<uint32_t>(millis()) - start >= waitMs || !makeRoom())
+      {
+        EspNowMidiLock lock(_statsMux);
+        ++_stats.dropped;
+        ++_stats.failed;
+        _stats.lastError = ESP_ERR_ESPNOW_NO_MEM;
+        return ESP_ERR_ESPNOW_NO_MEM;
+      }
+    }
+  }
+
+  // Sends the oldest queued packet, if no other one waits for its confirmation.
+  // A packet for a peer that was removed, or became unreachable since it was
+  // queued (and is no probe), is left out. @return whether one was taken.
+  bool sendQueued()
+  {
+    if (inFlightFull())
+    {
+      return false;
+    }
+    uint8_t mac[6];
+    uint8_t data[esp_now_midi_sysex::MAX_FRAME];
+    uint8_t flags = 0;
+    size_t len;
+    {
+      EspNowMidiLock lock(_queueMux);
+      len = _queue.pop(mac, data, flags);
+    }
+    if (len == 0)
+    {
+      return false;
+    }
+    bool known;
+    bool unreachable = false;
+    {
+      EspNowMidiLock lock(_peersMux);
+      const int index = indexOfLocked(PeerInfo::packMac(mac));
+      known = index >= 0;
+      if (known)
+      {
+        unreachable = _peers[index].unreachable;
+      }
+    }
+    if (!known)
+    {
+      return true;
+    }
+    if (unreachable && !(flags & kProbe))
+    {
+      EspNowMidiLock lock(_statsMux);
+      ++_stats.skipped;
+      return true;
+    }
+    sendOne(mac, data, len, false);
+    return true;
+  }
+
+  // Lets the sender task (or, without one, service()) send what is queued.
+  void kickSender()
+  {
+    if (!ESP_NOW_MIDI_SEND_QUEUE)
+    {
+      return;
+    }
+#if ESP_NOW_MIDI_HAS_TASKS
+    if (_senderTask)
+    {
+      wakeSender();
+      return;
+    }
+#endif
+    service();
+  }
+
+  void wakeSender()
+  {
+#if ESP_NOW_MIDI_HAS_TASKS
+    if (_senderTask)
+    {
+      xTaskNotifyGive(_senderTask);
+    }
+#endif
+  }
+
+  void noteWifiTask()
+  {
+#if ESP_NOW_MIDI_HAS_TASKS
+    _wifiTask = xTaskGetCurrentTaskHandle();
+#endif
+  }
+
+  bool canWaitForSender() const
+  {
+#if ESP_NOW_MIDI_HAS_TASKS
+    const TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    return self != _wifiTask && self != _senderTask;
+#else
+    return true;
+#endif
+  }
+
+  // Gives the sender a moment. @return false when waiting cannot help.
+  bool pauseForSender()
+  {
+#if ESP_NOW_MIDI_HAS_TASKS
+    if (_senderTask)
+    {
+      wakeSender();
+      vTaskDelay(1);
+      return true;
+    }
+#endif
+    service();
+    return false;
+  }
+
+  // Full queue: lets the sender take a packet. @return false when it cannot.
+  bool makeRoom()
+  {
+#if ESP_NOW_MIDI_HAS_TASKS
+    if (_senderTask)
+    {
+      return pauseForSender();
+    }
+#endif
+    checkStall();
+    return sendQueued();
+  }
+
+  void startSender()
+  {
+#if ESP_NOW_MIDI_HAS_TASKS
+    if (ESP_NOW_MIDI_SEND_QUEUE && !_senderTask)
+    {
+      if (xTaskCreate(senderTask, "espnow_midi_tx", ESP_NOW_MIDI_SENDER_STACK, this,
+                      ESP_NOW_MIDI_SENDER_PRIORITY, &_senderTask) != pdPASS)
+      {
+        _senderTask = nullptr;
+        EspNowMidiLog::e("Sender task not started; sending from service()");
+      }
+    }
+#endif
+  }
+
+#if ESP_NOW_MIDI_HAS_TASKS
+  // Sends the queue, one packet at a time: woken by a new packet or a send
+  // confirmation; the timeout keeps the stall check running.
+  static void senderTask(void *arg)
+  {
+    esp_now_midi *self = static_cast<esp_now_midi *>(arg);
+    for (;;)
+    {
+      self->checkStall();
+      if (!self->sendQueued())
+      {
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20));
+      }
+    }
+  }
+#endif
+
+  static void pauseForConfirmation()
+  {
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
+    vTaskDelay(1); // a confirmation usually takes well under 1 ms
+#endif
+  }
+
+  // Sends one packet, keeping at most ESP_NOW_MIDI_MAX_IN_FLIGHT unconfirmed:
+  // waits up to ESP_NOW_MIDI_SEND_WAIT_MS for a pending confirmation, then drops.
+  // The count goes up before esp_now_send(): the confirmation can arrive first.
+  esp_err_t sendOne(const uint8_t mac[6], const uint8_t *data, size_t len, bool wait = true)
+  {
+    for (int i = 0; wait && i < ESP_NOW_MIDI_SEND_WAIT_MS && inFlightFull(); i++)
+    {
+      pauseForConfirmation();
+    }
+    {
+      EspNowMidiLock lock(_statsMux);
+      if (_inFlight >= ESP_NOW_MIDI_MAX_IN_FLIGHT)
+      {
+        ++_stats.throttled;
+        ++_stats.failed;
+        _stats.lastError = ESP_ERR_ESPNOW_NO_MEM;
+        return ESP_ERR_ESPNOW_NO_MEM;
+      }
+      if (_inFlight == 0 && !_refusedSinceConfirm)
+      {
+        _lastConfirmMs = static_cast<uint32_t>(millis()); // stall timer starts now
+      }
+      ++_inFlight;
+      _lastSentPacked = PeerInfo::packMac(mac);
+    }
+    const esp_err_t err = esp_now_send(mac, data, len);
+    if (err != ESP_OK)
+    {
+      EspNowMidiLock lock(_statsMux);
+      if (_inFlight > 0)
+      {
+        --_inFlight;
+      }
+      if (err == ESP_ERR_ESPNOW_NO_MEM)
+      {
+        _refusedSinceConfirm = true;
+      }
+    }
+    return countSend(err);
+  }
+
+  static esp_err_t addDriverPeer(const uint8_t mac[6])
+  {
+    esp_now_peer_info_t peerInfo;
+    memset(&peerInfo, 0, sizeof(peerInfo));
+    memcpy(peerInfo.peer_addr, mac, 6);
+    peerInfo.channel = ESP_NOW_MIDI_CHANNEL;
+    peerInfo.encrypt = false;
+    return esp_now_add_peer(&peerInfo);
+  }
+
+  void restartEspNow(bool withWifi)
+  {
+    EspNowMidiLog::w(withWifi ? "ESP-NOW still stuck; restarting Wi-Fi and ESP-NOW"
+                              : "ESP-NOW stopped confirming sends; restarting it");
+    uint8_t macs[MAX_PEERS][6];
+    const int count = copyPeers(macs, MAX_PEERS);
+
+    esp_now_deinit();
+    if (withWifi)
+    {
+      esp_wifi_stop();
+      esp_wifi_start();
+    }
+    const esp_err_t err = esp_now_init();
+    if (err != ESP_OK)
+    {
+      EspNowMidiLog::e("ESP-NOW restart failed: %d", err);
+    }
+    esp_wifi_set_channel(ESP_NOW_MIDI_CHANNEL, WIFI_SECOND_CHAN_NONE);
+    setReducePowerAtCostOfLatency(_reducePowerAtCostOfLatency);
+    esp_now_register_send_cb(SendCallbackAdapter);
+    esp_now_register_recv_cb(OnDataRecvStatic);
+    for (int i = 0; i < count; i++)
+    {
+      addDriverPeer(macs[i]);
+    }
+
+    const uint32_t now = static_cast<uint32_t>(millis());
+    EspNowMidiLock lock(_statsMux);
+    _inFlight = 0;
+    _refusedSinceConfirm = false;
+    _lastConfirmMs = now;
+    _lastRestartMs = now;
+    _confirmedSinceRestart = false;
+    ++_stats.restarts;
+    if (withWifi)
+    {
+      ++_stats.wifiRestarts;
+    }
+  }
+
   void markSeen(const uint8_t mac[6])
   {
     if (!mac)
@@ -1300,7 +1886,66 @@ private:
     {
       _peers[index].lastSeenMs = now;
       _peers[index].seen = true;
+      _peers[index].missed = 0;
+      _peers[index].unreachable = false;
     }
+  }
+
+  // Send callback (WiFi task): counts unacknowledged sends per peer
+  void noteDelivery(uint64_t packed, bool delivered, uint32_t now)
+  {
+    EspNowMidiLock lock(_peersMux);
+    const int index = indexOfLocked(packed);
+    if (index < 0)
+    {
+      return;
+    }
+    PeerInfo &peer = _peers[index];
+    if (delivered)
+    {
+      peer.missed = 0;
+      peer.unreachable = false;
+      return;
+    }
+    if (peer.missed < 255)
+    {
+      ++peer.missed;
+    }
+    if (ESP_NOW_MIDI_UNREACHABLE_AFTER > 0 && !peer.unreachable &&
+        peer.missed >= ESP_NOW_MIDI_UNREACHABLE_AFTER)
+    {
+      peer.unreachable = true;
+      peer.nextProbeMs = now + ESP_NOW_MIDI_PROBE_INTERVAL_MS;
+    }
+  }
+
+  // Peers to send to: reachable ones first, then unreachable ones due for a
+  // probe (whose next probe moves on). @return all peers, sent to or not.
+  int copySendTargets(uint8_t out[][6], int &reachable, int &probes)
+  {
+    const uint32_t now = static_cast<uint32_t>(millis());
+    uint8_t due[MAX_PEERS][6];
+    reachable = 0;
+    probes = 0;
+    EspNowMidiLock lock(_peersMux);
+    for (int i = 0; i < _peersCount; i++)
+    {
+      PeerInfo &peer = _peers[i];
+      if (!peer.unreachable)
+      {
+        memcpy(out[reachable++], peer.mac, 6);
+      }
+      else if (static_cast<int32_t>(now - peer.nextProbeMs) >= 0)
+      {
+        peer.nextProbeMs = now + ESP_NOW_MIDI_PROBE_INTERVAL_MS;
+        memcpy(due[probes++], peer.mac, 6);
+      }
+    }
+    for (int i = 0; i < probes; i++)
+    {
+      memcpy(out[reachable + i], due[i], 6);
+    }
+    return _peersCount;
   }
 
   int indexOfLocked(uint64_t packed) const
@@ -1352,6 +1997,12 @@ private:
   void (*onSysExFromHandler)(const uint8_t *mac, uint8_t *data, uint16_t length) = nullptr;
   uint32_t _lastSendMs = 0;
   bool _hasSent = false;
+  int _inFlight = 0;                 // sent, not yet confirmed (guarded by _statsMux)
+  uint64_t _lastSentPacked = 0;      // peer of the last send, when the callback has no address
+  uint32_t _lastConfirmMs = 0;       // last send confirmation, or start of waiting
+  uint32_t _lastRestartMs = 0;
+  bool _refusedSinceConfirm = false; // driver said NO_MEM since the last confirmation
+  bool _confirmedSinceRestart = false;
   esp_now_midi_sysex::Reassembler _sysexReassembler;
   void (*onMessageHandler)(const uint8_t *mac, const midi_message &message) = nullptr;
 };

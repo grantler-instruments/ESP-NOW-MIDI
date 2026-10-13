@@ -148,6 +148,12 @@ namespace enomik
             return _nameOverride[0] != '\0' ? _nameOverride : _defaultName;
         }
 
+        /** @brief Returns the name set in the sketch (setName()), ignoring the app override. */
+        const char *getDefaultName() const
+        {
+            return _defaultName;
+        }
+
         /** @brief Sets (or with an empty name clears) the app name override and persists it. */
         void setNameOverride(const char *name)
         {

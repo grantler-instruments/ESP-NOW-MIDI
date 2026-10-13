@@ -14,6 +14,7 @@ typedef int esp_err_t;
 #define ESP_FAIL -1
 #define ESP_ERR_INVALID_ARG 0x102
 #define ESP_ERR_ESPNOW_EXIST 0x306B
+#define ESP_ERR_ESPNOW_NO_MEM 0x3067
 #define ESP_ERR_ESPNOW_FULL 0x3068
 #define ESP_ERR_ESPNOW_NOT_FOUND 0x3069
 
@@ -25,7 +26,8 @@ typedef enum
 
 typedef struct
 {
-    int unused;
+    uint8_t *des_addr;
+    uint8_t *src_addr;
 } wifi_tx_info_t;
 
 typedef struct
@@ -59,6 +61,13 @@ struct StubEspNow
     std::vector<StubEspNowPacket> sent;
     bool record = true;
     bool keepOnInit = false; // esp_now_init() reports "already initialized"
+    bool autoReport = true;  // confirm every send right away, like a healthy driver
+    bool stalled = false;    // driver stuck: refuses sends, confirms nothing (until deinit)
+    bool deepStalled = false; // stuck below ESP-NOW: only a Wi-Fi stop clears it
+    std::vector<std::array<uint8_t, 6>> absent; // peers that never acknowledge
+    uint8_t lastDest[6] = {0};
+    int wifiStops = 0;
+    int deinits = 0;
     void (*sendCb)(const wifi_tx_info_t *, esp_now_send_status_t) = nullptr;
 };
 
@@ -99,23 +108,65 @@ inline esp_err_t esp_now_init()
     }
     stubEspNow().peers.clear();
     stubEspNow().sent.clear();
+    stubEspNow().autoReport = true;
+    stubEspNow().stalled = false;
     return ESP_OK;
 }
 
 inline esp_err_t esp_now_send(const uint8_t *dest, const uint8_t *data, size_t len)
 {
+    void (*confirm)(const wifi_tx_info_t *, esp_now_send_status_t) = nullptr;
+    esp_now_send_status_t status = ESP_NOW_SEND_SUCCESS;
+    uint8_t to[6];
+    memcpy(to, dest, 6);
+    {
+        std::lock_guard<std::mutex> lock(stubEspNow().mutex);
+        if (stubEspNow().stalled || stubEspNow().deepStalled)
+        {
+            return ESP_ERR_ESPNOW_NO_MEM;
+        }
+        if (stubEspNowFind(dest) < 0)
+        {
+            return ESP_ERR_ESPNOW_NOT_FOUND;
+        }
+        if (stubEspNow().record)
+        {
+            StubEspNowPacket p;
+            memcpy(p.dest, dest, 6);
+            p.data.assign(data, data + len);
+            stubEspNow().sent.push_back(p);
+        }
+        memcpy(stubEspNow().lastDest, dest, 6);
+        for (const auto &mac : stubEspNow().absent)
+        {
+            if (memcmp(mac.data(), dest, 6) == 0)
+            {
+                status = ESP_NOW_SEND_FAIL;
+            }
+        }
+        if (stubEspNow().autoReport)
+        {
+            confirm = stubEspNow().sendCb;
+        }
+    }
+    // The real driver may confirm before esp_now_send() returns (other core)
+    if (confirm)
+    {
+        wifi_tx_info_t info{};
+        info.des_addr = to;
+        confirm(&info, status);
+    }
+    return ESP_OK;
+}
+
+// Like the real driver: forgets peers and callbacks; also clears a stall.
+inline esp_err_t esp_now_deinit()
+{
     std::lock_guard<std::mutex> lock(stubEspNow().mutex);
-    if (stubEspNowFind(dest) < 0)
-    {
-        return ESP_ERR_ESPNOW_NOT_FOUND;
-    }
-    if (stubEspNow().record)
-    {
-        StubEspNowPacket p;
-        memcpy(p.dest, dest, 6);
-        p.data.assign(data, data + len);
-        stubEspNow().sent.push_back(p);
-    }
+    stubEspNow().peers.clear();
+    stubEspNow().sendCb = nullptr;
+    stubEspNow().stalled = false;
+    stubEspNow().deinits++;
     return ESP_OK;
 }
 
@@ -154,10 +205,11 @@ inline esp_err_t esp_now_register_send_cb(void (*cb)(const wifi_tx_info_t *, esp
     return ESP_OK;
 }
 
-// Reports a delivery result, as the driver does after each send.
+// Reports a delivery result for the last send, as the driver does after each send.
 inline void stubEspNowReportSend(esp_now_send_status_t status)
 {
     wifi_tx_info_t info{};
+    info.des_addr = stubEspNow().lastDest;
     if (stubEspNow().sendCb)
     {
         stubEspNow().sendCb(&info, status);

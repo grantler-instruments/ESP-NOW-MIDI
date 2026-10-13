@@ -171,6 +171,27 @@ TEST_CASE("dongle skips muted peers and sends to the others", "[espnow][wire]")
     REQUIRE(stubEspNowSent()[0].data == bytes({0x90, 64, 90}));
 }
 
+TEST_CASE("dongle skips a client that stopped acknowledging", "[espnow][wire][unreachable]")
+{
+    enomik::Dongle dongle;
+    REQUIRE(dongle.espnowMIDI.begin());
+    REQUIRE(dongle.espnowMIDI.addPeer(kPeerA));
+    REQUIRE(dongle.espnowMIDI.addPeer(kPeerB));
+    std::array<uint8_t, 6> off;
+    memcpy(off.data(), kPeerA, 6);
+    stubEspNow().absent.push_back(off);
+
+    for (int i = 0; i < ESP_NOW_MIDI_UNREACHABLE_AFTER; i++)
+    {
+        dongle.sendNoteOn(64, 90, 1);
+    }
+    stubEspNowSent().clear();
+    dongle.sendNoteOn(64, 90, 1);
+    stubEspNow().absent.clear();
+    REQUIRE(stubEspNowSent().size() == 1);
+    REQUIRE(memcmp(stubEspNowSent()[0].dest, kPeerB, 6) == 0);
+}
+
 TEST_CASE("dongle -> receiver round trip reaches the MIDI handlers", "[espnow][wire]")
 {
     esp_now_midi receiver;
@@ -682,6 +703,7 @@ TEST_CASE("send stats count refused, sent and acknowledged packets", "[espnow][s
 {
     esp_now_midi midi;
     REQUIRE(midi.begin());
+    stubEspNow().autoReport = false; // confirm by hand below
 
     REQUIRE(midi.sendNoteOn(60, 100, 1) == ESP_FAIL); // no peers yet
     EspNowSendStats s = midi.getSendStats();
@@ -689,18 +711,16 @@ TEST_CASE("send stats count refused, sent and acknowledged packets", "[espnow][s
     REQUIRE(s.failed == 1);
     REQUIRE(s.lastError == ESP_FAIL);
 
-    uint8_t a[6], b[6];
+    uint8_t a[6];
     macFor(a, 1);
-    macFor(b, 2);
     REQUIRE(midi.addPeer(a));
-    REQUIRE(midi.addPeer(b));
     REQUIRE(midi.sendNoteOn(60, 100, 1) == ESP_OK);
+    stubEspNowReportSend(ESP_NOW_SEND_SUCCESS);
+    REQUIRE(midi.sendNoteOn(60, 100, 1) == ESP_OK);
+    stubEspNowReportSend(ESP_NOW_SEND_FAIL);
     uint8_t stranger[6];
     macFor(stranger, 3);
     REQUIRE(midi.send(stranger, bytes({0x90, 60, 0}).data(), 3) == ESP_ERR_ESPNOW_NOT_FOUND);
-
-    stubEspNowReportSend(ESP_NOW_SEND_SUCCESS);
-    stubEspNowReportSend(ESP_NOW_SEND_FAIL);
 
     s = midi.getSendStats();
     REQUIRE(s.sent == 2);

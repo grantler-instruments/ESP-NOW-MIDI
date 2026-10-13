@@ -41,6 +41,19 @@ def _poll_esc() -> bool:
     return sys.stdin.read(1) == "\x1b"
 
 
+def wait_start_or_skip() -> bool:
+    """Block until Enter (True, start) or Esc (False, skip)."""
+    if not sys.stdin.isatty():
+        return input().strip().lower() not in ("s", "skip")
+    with _cbreak_stdin():
+        while True:
+            key = sys.stdin.read(1)
+            if key in ("\n", "\r"):
+                return True
+            if key == "\x1b":
+                return False
+
+
 @dataclass
 class MidiLink:
     """An open input/output pair for one device."""

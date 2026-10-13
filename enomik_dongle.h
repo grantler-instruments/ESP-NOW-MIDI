@@ -8,6 +8,7 @@
 #include "include/UsbSysExQueue.h"
 #include "include/PeerDirectory.h"
 #include "include/UsbStallWatchdog.h"
+#include "include/DisplayPacer.h"
 #include "include/MidiInbox.h"
 #include "include/UsbMidiPacket.h"
 #include "include/esp_now_midi_compat.h"
@@ -26,7 +27,18 @@
 #endif
 
 #ifndef DONGLE_UPDATE_DISPLAY_INTERVAL_MS
-#define DONGLE_UPDATE_DISPLAY_INTERVAL_MS 64
+/** Minimum time between two display redraws (ms). */
+#define DONGLE_UPDATE_DISPLAY_INTERVAL_MS 200
+#endif
+
+#ifndef DONGLE_DISPLAY_QUIET_MS
+/** The display redraws only after MIDI was quiet this long (ms, 0 = always). */
+#define DONGLE_DISPLAY_QUIET_MS 100
+#endif
+
+#ifndef DONGLE_DISPLAY_MAX_DEFER_MS
+/** ...but at the latest this long after the previous redraw (ms, 0 = wait for quiet). */
+#define DONGLE_DISPLAY_MAX_DEFER_MS 1000
 #endif
 
 #ifdef HAS_USB_MIDI
@@ -128,8 +140,6 @@ namespace enomik
             : _isInitialized(false),
               _usbMidiInitialized(false),
               _display(nullptr),
-              _lastDisplayUpdate(0),
-              _displayIntervalMs(DONGLE_UPDATE_DISPLAY_INTERVAL_MS),
               _displayDirty(true),
               _lastDrawnPeerCount(-1),
               _lastDrawnUsbStatus(0),
@@ -141,6 +151,9 @@ namespace enomik
         {
             memset(_baseMac, 0, sizeof(_baseMac));
             memset(_messageHistory, 0, sizeof(_messageHistory));
+            _displayPacer.intervalMs = DONGLE_UPDATE_DISPLAY_INTERVAL_MS;
+            _displayPacer.quietMs = DONGLE_DISPLAY_QUIET_MS;
+            _displayPacer.maxDeferMs = DONGLE_DISPLAY_MAX_DEFER_MS;
             instancePtr = this;
             espnowMIDI.setHandleMessage(onEspNowMessageStatic);
             espnowMIDI.setHandleSysExFrom(handleSysExStatic);
@@ -186,7 +199,24 @@ namespace enomik
         /** @brief Minimum interval between display updates (milliseconds). */
         void setDisplayUpdateInterval(uint32_t intervalMs)
         {
-            _displayIntervalMs = intervalMs;
+            _displayPacer.intervalMs = intervalMs;
+        }
+
+        /**
+         * @brief Holds display redraws back while MIDI flows.
+         *
+         * A redraw blocks loop(), and with it USB and ESP-NOW bridging, for as
+         * long as the display takes (an SSD1306 frame over I2C: ~20 ms at
+         * 400 kHz, ~80 ms at 100 kHz). The display redraws once MIDI was quiet
+         * for @p quietMs, or after @p maxDeferMs at the latest. Redraws after
+         * invalidateDisplay() (UI input) are not held back.
+         * @param quietMs 0 = redraw regardless of MIDI.
+         * @param maxDeferMs 0 = never redraw while MIDI flows.
+         */
+        void setDisplayQuietTime(uint32_t quietMs, uint32_t maxDeferMs = DONGLE_DISPLAY_MAX_DEFER_MS)
+        {
+            _displayPacer.quietMs = quietMs;
+            _displayPacer.maxDeferMs = maxDeferMs;
         }
 
         /** @brief USB manufacturer string; call before begin(). */
@@ -223,7 +253,7 @@ namespace enomik
 
             TinyUSBDevice.setManufacturerDescriptor(_manufacturer);
             TinyUSBDevice.setProductDescriptor(_product);
-            TinyUSBDevice.setSerialDescriptor(usbSerialFromMac());
+            TinyUSBDevice.setSerialDescriptor(usbSerialFromMac("dongle"));
 
             g_dongle_usb_midi.begin();
 
@@ -314,6 +344,7 @@ namespace enomik
             }
 
             const unsigned long now = millis();
+            espnowMIDI.service(); // restarts ESP-NOW if the driver stopped confirming sends
 
             if (_usbMidiInitialized && !TinyUSBDevice.mounted())
             {
@@ -650,7 +681,7 @@ namespace enomik
         void invalidateDisplay()
         {
             _displayDirty = true;
-            _lastDisplayUpdate = 0;
+            _displayPacer.requestNow();
         }
 
         bool addPeer(const uint8_t mac[6])
@@ -967,8 +998,7 @@ namespace enomik
         bool _isInitialized;
         bool _usbMidiInitialized;
         Display *_display;
-        uint32_t _lastDisplayUpdate;
-        uint32_t _displayIntervalMs;
+        DisplayPacer _displayPacer;
         bool _displayDirty;
         PeerDirectory _directory;
         volatile bool _announceChanged = false; // set in the receive callback, read in loop()
@@ -978,6 +1008,7 @@ namespace enomik
         unsigned long _lastDrawnSecond;
         UsbMidiQueue _usbMidiQueue;
         UsbSysExQueue _usbSysExQueue;
+        UsbSysExPacer _usbSysExPacer;
         uint32_t _usbStaleMs = USB_MIDI_STALE_MS;
         uint32_t _lastStaleCheckMs = 0;
         UsbStallWatchdog _usbWatchdog;
@@ -1016,6 +1047,7 @@ namespace enomik
             _messageHistory[_messageIndex].timestamp = millis();
             _messageIndex = (_messageIndex + 1) % DONGLE_MAX_HISTORY;
             _displayDirty = true;
+            _displayPacer.noteMidi(static_cast<uint32_t>(millis()));
         }
 
         void queueToUsb(const midi_message &msg, bool addHistory)
@@ -1099,26 +1131,8 @@ namespace enomik
 
         esp_err_t sendToUnmutedPeers(const uint8_t *data, size_t len)
         {
-            uint8_t macs[MAX_PEERS][6];
-            const int n = espnowMIDI.copyPeers(macs, MAX_PEERS);
-            if (n == 0)
-            {
-                return ESP_FAIL;
-            }
-            esp_err_t result = ESP_OK;
-            for (int i = 0; i < n; i++)
-            {
-                if (isMuted(macs[i]))
-                {
-                    continue;
-                }
-                const esp_err_t err = espnowMIDI.send(macs[i], data, len);
-                if (err != ESP_OK)
-                {
-                    result = err;
-                }
-            }
-            return result;
+            return espnowMIDI.sendToPeersExcept(data, len,
+                                                [this](const uint8_t *mac) { return isMuted(mac); });
         }
 
         esp_err_t sendMidiToUnmutedPeers(const midi_message &msg)
@@ -1419,9 +1433,14 @@ namespace enomik
             {
                 if (!from || !isMuted(from))
                 {
-                    // Whole USB-MIDI packets, like the rest of the dongle's USB output
-                    writeUsbMidiSysEx(data, length, [](const uint8_t packet[4])
-                                      { return g_dongle_usb_midi.writePacket(packet); });
+                    // Whole USB-MIDI packets, waiting for buffer space so a long
+                    // SysEx is not cut off (the host would wait for F7 forever)
+                    _usbSysExPacer.write(
+                        data, length,
+                        [](const uint8_t packet[4]) { return g_dongle_usb_midi.writePacket(packet); },
+                        []() { return TinyUSBDevice.mounted() && !TinyUSBDevice.suspended(); },
+                        []() { return static_cast<uint32_t>(millis()); },
+                        []() { delay(1); });
                 }
                 _usbSysExQueue.consumeHead();
             }
@@ -1451,11 +1470,11 @@ namespace enomik
 
         void updateDisplay(unsigned long now)
         {
-            if (!_display || (now - _lastDisplayUpdate) < _displayIntervalMs)
+            if (!_display || !_displayPacer.due(static_cast<uint32_t>(now)))
             {
                 return;
             }
-            _lastDisplayUpdate = now;
+            _displayPacer.drawn(static_cast<uint32_t>(now));
 
             const int peerCount = espnowMIDI.getPeersCount();
             const char usbStatus = getUsbStatusChar();

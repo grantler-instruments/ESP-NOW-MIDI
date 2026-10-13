@@ -50,7 +50,7 @@ from cases import (
     PIN_DIGITAL_B,
     PIN_NOTE,
 )
-from midi_io import CANCELLED, MidiLink, find_link
+from midi_io import CANCELLED, MidiLink, find_link, wait_start_or_skip
 
 PASS = "PASS"
 FAIL = "FAIL"
@@ -182,8 +182,8 @@ class Wizard:
         self.request_sysex(link, sx.build_reset(), "reset", timeout=2.0)
 
         self._sysex_basics(link)
-        if self.io_mode in ("virtual", "both"):
-            self._prime_fake_inputs(link)
+        # Unconnected analog pins read noise and would flood MIDI: fake all inputs
+        self._prime_fake_inputs(link)
         self._configure_pins(link)
         self._sysex_errors(link)
 
@@ -308,9 +308,8 @@ class Wizard:
         self.section("Phase 2 - Client via ESP-NOW (through dongle)")
         print("  (SysEx configuration is not bridged by the dongle, so it runs in Phase 1 only)")
 
-        # The first echo waits for a couple of heartbeat (ANNOUNCE) cycles, so the dongle
-        # can auto-discover the client before host -> client routing is used.
-        self._echo(link, tc.channel_voice_cases(), "ESP-NOW", first_timeout=12.0)
+        self._wait_for_client(link)
+        self._echo(link, tc.channel_voice_cases(), "ESP-NOW")
         self._no_echo_on_io_channel(link, "ESP-NOW")
         self._echo(link, tc.system_cases(), "ESP-NOW")
         self._burst_test(link, "ESP-NOW", spacing=0.005, max_loss=0.05)
@@ -396,6 +395,25 @@ class Wizard:
             self._digital_cc_test(link, PIN_DIGITAL_A, CC_DIGITAL_A, transport=transport)
             self._digital_cc_test(link, PIN_DIGITAL_B, CC_DIGITAL_B, transport=transport)
             self._analog_cc_test(link, PIN_ANALOG_IN, CC_ANALOG_IN, transport=transport)
+            self._prime_fake_inputs(link)  # quiet again: unconnected pins read noise
+
+    def _wait_for_client(self, link: MidiLink, timeout: float = 15.0) -> None:
+        """Wait until the dongle routes to the client, and quiet its inputs.
+
+        After a reboot the client reads its real pins again; unconnected analog
+        pins then flood MIDI, so the fake inputs are set until an echo comes back.
+        The dongle also has to discover the client (heartbeat) first.
+        """
+        case = tc.channel_voice_cases()[0]
+        deadline = time.monotonic() + timeout
+        got = None
+        while got is None and time.monotonic() < deadline:
+            self._prime_fake_inputs(link)
+            self.send(link, case.type, case.message_kwargs())
+            got = link.wait_for(case.matches, timeout=1.0)
+            self.send(link, "note_off", {"channel": case.channel - 1, "note": case.fields["note"], "velocity": 0})
+        self._prime_fake_inputs(link)
+        self.record("ESP-NOW link to the client", got is not None)
 
     def _prime_fake_inputs(self, link: MidiLink) -> None:
         """Release fake buttons and set fake analog inputs to 0, then drop what they sent."""
@@ -449,7 +467,11 @@ class Wizard:
     def _digital_cc_test(
         self, link: MidiLink, pin: int, cc: int, transport: str
     ) -> bool:
-        print(f"\n  Press the button on pin {pin}  [Esc = skip]")
+        name = f"Digital pin {pin} -> CC {cc} ({transport})"
+        print(f"\n  Button on pin {pin}: Enter = start, Esc = skip")
+        if not wait_start_or_skip():
+            return self.record(name, False, "skipped")
+        print("    Press the button now  [Esc = skip]")
         mido_ch = IO_CHANNEL - 1
         link.flush()
 
@@ -464,14 +486,8 @@ class Wizard:
 
         got = link.wait_for(is_press, timeout=30.0, allow_esc=True)
         if got is CANCELLED:
-            return self.record(
-                f"Digital pin {pin} -> CC {cc} ({transport})",
-                False,
-                "skipped",
-            )
-        return self.record(
-            f"Digital pin {pin} -> CC {cc} ({transport})", got is not None
-        )
+            return self.record(name, False, "skipped")
+        return self.record(name, got is not None)
 
     def _analog_cc_test(
         self, link: MidiLink, pin: int, cc: int, transport: str
@@ -492,6 +508,12 @@ class Wizard:
                 and msg.control == cc
             ):
                 print(f"    received CC {cc} value={msg.value}")
+
+        print(f"\n  Potentiometer on pin {pin}: Enter = start, Esc = skip")
+        if not wait_start_or_skip():
+            for _, want in steps:
+                self.record(f"Analog pin {pin} -> CC {cc} = {want} ({transport})", False, "skipped")
+            return False
 
         for label, want in steps:
             print(

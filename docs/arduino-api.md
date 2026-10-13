@@ -11,8 +11,17 @@ There are three main ways to use the library:
 - [`esp_now_midi`](api/Classes/classesp__now__midi.md): low-level ESP-NOW MIDI
   transport. Initialize it, add peers, send MIDI messages, and register receive
   handlers. Its receive handlers run in the ESP-NOW receive callback (WiFi
-  task): keep them short. `getSendStats()` counts refused, sent and
-  acknowledged packets to tell why messages do not arrive.
+  task): keep them short; sending from them is fine. Sends only queue the
+  packet and return; a sender task sends the queue one packet at a time
+  (`ESP_NOW_MIDI_SEND_QUEUE`, `pendingSends()`, `flush()` before deep sleep or
+  a restart). A full queue refuses controller values first and note offs
+  last, and a new controller, pitch bend or aftertouch value replaces a
+  waiting one. `getSendStats()` counts refused, sent and acknowledged packets
+  to tell why messages do not arrive (`dropped`: queue full). A peer that
+  acknowledged none of the last 5 packets (`ESP_NOW_MIDI_UNREACHABLE_AFTER`) is
+  skipped, except for a probe every 2 s (`ESP_NOW_MIDI_PROBE_INTERVAL_MS`),
+  until it acknowledges or sends again: `isPeerReachable()`,
+  `getSendStats().skipped`.
 - [`enomik::Client`](api/Classes/classenomik_1_1_client.md): higher-level client
   that wraps ESP-NOW MIDI setup, peer storage, and a MIDI SysEx configuration
   interface for pin mapping and board setup. Received MIDI is handled in
@@ -23,7 +32,9 @@ There are three main ways to use the library:
   `setHeartbeatInterval()` (default 60 s, `0` = off).
 - `enomik::Dongle`: USB MIDI ↔ ESP-NOW bridge for a host-connected board
   (ESP32-S2/S3). Call `begin()` / `loop()`. Optional status UI via
-  `enomik::Dongle::Display` and `setDisplay()`. Optional
+  `enomik::Dongle::Display` and `setDisplay()`; redraws wait for a 100 ms
+  pause in MIDI (at most 1 s) so they do not hold up bridging
+  (`setDisplayQuietTime()`, `setDisplayUpdateInterval()`). Optional
   `setToHostFilter` / `setFromHostFilter` to drop or remap bridged messages.
   From the clients' announces it knows each peer's name and whether it is
   online: `getPeerName()`, `getPeerAnnounce()`, `getPeerStatus()`

@@ -95,4 +95,94 @@ bool writeUsbMidiSysEx(const uint8_t *data, uint16_t length, Write write)
   return true;
 }
 
+/**
+ * @brief Like writeUsbMidiSysEx(), but waits while the USB buffer is full.
+ * @param wait Called when a packet does not fit; sleeps briefly and returns
+ * `true` to try again, `false` to give up. Its argument is `true` while
+ * ending a cut-off SysEx.
+ *
+ * Giving up in the middle of a message would leave the host waiting for `F7`
+ * and ignoring the following MIDI, so it still tries to end the SysEx with `F7`.
+ * @return `true` when the whole SysEx was written.
+ */
+template <typename Write, typename Wait>
+bool writeUsbMidiSysExWaiting(const uint8_t *data, uint16_t length, Write write, Wait wait)
+{
+  if (!data || length < 2 || data[0] != 0xF0 || data[length - 1] != 0xF7)
+  {
+    return false;
+  }
+  for (uint16_t i = 0; i < length; i += 3)
+  {
+    const uint8_t n = (length - i) < 3 ? (length - i) : 3;
+    const bool last = i + n == length;
+    const uint8_t packet[4] = {static_cast<uint8_t>(last ? 0x04 + n : 0x04),
+                               data[i],
+                               n > 1 ? data[i + 1] : uint8_t(0),
+                               n > 2 ? data[i + 2] : uint8_t(0)};
+    while (!write(packet))
+    {
+      if (!wait(false))
+      {
+        if (i > 0)
+        {
+          const uint8_t end[4] = {0x05, 0xF7, 0, 0}; // SysEx ends with 1 byte
+          while (!write(end) && wait(true))
+          {
+          }
+        }
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * @brief Writes SysEx to USB, waiting up to a time budget for buffer space.
+ *
+ * A burst of SysEx (e.g. a GET_CONFIG reply) is larger than TinyUSB's MIDI
+ * buffer, so writes must wait for the host to read. After a SysEx timed out,
+ * the next ones within the back-off fail fast, so a host that stopped reading
+ * does not stall the caller on every message.
+ */
+class UsbSysExPacer
+{
+public:
+  static constexpr uint32_t BUDGET_MS = 20;   ///< Wait per SysEx for buffer space.
+  static constexpr uint32_t END_EXTRA_MS = 10; ///< Extra wait to end a cut-off SysEx.
+  static constexpr uint32_t BACKOFF_MS = 500;  ///< Fail fast this long after a timeout.
+
+  /**
+   * @param write Writes one packet, `false` when the buffer is full.
+   * @param ready `false` when USB is gone (do not wait at all).
+   * @param now Current time in milliseconds.
+   * @param sleep Waits about 1 ms so the USB task can send.
+   */
+  template <typename Write, typename Ready, typename Now, typename Sleep>
+  bool write(const uint8_t *data, uint16_t length, Write write, Ready ready, Now now, Sleep sleep)
+  {
+    const uint32_t start = now();
+    const bool failFast = _stalled && start - _stalledAt < BACKOFF_MS;
+    const bool ok = writeUsbMidiSysExWaiting(data, length, write, [&](bool ending)
+                                             {
+      if (failFast || !ready())
+        return false;
+      if (now() - start >= BUDGET_MS + (ending ? END_EXTRA_MS : 0))
+        return false;
+      sleep();
+      return true; });
+    _stalled = !ok;
+    if (!ok)
+    {
+      _stalledAt = now();
+    }
+    return ok;
+  }
+
+private:
+  bool _stalled = false;
+  uint32_t _stalledAt = 0;
+};
+
 } // namespace enomik

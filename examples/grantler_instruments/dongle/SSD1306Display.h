@@ -375,6 +375,9 @@ private:
     uint8_t* ptr = oled_.getBuffer() + (uint16_t)pageStart * SCREEN_WIDTH;
     uint16_t count = (uint16_t)(pageEnd - pageStart + 1) * SCREEN_WIDTH;
 
+    // 400 kHz like Adafruit_SSD1306::display(); Wire's default 100 kHz made a
+    // full frame block loop() for ~80 ms.
+    Wire.setClock(400000);
     Wire.beginTransmission(SCREEN_ADDRESS);
     Wire.write((uint8_t)0x40);
     uint16_t bytesOut = 1;
@@ -389,5 +392,6 @@ private:
       bytesOut++;
     }
     Wire.endTransmission();
+    Wire.setClock(100000);
   }
 };

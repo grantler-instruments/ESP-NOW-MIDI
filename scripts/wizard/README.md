@@ -43,6 +43,10 @@ buttons and a potentiometer. Press **Esc** to skip a physical step, or use
 
 **Phase 2 — client over ESP-NOW (through the dongle)**
 
+First waits until an echo comes back over the dongle (up to 15 s) and sets the
+fake inputs: after a reboot the client reads its real pins, and unconnected
+analog pins read noise and flood MIDI.
+
 Steps 4, 5, 6, 8, 9 and 10 again over the air. The burst allows up to 5% loss.
 The 300-byte SysEx is split into two ESP-NOW frames and reassembled by the dongle.
 
@@ -92,7 +96,9 @@ The wizard exits with a non-zero status if any step fails.
 ## Notes
 - Channels are 1-based here to match the library (`mido` uses 0-based on the
   wire; the wizard converts internally).
-- Button / pot steps advance automatically when MIDI arrives — no Enter. Press **Esc** during those steps to skip the current test.
+- Each real button / pot test waits for **Enter** before it listens, so a
+  floating pin cannot pass it early; **Esc** skips it. During a step, MIDI
+  advances it automatically; **Esc** still skips.
 - Test cases live in `cases.py` (no MIDI dependency); `test/protocol` unit-tests
   them.
 - The firmware sends a SysEx ANNOUNCE every 2 s while idle so the dongle

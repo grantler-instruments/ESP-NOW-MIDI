@@ -157,7 +157,17 @@ namespace enomik
 
         static void sendSysExToUsb(const uint8_t *data, uint16_t length)
         {
-            writeUsbMidiSysEx(data, length, writeUsbPacket);
+#ifdef HAS_USB_MIDI
+            // Waits for buffer space: a GET_CONFIG reply is larger than the USB buffer
+            static UsbSysExPacer pacer;
+            pacer.write(data, length, writeUsbPacket,
+                        []() { return TinyUSBDevice.mounted() && TinyUSBDevice.ready(); },
+                        []() { return static_cast<uint32_t>(millis()); },
+                        []() { delay(1); });
+#else
+            (void)data;
+            (void)length;
+#endif
         }
 
         void onSystemExclusive(uint8_t *data, unsigned int length)
@@ -516,7 +526,7 @@ namespace enomik
 #ifdef HAS_USB_MIDI
             TinyUSBDevice.setManufacturerDescriptor("grantler instruments");
             TinyUSBDevice.setProductDescriptor("enomik3000_client");
-            TinyUSBDevice.setSerialDescriptor(usbSerialFromMac());
+            TinyUSBDevice.setSerialDescriptor(usbSerialFromMac(io.getDefaultName()));
 
             g_client_usb_midi.begin();
 
@@ -619,6 +629,7 @@ namespace enomik
             processReceived();
             io.loop();
             maybeSendHeartbeat();
+            espnowMIDI.service(); // restarts ESP-NOW if the driver stopped confirming sends
         }
 
         /**
