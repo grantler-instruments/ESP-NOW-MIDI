@@ -217,17 +217,8 @@ namespace enomik
                         onNoteOff(channel, note, 0);
                         return;
                     }
-                    if (config.mode == ENOMIK_OUTPUT)
-                    {
-                        digitalWrite(config.pin, HIGH);
-                    }
-                    else if (config.mode == ENOMIK_ANALOG_OUTPUT)
-                    {
-                        int mappedValue = map(velocity, config.min_midi_value, config.max_midi_value,
-                                              0, PWM_MAX_VALUE);
-                        mappedValue = constrain(mappedValue, 0, PWM_MAX_VALUE);
-                        analogWrite(config.pin, (uint8_t)mappedValue);
-                    }
+                    // digital pins switch fully on regardless of velocity
+                    writeOutput(config, config.mode == ENOMIK_OUTPUT ? 127 : velocity);
                 }
             }
         }
@@ -243,14 +234,7 @@ namespace enomik
                     config.midi_channel == channel &&
                     config.midi_note == note)
                 {
-                    if (config.mode == ENOMIK_OUTPUT)
-                    {
-                        digitalWrite(config.pin, LOW);
-                    }
-                    else if (config.mode == ENOMIK_ANALOG_OUTPUT)
-                    {
-                        analogWrite(config.pin, 0);
-                    }
+                    writeOutput(config, 0);
                 }
             }
         }
@@ -263,15 +247,7 @@ namespace enomik
                 if (config.midi_type == MidiStatus::MIDI_PITCH_BEND &&
                     config.midi_channel == channel)
                 {
-                    if (config.mode == ENOMIK_OUTPUT)
-                    {
-                        digitalWrite(config.pin, bend > 0 ? HIGH : LOW);
-                    }
-                    else if (config.mode == ENOMIK_ANALOG_OUTPUT)
-                    {
-                        int mappedValue = map(bend + 8192, MIDI_MIN_BEND, MIDI_MAX_BEND, 0, PWM_MAX_VALUE);
-                        analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
-                    }
+                    writePitchBend(config, bend);
                 }
             }
         }
@@ -285,15 +261,7 @@ namespace enomik
                     config.midi_channel == channel &&
                     config.midi_cc == control)
                 {
-                    if (config.mode == ENOMIK_OUTPUT)
-                    {
-                        digitalWrite(config.pin, value > 63 ? HIGH : LOW);
-                    }
-                    else if (config.mode == ENOMIK_ANALOG_OUTPUT)
-                    {
-                        int mappedValue = map(value, config.min_midi_value, config.max_midi_value, 0, PWM_MAX_VALUE);
-                        analogWrite(config.pin, constrain(mappedValue, 0, PWM_MAX_VALUE));
-                    }
+                    writeOutput(config, value);
                 }
             }
         }
@@ -788,13 +756,44 @@ namespace enomik
             return false;
         }
 
+        /**
+         * Maps `x` from `inMin`..`inMax` onto the output pin. An inverted range
+         * (min > max) inverts the pin. Digital pins switch at the midpoint.
+         */
+        static void writeOutput(const PinConfig &c, long x, long inMin, long inMax)
+        {
+            const int level = constrain((int)map(x, inMin, inMax, 0, PWM_MAX_VALUE), 0, PWM_MAX_VALUE);
+            if (c.mode == ENOMIK_OUTPUT)
+                digitalWrite(c.pin, level > PWM_MAX_VALUE / 2 ? HIGH : LOW);
+            else if (c.mode == ENOMIK_ANALOG_OUTPUT)
+                analogWrite(c.pin, (uint8_t)level);
+        }
+
+        /** Maps signed pitch bend through the pin's min/max onto the output pin. */
+        static void writePitchBend(const PinConfig &c, int bend)
+        {
+            // min/max are 7-bit; scale them to 14 bits like pitch-bend inputs do.
+            // Center maps just below the midpoint, so digital pins rest off either way.
+            writeOutput(c, bend + 8192, pitchBendFrom7Bit(c.min_midi_value),
+                        pitchBendFrom7Bit(c.max_midi_value));
+        }
+
+        /** Maps a 7-bit MIDI value through the pin's min/max onto the output pin. */
+        static void writeOutput(const PinConfig &c, long value)
+        {
+            writeOutput(c, value, c.min_midi_value, c.max_midi_value);
+        }
+
         void initializePinHardware(const PinConfig &c)
         {
             if (c.mode == ENOMIK_OUTPUT || c.mode == ENOMIK_ANALOG_OUTPUT)
             {
                 pinMode(c.pin, OUTPUT);
-                if (c.mode == ENOMIK_ANALOG_OUTPUT)
-                    analogWrite(c.pin, 0);
+                // rest level: pitch bend rests at center, everything else at 0
+                if (c.midi_type == MidiStatus::MIDI_PITCH_BEND)
+                    writePitchBend(c, 0);
+                else
+                    writeOutput(c, 0);
             }
             else if (c.mode == ENOMIK_INPUT)
             {

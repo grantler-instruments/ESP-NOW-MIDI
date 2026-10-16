@@ -28,6 +28,7 @@ add_executable(native_tests
   test_midi_inbox.cpp
   test_client_dispatch.cpp
   test_io_pitch_bend.cpp
+  test_io_outputs.cpp
   test_io_name.cpp
   test_client_peers.cpp
   test_io_readers.cpp
