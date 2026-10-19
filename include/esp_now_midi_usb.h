@@ -251,7 +251,9 @@ inline void dispatchPacket(const uint8_t packet[4])
             h.pitchBend(channel, value);
         }
         break;
-    case 0xF: // System common / real-time (single-byte or fixed-length)
+    case 0x2: // Two-byte System Common (Song Select)
+    case 0x3: // Three-byte System Common (Song Position Pointer)
+    case 0xF: // Single byte (real-time)
         switch (status)
         {
         case 0xF2: // Song Position Pointer
@@ -371,7 +373,12 @@ inline void usbInstall()
     cfg.descriptor.full_speed_config = configDescriptor();
     cfg.descriptor.high_speed_config = nullptr;
 
-    tinyusb_driver_install(&cfg);
+    const esp_err_t err = tinyusb_driver_install(&cfg);
+    if (err != ESP_OK)
+    {
+        EspNowMidiLog::e("tinyusb_driver_install failed: %d", static_cast<int>(err));
+        return;
+    }
     usbInstalled() = true;
 }
 
@@ -407,7 +414,8 @@ public:
     void attach()
     {
         esp_now_midi_usb_detail::usbInstall();
-        tud_connect();
+        if (esp_now_midi_usb_detail::usbInstalled())
+            tud_connect();
     }
 
     void detach() { tud_disconnect(); }

@@ -45,6 +45,10 @@
 - Fixed: ESP-IDF touch on the S2/S3 read the wrong pad (GPIO n used touch channel n-1) and folded raw readings into 0-1000. ESP-IDF builds for chips without touch (C3/C6/H2) no longer fail on `touch_pad_t`.
 - Fixed: Client passed every USB SysEx to its config handler, which answered other vendors' SysEx with `DECODE_FAILED`. Now only enomik SysEx (`F0 7D`) goes there; `setHandleSysEx` still gets all.
 - Fixed: `enomik_client.h` / `enomik_dongle.h` could not be included from several source files with USB MIDI on (multiple definition of the USB MIDI objects).
+- Fixed: Arduino: starting ESP-NOW switched Wi-Fi to STA only and stopped a running access point; it now adds STA to it.
+- Fixed: ESP-IDF USB MIDI dropped Song Position and Song Select received from the host.
+- Fixed: ESP-IDF: a failing `tinyusb_driver_install()` was ignored; it is now logged and USB is not started.
+- Fixed: ESP-IDF `map()` divided by zero when the input range was empty.
 - Fixed: ESP-NOW frames that are not valid MIDI or SysEx transport frames (other ESP-NOW apps, corrupt data) were dispatched as MIDI; they are now ignored.
 - Fixed: auto-discovery added a new sender as peer inside the Wi-Fi receive callback. It is now added by the sender task (or `service()`) right after its first valid packet.
 - Core: `lastSenderMac(uint8_t out[6])` copies the sender MAC safely; the pointer version is only valid inside a receive handler.
