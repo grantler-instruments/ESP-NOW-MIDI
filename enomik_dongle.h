@@ -47,14 +47,17 @@
 #include <MIDI.h>
 
 // Global USB MIDI objects — MUST be at file scope; distinct from Client symbols.
-Adafruit_USBD_MIDI g_dongle_usb_midi;
-MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, g_dongle_usb_midi, DONGLE_USBMIDI);
+// inline: one object even when this header is included from several source
+// files (MIDI_CREATE_INSTANCE written out, it defines non-inline globals).
+inline Adafruit_USBD_MIDI g_dongle_usb_midi;
+inline MIDI_NAMESPACE::SerialMIDI<Adafruit_USBD_MIDI> serialDONGLE_USBMIDI(g_dongle_usb_midi);
+inline MIDI_NAMESPACE::MidiInterface<MIDI_NAMESPACE::SerialMIDI<Adafruit_USBD_MIDI>> DONGLE_USBMIDI(serialDONGLE_USBMIDI);
 #elif defined(ESP_PLATFORM)
 #include "include/esp_now_midi_usb.h"
 
 // Global USB MIDI objects — MUST be at file scope; distinct from Client symbols.
-TinyUsbRawMidiClass g_dongle_usb_midi;
-TinyUsbMidiClass DONGLE_USBMIDI;
+inline TinyUsbRawMidiClass g_dongle_usb_midi;
+inline TinyUsbMidiClass DONGLE_USBMIDI;
 #endif
 
 // Used by the USB watchdog. Weak references: if a TinyUSB build lacks either

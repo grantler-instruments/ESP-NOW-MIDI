@@ -27,7 +27,8 @@
 namespace enomik {
 
 /**
- * @brief ISR-safe ring buffer for MIDI messages destined for USB MIDI OUT.
+ * @brief Thread-safe ring buffer (spinlock) for MIDI messages destined for
+ * USB MIDI OUT. Used from tasks, not from interrupts.
  *
  * Clock messages can be coalesced via enqueueClock() so a burst of clocks
  * does not flood the queue.

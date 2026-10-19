@@ -25,14 +25,17 @@
 #include <MIDI.h>
 
 // Global USB MIDI objects - MUST be at file scope; distinct from Dongle symbols.
-Adafruit_USBD_MIDI g_client_usb_midi;
-MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, g_client_usb_midi, CLIENT_USBMIDI);
+// inline: one object even when this header is included from several source
+// files (MIDI_CREATE_INSTANCE written out, it defines non-inline globals).
+inline Adafruit_USBD_MIDI g_client_usb_midi;
+inline MIDI_NAMESPACE::SerialMIDI<Adafruit_USBD_MIDI> serialCLIENT_USBMIDI(g_client_usb_midi);
+inline MIDI_NAMESPACE::MidiInterface<MIDI_NAMESPACE::SerialMIDI<Adafruit_USBD_MIDI>> CLIENT_USBMIDI(serialCLIENT_USBMIDI);
 #elif defined(ESP_PLATFORM)
 #include "include/esp_now_midi_usb.h"
 
 // Global USB MIDI objects - MUST be at file scope; distinct from Dongle symbols.
-TinyUsbRawMidiClass g_client_usb_midi;
-TinyUsbMidiClass CLIENT_USBMIDI;
+inline TinyUsbRawMidiClass g_client_usb_midi;
+inline TinyUsbMidiClass CLIENT_USBMIDI;
 #endif
 #endif
 
@@ -172,8 +175,9 @@ namespace enomik
 
         void onSystemExclusive(uint8_t *data, unsigned int length)
         {
-            // Longer than any enomik config message; also keeps uint16_t from wrapping
-            if (length <= SysExPacket::MAX_DATA_SIZE)
+            // Other vendors' SysEx is only for the user handler. Longer than any
+            // enomik config message: also keeps uint16_t from wrapping.
+            if (SysExPacket::isEnomik(data, length) && length <= SysExPacket::MAX_DATA_SIZE)
             {
                 io.onSysEx(data, static_cast<uint16_t>(length));
             }
