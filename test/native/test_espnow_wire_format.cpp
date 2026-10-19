@@ -70,7 +70,9 @@ void attachHandlers(esp_now_midi &rx)
 }
 
 // Delivers bytes like the radio does: in a heap buffer of exactly that length,
-// so an out-of-bounds read is caught by AddressSanitizer builds.
+// so an out-of-bounds read is caught by AddressSanitizer builds. Then runs
+// service(), which adds a newly discovered sender as the sender task does on
+// hardware.
 void deliver(esp_now_midi &rx, const std::vector<uint8_t> &data)
 {
     uint8_t *buf = static_cast<uint8_t *>(malloc(data.empty() ? 1 : data.size()));
@@ -80,6 +82,7 @@ void deliver(esp_now_midi &rx, const std::vector<uint8_t> &data)
     }
     rx.OnDataRecv(kSender, buf, static_cast<int>(data.size()));
     free(buf);
+    rx.service();
 }
 
 } // namespace
@@ -362,15 +365,21 @@ TEST_CASE("peer list: auto-discovery adds a sender exactly once", "[espnow][peer
     const uint8_t clock = 0xF8;
     midi.OnDataRecv(sender, &clock, 1);
     midi.OnDataRecv(sender, &clock, 1);
+    REQUIRE(midi.getPeersCount() == 0); // not in the receive callback
+
+    midi.service(); // the sender task on hardware
     REQUIRE(midi.getPeersCount() == 1);
     REQUIRE(midi.hasPeer(sender));
+    uint32_t lastSeen = 0;
+    REQUIRE(midi.getPeerLastSeen(sender, lastSeen)); // its first packet counts
 }
 
 TEST_CASE("peer list: concurrent use from the WiFi task and the loop task", "[espnow][peers][threads]")
 {
     // Thread "wifi" acts like the receive callback: auto-discovery plus a
-    // handler that echoes to all peers. The main thread acts like loop():
-    // adds, removes, clears and sends. Run under ThreadSanitizer to catch races.
+    // handler that echoes to all peers. The main thread acts like loop() and
+    // the sender task: adds, removes, clears, sends and adds discovered
+    // senders (service()). Run under ThreadSanitizer to catch races.
     esp_now_midi midi;
     REQUIRE(midi.begin());
     stubEspNow().record = false;
@@ -394,6 +403,7 @@ TEST_CASE("peer list: concurrent use from the WiFi task and the loop task", "[es
         midi.sendToAllPeers(note, 3);
         macFor(mac, (i * 7) % 40);
         midi.removePeer(mac);
+        midi.service();
         if (i % 500 == 0)
         {
             midi.clearPeers();
@@ -671,10 +681,12 @@ TEST_CASE("auto-discovery ignores senders of foreign traffic", "[espnow][discove
         rx.OnDataRecv(mac, junk.data(), static_cast<int>(junk.size()));
         rx.OnDataRecv(mac, bytes({0x12, 0x34}).data(), 2);
     }
+    rx.service();
     REQUIRE(rx.getPeersCount() == 0);
 
     macFor(mac, 1);
     rx.OnDataRecv(mac, bytes({0x90, 60, 100}).data(), 3);
+    rx.service();
     REQUIRE(rx.getPeersCount() == 1);
     REQUIRE(rx.hasPeer(mac));
 }
@@ -728,4 +740,44 @@ TEST_CASE("send stats count refused, sent and acknowledged packets", "[espnow][s
     REQUIRE(s.lastError == ESP_ERR_ESPNOW_NOT_FOUND);
     REQUIRE(s.delivered == 1);
     REQUIRE(s.notDelivered == 1);
+}
+
+TEST_CASE("receive ignores short frames that are not valid MIDI", "[espnow][receive]")
+{
+    esp_now_midi rx;
+    REQUIRE(rx.begin(false, false)); // no auto-discovery
+    attachHandlers(rx);
+
+    deliver(rx, bytes({0x40}));             // data byte, no status
+    deliver(rx, bytes({0x90, 60}));         // note on missing its velocity
+    deliver(rx, bytes({0x90, 0x80, 100}));  // data byte with the high bit set
+    deliver(rx, bytes({0xF4}));             // undefined status
+    deliver(rx, bytes({0xC0, 5, 6}));       // program change is 2 bytes, not 3
+    REQUIRE(g_rx.noteOns == 0);
+    REQUIRE(g_rx.programChanges == 0);
+
+    deliver(rx, bytes({0x90, 60, 100}));
+    deliver(rx, bytes({0xC0, 5}));
+    deliver(rx, bytes({0xF8}));
+    REQUIRE(g_rx.noteOns == 1);
+    REQUIRE(g_rx.programChanges == 1);
+    REQUIRE(g_rx.clocks == 1);
+}
+
+TEST_CASE("lastSenderMac copies the sender of the last valid packet", "[espnow][receive]")
+{
+    esp_now_midi rx;
+    REQUIRE(rx.begin(false, false));
+    uint8_t out[6] = {};
+    REQUIRE_FALSE(rx.lastSenderMac(out));
+    REQUIRE_FALSE(rx.lastSenderMac(nullptr));
+
+    uint8_t other[6];
+    macFor(other, 7);
+    rx.OnDataRecv(other, bytes({0x40}).data(), 1); // junk: not a sender of MIDI
+    REQUIRE_FALSE(rx.lastSenderMac(out));
+
+    deliver(rx, bytes({0xF8}));
+    REQUIRE(rx.lastSenderMac(out));
+    REQUIRE(memcmp(out, kSender, 6) == 0);
 }

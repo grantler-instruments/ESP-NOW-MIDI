@@ -43,9 +43,12 @@ int countAnnounces()
     return count;
 }
 
+// Receive callback, then service(): adds a newly discovered sender as the
+// sender task does on hardware.
 void deliver(esp_now_midi &rx, const uint8_t mac[6], const std::vector<uint8_t> &data)
 {
     rx.OnDataRecv(mac, data.data(), static_cast<int>(data.size()));
+    rx.service();
 }
 
 // What a client with this name sends, as ESP-NOW frames.

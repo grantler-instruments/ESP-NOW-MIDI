@@ -1029,23 +1029,22 @@ public:
    */
   void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
   {
-    if (mac)
-    {
-      memcpy(_lastSenderMac, mac, 6);
-      _lastSenderValid = true;
-    }
-    if (!incomingData || len <= 0)
+    // Anything else on the air (other ESP-NOW apps, corrupt frames) is not MIDI
+    if (!incomingData || !isMidiPacket(incomingData, len))
     {
       return;
     }
-    if (isMidiPacket(incomingData, len))
+    if (mac)
     {
-      if (_autoPeerDiscovery && !hasPeer(mac))
-      {
-        addPeer(mac);
-      }
-      markSeen(mac);
+      EspNowMidiLock lock(_peersMux);
+      memcpy(_lastSenderMac, mac, 6);
+      _lastSenderValid = true;
     }
+    if (mac && _autoPeerDiscovery && queueDiscovered(mac))
+    {
+      wakeSender(); // adds the peer outside this Wi-Fi task callback
+    }
+    markSeen(mac);
     // SysEx transport frames are always longer than short MIDI (1–3 bytes).
     if (len > static_cast<int>(sizeof(midi_message_packet)))
     {
@@ -1389,10 +1388,11 @@ public:
 #if ESP_NOW_MIDI_HAS_TASKS
     if (_senderTask)
     {
-      wakeSender(); // the sender task restarts ESP-NOW itself
+      wakeSender(); // the sender task restarts ESP-NOW and adds discovered peers itself
       return;
     }
 #endif
+    addDiscoveredPeers();
     checkStall();
     if (ESP_NOW_MIDI_SEND_QUEUE)
     {
@@ -1504,10 +1504,31 @@ public:
   /**
    * @brief MAC of the peer that sent the packet currently being dispatched.
    * @return Pointer to 6 bytes, or `nullptr` if no packet has been received yet.
+   * Only valid inside a receive handler: the next packet overwrites it. Use
+   * lastSenderMac(uint8_t[6]) elsewhere.
    */
   const uint8_t *lastSenderMac() const
   {
     return _lastSenderValid ? _lastSenderMac : nullptr;
+  }
+
+  /**
+   * @brief Copies the MAC of the peer that sent the last MIDI packet.
+   * @return `false` if no packet has been received yet.
+   */
+  bool lastSenderMac(uint8_t out[6]) const
+  {
+    if (!out)
+    {
+      return false;
+    }
+    EspNowMidiLock lock(_peersMux);
+    if (!_lastSenderValid)
+    {
+      return false;
+    }
+    memcpy(out, _lastSenderMac, 6);
+    return true;
   }
 
   /**
@@ -1765,6 +1786,7 @@ private:
     esp_now_midi *self = static_cast<esp_now_midi *>(arg);
     for (;;)
     {
+      self->addDiscoveredPeers();
       self->checkStall();
       if (!self->sendQueued())
       {
@@ -1873,6 +1895,48 @@ private:
     }
   }
 
+  // Receive callback: remembers an unknown sender for addDiscoveredPeers().
+  // Returns true when it was newly queued. A full list drops it; the
+  // sender's next packet queues it again.
+  bool queueDiscovered(const uint8_t mac[6])
+  {
+    const uint64_t packed = PeerInfo::packMac(mac);
+    EspNowMidiLock lock(_peersMux);
+    if (indexOfLocked(packed) >= 0 || _discoveredCount >= kMaxDiscovered)
+    {
+      return false;
+    }
+    for (int i = 0; i < _discoveredCount; i++)
+    {
+      if (PeerInfo::packMac(_discovered[i]) == packed)
+      {
+        return false;
+      }
+    }
+    memcpy(_discovered[_discoveredCount++], mac, 6);
+    return true;
+  }
+
+  // Adds the senders queued by the receive callback (sender task or service()).
+  void addDiscoveredPeers()
+  {
+    uint8_t macs[kMaxDiscovered][6];
+    int count;
+    {
+      EspNowMidiLock lock(_peersMux);
+      count = _discoveredCount;
+      memcpy(macs, _discovered, sizeof(macs));
+      _discoveredCount = 0;
+    }
+    for (int i = 0; i < count; i++)
+    {
+      if (_autoPeerDiscovery && !hasPeer(macs[i]) && addPeer(macs[i]))
+      {
+        markSeen(macs[i]); // its first packet was already received
+      }
+    }
+  }
+
   void markSeen(const uint8_t mac[6])
   {
     if (!mac)
@@ -1973,8 +2037,11 @@ private:
   DataSentCallback userDataSentCallback = nullptr;
   bool _autoPeerDiscovery = true;
   bool _reducePowerAtCostOfLatency = false;
-  uint8_t _lastSenderMac[6] = {0};
+  uint8_t _lastSenderMac[6] = {0}; // Guarded by _peersMux
   bool _lastSenderValid = false;
+  static constexpr int kMaxDiscovered = 4;
+  uint8_t _discovered[kMaxDiscovered][6] = {}; // Unknown senders, guarded by _peersMux
+  int _discoveredCount = 0;
 
   // MIDI Handlers
   void (*onNoteOnHandler)(byte channel, byte note, byte velocity) = nullptr;
