@@ -6,7 +6,12 @@
 #elif defined(ESP_PLATFORM)
 #include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "soc/soc_caps.h"
+// Legacy touch_pad driver: ESP32 (v1), S2/S3 (v2). P4 (v3) is not supported here yet.
+#if SOC_TOUCH_SENSOR_SUPPORTED && SOC_TOUCH_SENSOR_VERSION <= 2
+#define ESP_NOW_MIDI_IDF_TOUCH 1
 #include "driver/touch_pad.h"
+#endif
 #include "esp_adc/adc_oneshot.h"
 #include "./esp_now_midi_log.h"
 #include <cstdint>
@@ -205,17 +210,18 @@ inline int analogRead(uint8_t pin)
 // --- Capacitive touch --------------------------------------------------------
 //
 // IDF has no GPIO->touch-channel lookup (unlike adc_oneshot_io_to_channel for
-// ADC), so this table is hand-built from each chip's touch pinout. Raw touch
-// value polarity also differs by chip: classic ESP32 reads LOWER on touch,
-// S2/S3 read HIGHER on touch. Arduino-ESP32's touchRead() normalizes this to
-// "always lower on touch"; we replicate that so enomik_io.h's
-// `touchValue < threshold` comparison keeps working unmodified.
+// ADC), so this table is hand-built from each chip's touch pinout. touchRead()
+// returns the raw reading like Arduino-ESP32: classic ESP32 reads LOWER on
+// touch, S2/S3 read HIGHER. enomik_io.h compares against a per-pin baseline in
+// the right direction (ENOMIK_TOUCH_RISES). Chips without a touch sensor
+// (C3/C6/H2) or with an unsupported one (P4) get no touchRead(); enomik_io.h
+// does not call it there.
+#ifdef ESP_NOW_MIDI_IDF_TOUCH
 
 namespace esp_now_midi_gpio_detail
 {
 
 #if CONFIG_IDF_TARGET_ESP32
-constexpr bool TOUCH_RAW_INCREASES_ON_TOUCH = false;
 inline bool gpioToTouchChannel(uint8_t pin, touch_pad_t &out)
 {
     switch (pin)
@@ -234,83 +240,66 @@ inline bool gpioToTouchChannel(uint8_t pin, touch_pad_t &out)
     }
 }
 #elif CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
-constexpr bool TOUCH_RAW_INCREASES_ON_TOUCH = true;
 inline bool gpioToTouchChannel(uint8_t pin, touch_pad_t &out)
 {
     if (pin >= 1 && pin <= 14)
     {
-        out = static_cast<touch_pad_t>(pin - 1);
+        out = static_cast<touch_pad_t>(pin);
         return true;
     }
     return false;
 }
-#else
-constexpr bool TOUCH_RAW_INCREASES_ON_TOUCH = false;
-inline bool gpioToTouchChannel(uint8_t, touch_pad_t &)
-{
-    return false; // No touch peripheral on this target (e.g. ESP32-C3).
-}
 #endif
 
-inline bool &touchDriverInitialized()
+// Initializes the touch driver and the channel on first use.
+inline void ensureTouchChannel(touch_pad_t channel)
 {
-    static bool initialized = false;
-    return initialized;
-}
-
-} // namespace esp_now_midi_gpio_detail
-
-inline void touchAttachInterrupt(uint8_t pin, void (*callback)(void), int /*threshold*/)
-{
-    (void)callback; // enomik_io.h always passes nullptr: polling-only, no ISR.
-
-    touch_pad_t channel;
-    if (!esp_now_midi_gpio_detail::gpioToTouchChannel(pin, channel))
-    {
-        EspNowMidiLog::e("esp_now_midi_gpio: pin %u has no touch channel on this target", pin);
+    static bool driverInitialized = false;
+    static uint32_t configured = 0;
+    if (configured & (1u << channel))
         return;
-    }
 
-    if (!esp_now_midi_gpio_detail::touchDriverInitialized())
+    if (!driverInitialized)
     {
         touch_pad_init();
-        esp_now_midi_gpio_detail::touchDriverInitialized() = true;
+        driverInitialized = true;
     }
 
 #if CONFIG_IDF_TARGET_ESP32
     // Classic ESP32: threshold is part of touch_pad_config (0 = use default).
     touch_pad_config(channel, 0);
 #else
-    // S2/S3 (and newer): threshold is configured separately.
+    // S2/S3: the measurement FSM must run for raw data to update.
     touch_pad_config(channel);
+    touch_pad_set_fsm_mode(TOUCH_FSM_MODE_TIMER);
+    touch_pad_fsm_start();
 #endif
+    configured |= 1u << channel;
 }
 
-inline int touchRead(uint8_t pin)
+} // namespace esp_now_midi_gpio_detail
+
+inline uint32_t touchRead(uint8_t pin)
 {
     touch_pad_t channel;
     if (!esp_now_midi_gpio_detail::gpioToTouchChannel(pin, channel))
     {
+        EspNowMidiLog::e("esp_now_midi_gpio: pin %u has no touch channel on this target", pin);
         return 0;
     }
+    esp_now_midi_gpio_detail::ensureTouchChannel(channel);
 
 #if CONFIG_IDF_TARGET_ESP32
     uint16_t raw16 = 0;
     touch_pad_read(channel, &raw16);
-    uint32_t raw = raw16;
+    return raw16;
 #else
     uint32_t raw = 0;
     touch_pad_read_raw_data(channel, &raw);
+    return raw;
 #endif
-
-    // Normalize polarity to match Arduino-ESP32: always lower on touch.
-    if (esp_now_midi_gpio_detail::TOUCH_RAW_INCREASES_ON_TOUCH)
-    {
-        constexpr uint32_t TOUCH_RAW_CEILING = 1000;
-        raw = (raw < TOUCH_RAW_CEILING) ? (TOUCH_RAW_CEILING - raw) : 0;
-    }
-
-    return static_cast<int>(raw);
 }
+
+#endif // ESP_NOW_MIDI_IDF_TOUCH
 
 #endif

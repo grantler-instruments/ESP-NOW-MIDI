@@ -32,6 +32,8 @@ add_executable(native_tests
   test_io_name.cpp
   test_client_peers.cpp
   test_io_readers.cpp
+  test_io_pin_config_storage.cpp
+  test_io_touch.cpp
   test_announce.cpp
   test_send_health.cpp
   test_send_queue.cpp

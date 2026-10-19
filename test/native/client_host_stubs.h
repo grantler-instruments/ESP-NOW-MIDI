@@ -53,13 +53,18 @@ namespace enomik
 class Preferences
 {
 public:
-    bool begin(const char *, bool = false) { return true; }
+    // Blobs are stored as "<namespace>/<key>" so namespaces don't collide.
+    bool begin(const char *ns, bool = false)
+    {
+        _ns = ns ? ns : "";
+        return true;
+    }
     void end() {}
     void clear() {}
     size_t putBytes(const char *key, const void *value, size_t len)
     {
         if (stubPrefsPersist())
-            stubPrefsBlobs()[key] = std::string(static_cast<const char *>(value), len);
+            stubPrefsBlobs()[path(key)] = std::string(static_cast<const char *>(value), len);
         return len;
     }
     // Like Arduino Preferences: 0 when the stored blob is larger than maxLen.
@@ -67,23 +72,30 @@ public:
     {
         if (!stubPrefsPersist())
             return 0;
-        auto it = stubPrefsBlobs().find(key);
+        auto it = stubPrefsBlobs().find(path(key));
         if (it == stubPrefsBlobs().end() || it->second.size() > maxLen)
             return 0;
         memcpy(buf, it->second.data(), it->second.size());
         return it->second.size();
     }
-    size_t putUInt(const char *, uint32_t) { return 4; }
-    uint32_t getUInt(const char *, uint32_t d = 0) { return d; }
+    size_t putUInt(const char *key, uint32_t value) { return putBytes(key, &value, sizeof(value)); }
+    uint32_t getUInt(const char *key, uint32_t d = 0)
+    {
+        uint32_t value = d;
+        return getBytes(key, &value, sizeof(value)) == sizeof(value) ? value : d;
+    }
     size_t putUChar(const char *, uint8_t) { return 1; }
     uint8_t getUChar(const char *, uint8_t d = 0) { return d; }
     size_t putBool(const char *, bool) { return 1; }
     bool getBool(const char *, bool d = false) { return d; }
+
+private:
+    std::string path(const char *key) const { return _ns + "/" + key; }
+    std::string _ns;
 };
 } // namespace enomik
 
-inline int touchRead(uint8_t) { return 0; }
-inline void touchAttachInterrupt(uint8_t, void (*)(), int) {}
+inline uint32_t touchRead(uint8_t) { return 0; }
 #define ESP_MAC_WIFI_STA 0
 inline int esp_read_mac(uint8_t *mac, int)
 {
