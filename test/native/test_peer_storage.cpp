@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <type_traits>
 #include <cstring>
 
 #include "include/PeerStorage.h"
@@ -83,3 +84,7 @@ TEST_CASE("PeerStorage RAM backend survives a second begin on the same instance"
     REQUIRE(store.exists(kMacA));
     REQUIRE(store.count() == 1);
 }
+
+// Owns an NVS handle that the destructor closes: a copy would close it twice
+static_assert(!std::is_copy_constructible<enomik::PeerStorage>::value, "PeerStorage must not be copyable");
+static_assert(!std::is_copy_assignable<enomik::PeerStorage>::value, "PeerStorage must not be copy-assignable");

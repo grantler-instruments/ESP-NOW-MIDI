@@ -49,6 +49,8 @@
 - Fixed: ESP-IDF USB MIDI dropped Song Position and Song Select received from the host.
 - Fixed: ESP-IDF: a failing `tinyusb_driver_install()` was ignored; it is now logged and USB is not started.
 - Fixed: ESP-IDF `map()` divided by zero when the input range was empty.
+- `PeerStorage` can no longer be copied (a copy closed the NVS handle twice), and `begin()` fails when the peer list does not fit the EEPROM size.
+- Removed: `MPEChannelManager.h` (unused, wrong zone math).
 - Fixed: ESP-NOW frames that are not valid MIDI or SysEx transport frames (other ESP-NOW apps, corrupt data) were dispatched as MIDI; they are now ignored.
 - Fixed: auto-discovery added a new sender as peer inside the Wi-Fi receive callback. It is now added by the sender task (or `service()`) right after its first valid packet.
 - Core: `lastSenderMac(uint8_t out[6])` copies the sender MAC safely; the pointer version is only valid inside a receive handler.

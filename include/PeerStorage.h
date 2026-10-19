@@ -43,6 +43,10 @@ public:
 #endif
     }
 
+    // Owns the NVS handle (closed in the destructor): a copy would close it twice
+    PeerStorage(const PeerStorage &) = delete;
+    PeerStorage &operator=(const PeerStorage &) = delete;
+
 #if defined(ESP_PLATFORM) && !defined(ARDUINO)
     ~PeerStorage() {
         if (initialized) {
@@ -58,6 +62,12 @@ public:
         }
 
 #ifdef ARDUINO
+        if (eepromAddr + sizeof(StorageFormat) > eepromSize) {
+            EspNowMidiLog::e("PeerStorage: %u bytes at %u do not fit in EEPROM size %u",
+                             static_cast<unsigned>(sizeof(StorageFormat)),
+                             static_cast<unsigned>(eepromAddr), static_cast<unsigned>(eepromSize));
+            return false;
+        }
         if (!EEPROM.begin(eepromSize)) {
             EspNowMidiLog::e("PeerStorage: Failed to initialize EEPROM");
             return false;
