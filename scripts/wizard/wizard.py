@@ -186,6 +186,7 @@ class Wizard:
         self._prime_fake_inputs(link)
         self._configure_pins(link)
         self._sysex_errors(link)
+        self._raw_stream(link)
 
         self._echo(link, tc.channel_voice_cases(), "USB")
         self._no_echo_on_io_channel(link, "USB")
@@ -271,6 +272,56 @@ class Wizard:
         self.check_error(
             link, "short MAC", sx.build_raw(sx.CMD_ADD_PEER, [1, 2, 3]), sx.CMD_ADD_PEER, sx.ERR_DECODE_FAILED
         )
+
+    def _raw_stream(self, link: MidiLink) -> None:
+        """SET_RAW_STREAM on the fake analog pin: frames arrive, follow a threshold change, stop."""
+        args = dict(next(a for _, a in PIN_CONFIGS if a["pin"] == PIN_ANALOG_IN))
+        self.send(link, *tc.fake_analog(PIN_ANALOG_IN, 64))
+        self.drain(link, 0.3)
+
+        resp = self.request_sysex(link, sx.build_set_raw_stream(PIN_ANALOG_IN, True, 50), "raw_stream")
+        ok = bool(resp and resp["pin"] == PIN_ANALOG_IN and resp["enabled"] and resp["interval_ms"] == 50)
+        self.record("SysEx SET_RAW_STREAM on", ok)
+
+        frames = self._collect_raw_frames(link, 1.0)
+        norms = [f["norm"] for f in frames]
+        ok = 14 <= len(frames) <= 24 and all(f["pin"] == PIN_ANALOG_IN for f in frames) and \
+            bool(norms) and abs(norms[-1] - 64) <= 2
+        self.record("RAW_VALUE frames at 50 ms", ok, f"{len(frames)} frames, norm {norms[-1:]}")
+
+        # Tuning the threshold keeps the stream running.
+        self.request_sysex(
+            link, sx.build_set_pin_config(channel=IO_CHANNEL, threshold=33, **args), "pin_config"
+        )
+        frames = self._collect_raw_frames(link, 0.3)
+        self.record("RAW_VALUE shows new threshold", bool(frames) and frames[-1]["threshold"] == 33)
+        self.request_sysex(link, sx.build_set_pin_config(channel=IO_CHANNEL, **args), "pin_config")
+
+        resp = self.request_sysex(link, sx.build_set_raw_stream(PIN_ANALOG_IN, False), "raw_stream")
+        self.record("SysEx SET_RAW_STREAM off", bool(resp and not resp["enabled"]))
+        self.drain(link, 0.2)
+        frames = self._collect_raw_frames(link, 0.5)
+        self.record("RAW_VALUE frames stop", not frames, f"{len(frames)} after off")
+
+        self.check_error(
+            link, "raw stream on unconfigured pin", sx.build_set_raw_stream(UNUSED_PIN, True),
+            sx.CMD_SET_RAW_STREAM, sx.ERR_PIN_NOT_FOUND,
+        )
+        self._prime_fake_inputs(link)
+
+    @staticmethod
+    def _collect_raw_frames(link: MidiLink, seconds: float) -> list[dict]:
+        frames: list[dict] = []
+
+        def on_message(msg: mido.Message) -> None:
+            if msg.type == "sysex":
+                parsed = sx.parse(list(msg.data))
+                if parsed and parsed.get("cmd") == "raw_value":
+                    frames.append(parsed)
+
+        link.flush()
+        link.wait_for(lambda m: False, timeout=seconds, on_message=on_message)
+        return frames
 
     def _pair_with_dongle(self, link: MidiLink) -> None:
         """Store the dongle as a peer (persisted on the client for Phase 2)."""

@@ -43,6 +43,10 @@ CMD_SET_NAME = 0x11
 CMD_GET_NAME = 0x12
 # Device -> device notification (hello and heartbeat), never answered
 CMD_ANNOUNCE = 0x15
+CMD_SET_RAW_STREAM = 0x16
+# Device -> host notification while the raw stream is on, never answered
+CMD_RAW_VALUE = 0x17
+RAW_STREAM_ALL_PINS = 0x7F
 
 # Response codes (request + 64)
 RESP_SET_PIN_CONFIG = CMD_SET_PIN_CONFIG + 0x40
@@ -63,6 +67,7 @@ RESP_SET_POWER_SAVE = CMD_SET_POWER_SAVE + 0x40
 RESP_GET_POWER_SAVE = CMD_GET_POWER_SAVE + 0x40
 RESP_SET_NAME = CMD_SET_NAME + 0x40
 RESP_GET_NAME = CMD_GET_NAME + 0x40
+RESP_SET_RAW_STREAM = CMD_SET_RAW_STREAM + 0x40
 
 RESP_ERROR = 0x7F
 
@@ -208,6 +213,23 @@ def build_get_name() -> list[int]:
     return _header(CMD_GET_NAME)
 
 
+def build_set_raw_stream(pin: int, enable: bool, interval_ms: int = 0) -> list[int]:
+    """Start/stop RAW_VALUE frames for one pin (or RAW_STREAM_ALL_PINS).
+
+    interval_ms is sent in 5 ms units; 0 = firmware default (50 ms), minimum 20 ms.
+    The firmware stops on its own after 10 s without any SysEx from the host,
+    so re-send this as a keepalive while streaming.
+    """
+    return _header(CMD_SET_RAW_STREAM) + [pin & 0x7F, 1 if enable else 0, min(interval_ms // 5, 0x7F)]
+
+
+def _septets32(data: list[int]) -> int:
+    value = 0
+    for b in data:
+        value = (value << 7) | (b & 0x7F)
+    return value
+
+
 def build_get_peer(index: int) -> list[int]:
     return _header(CMD_GET_PEER) + [index]
 
@@ -313,6 +335,28 @@ def parse(data: list[int]) -> dict | None:
             "kind": DEVICE_KIND_NAMES.get(payload[0], f"unknown_0x{payload[0]:02X}"),
             "version": tuple(payload[1:4]),
             "name": bytes(payload[4:]).decode("ascii", errors="replace"),
+        }
+
+    if cmd == RESP_SET_RAW_STREAM and len(payload) >= 3:
+        return {
+            "cmd": "raw_stream",
+            "pin": payload[0],
+            "enabled": bool(payload[1]),
+            "interval_ms": payload[2] * 5,
+        }
+
+    if cmd == CMD_RAW_VALUE and len(payload) == 21:
+        return {
+            "cmd": "raw_value",
+            "pin": payload[0],
+            "mode": payload[1],
+            "raw": _septets32(payload[2:7]),
+            "baseline": _septets32(payload[7:12]),
+            "peak": _septets32(payload[12:17]),
+            "percent": payload[17],
+            "norm": payload[18],
+            "threshold": payload[19],
+            "active": bool(payload[20]),
         }
 
     if cmd in (RESP_SET_NAME, RESP_GET_NAME):

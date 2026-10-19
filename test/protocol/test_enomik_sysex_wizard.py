@@ -257,3 +257,37 @@ class TestWizardAnnounce(unittest.TestCase):
 
     def test_announce_is_not_a_request_with_response(self):
         self.assertFalse(hasattr(sx, "RESP_ANNOUNCE"))
+
+    def test_build_set_raw_stream(self):
+        self.assertEqual(
+            sx.build_set_raw_stream(4, True, 50),
+            [sx.MANUFACTURER_ID, sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR, 0x16, 4, 1, 10],
+        )
+        self.assertEqual(sx.build_set_raw_stream(sx.RAW_STREAM_ALL_PINS, False)[-3:], [0x7F, 0, 0])
+
+    def test_parse_raw_stream_response(self):
+        self.assertEqual(
+            sx.parse(response(sx.RESP_SET_RAW_STREAM, [4, 1, 4])),
+            {"cmd": "raw_stream", "pin": 4, "enabled": True, "interval_ms": 20},
+        )
+
+    def test_parse_raw_value(self):
+        def septets(value: int) -> list[int]:
+            return [(value >> (7 * i)) & 0x7F for i in range(4, -1, -1)]
+
+        payload = [12, 5] + septets(0xFFFFFFF0) + septets(180000) + septets(9000) + [40, 64, 30, 1]
+        self.assertEqual(
+            sx.parse(response(sx.CMD_RAW_VALUE, payload)),
+            {
+                "cmd": "raw_value",
+                "pin": 12,
+                "mode": 5,
+                "raw": 0xFFFFFFF0,
+                "baseline": 180000,
+                "peak": 9000,
+                "percent": 40,
+                "norm": 64,
+                "threshold": 30,
+                "active": True,
+            },
+        )

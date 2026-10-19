@@ -518,3 +518,16 @@ TEST_CASE("decodeMAC extracts MAC from nibbles", "[sysex][decode]")
         REQUIRE_FALSE(enomik::SysExDecoder::decodeMAC(payload, 11, decoded));
     }
 }
+
+TEST_CASE("isEnomik tells enomik SysEx from other vendors", "[sysex]")
+{
+    const auto enomikPacket = enomik::SysExEncoder::encodeVersion();
+    REQUIRE(enomik::SysExPacket::isEnomik(enomikPacket.data, enomikPacket.length));
+
+    const uint8_t roland[] = {0xF0, 0x41, 0x10, 0x42, 0x12, 0xF7};
+    const uint8_t universal[] = {0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7};
+    REQUIRE_FALSE(enomik::SysExPacket::isEnomik(roland, sizeof(roland)));
+    REQUIRE_FALSE(enomik::SysExPacket::isEnomik(universal, sizeof(universal)));
+    REQUIRE_FALSE(enomik::SysExPacket::isEnomik(enomikPacket.data, 1));
+    REQUIRE_FALSE(enomik::SysExPacket::isEnomik(nullptr, 6));
+}

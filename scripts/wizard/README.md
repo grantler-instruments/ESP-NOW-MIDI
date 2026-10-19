@@ -24,6 +24,9 @@ buttons and a potentiometer. Press **Esc** to skip a physical step, or use
    - pin 11 analog input → pitch bend
 3. SysEx error replies: unknown command, wrong protocol version, unconfigured
    pin, malformed MAC
+   Raw stream: `SET_RAW_STREAM` on analog pin 10 sends `RAW_VALUE` frames
+   every 50 ms with the fake level, a threshold change shows up in the frames,
+   frames stop after `SET_RAW_STREAM` off, unconfigured pin → `PIN_NOT_FOUND`
 4. Echo on **channel 10** of every channel voice message, including edge values
    (velocity 1/127, CC 0/127, program 0/127, pitch bend min/max/center,
    aftertouch 0/127); channel 1 is **not** echoed
