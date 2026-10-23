@@ -148,7 +148,37 @@ void onStop() { _client.sendStop(); }
 void onSongPosition(uint16_t position) { _client.sendSongPosition(position); }
 void onSongSelect(byte song) { _client.sendSongSelect(song); }
 
+// --- Debug: live ESP-NOW peers and send counters --------------------------------
+// The inspector shows the stored peers; this shows the live ESP-NOW list the
+// client actually sends to, every TEST_DEBUG_INTERVAL_MS (0 = off).
+static void printDebug() {
+  static uint32_t lastPrintMs = 0;
+  const uint32_t now = millis();
+  if (TEST_DEBUG_INTERVAL_MS == 0 || now - lastPrintMs < TEST_DEBUG_INTERVAL_MS) return;
+  lastPrintMs = now;
+
+  esp_now_midi &espnow = _client.espnowMIDI;
+  const int count = espnow.getPeersCount();
+  Serial.printf("[debug] live peers: %d\n", count);
+  for (int i = 0; i < count; i++) {
+    uint8_t mac[6];
+    if (!espnow.getPeer(i, mac)) continue;
+    uint32_t lastSeenMs = 0;
+    const bool seen = espnow.getPeerLastSeen(mac, lastSeenMs);
+    Serial.printf("[debug]   %d %s %s, last seen %s%lu ms ago\n", i, enomik::macToString(mac).c_str(),
+                  espnow.isPeerReachable(mac) ? "reachable" : "UNREACHABLE", seen ? "" : "never/",
+                  seen ? (unsigned long)(now - lastSeenMs) : 0UL);
+  }
+  const EspNowSendStats s = espnow.getSendStats();
+  Serial.printf("[debug] sent %lu delivered %lu notDelivered %lu failed %lu (last err %d) skipped %lu "
+                "dropped %lu restarts %lu/%lu wifi\n",
+                (unsigned long)s.sent, (unsigned long)s.delivered, (unsigned long)s.notDelivered,
+                (unsigned long)s.failed, (int)s.lastError, (unsigned long)s.skipped, (unsigned long)s.dropped,
+                (unsigned long)s.restarts, (unsigned long)s.wifiRestarts);
+}
+
 void setup() {
+  Serial.begin(115200);
   clearFakes();
 
   _client.setName("client_test"); // optional
@@ -174,4 +204,5 @@ void setup() {
 
 void loop() {
   _client.loop();
+  printDebug();
 }

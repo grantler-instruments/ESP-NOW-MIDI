@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run the test wizard in a project-local virtualenv (.venv/).
+# Run the board tester (or `run.sh client_test ...`: the client_test wizard)
+# in a project-local virtualenv (.venv/).
 # Nothing is installed into system Python or user site-packages.
 
 set -euo pipefail
@@ -11,7 +12,13 @@ VENV="$ROOT/.venv"
 PY="$VENV/bin/python"
 PIP="$VENV/bin/pip"
 
-echo "ESP-NOW MIDI test wizard"
+SCRIPT=wizard.py
+if [[ "${1:-}" == "client_test" ]]; then
+  SCRIPT=client_test.py
+  shift
+fi
+
+echo "ESP-NOW MIDI ${SCRIPT%.py}"
 
 if [[ ! -x "$PY" ]]; then
   echo "Creating isolated venv at scripts/wizard/.venv ..."
@@ -26,4 +33,4 @@ else
 fi
 
 export PYTHONUNBUFFERED=1
-exec "$PY" wizard.py "$@"
+exec "$PY" "$SCRIPT" "$@"

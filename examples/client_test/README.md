@@ -42,4 +42,4 @@ via the dongle in Phase 2). There is no parallel serial protocol.
 `HAS_USB_MIDI` is enabled in this example's `config.h`; that is what exposes the
 USB MIDI port used in Phase 1.
 
-See `scripts/wizard/README.md` for how to drive this firmware.
+Drive it with `scripts/wizard/run.sh client_test`; see `scripts/wizard/README.md`.

@@ -36,3 +36,6 @@
 // Heartbeat (SysEx ANNOUNCE) interval while idle. Shorter than the library
 // default of 60 s so the dongle discovers this client within seconds in Phase 2.
 #define TEST_HEARTBEAT_INTERVAL_MS 2000
+
+// Serial dump of the live ESP-NOW peers and send counters (0 = off).
+#define TEST_DEBUG_INTERVAL_MS 2000

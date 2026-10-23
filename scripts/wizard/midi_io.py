@@ -1,4 +1,4 @@
-"""Thin helpers around mido for the test wizard."""
+"""Thin helpers around mido for the board tester and the client_test wizard."""
 
 from __future__ import annotations
 
@@ -13,13 +13,17 @@ from typing import Any
 
 import mido
 
+# Do not fall back to "enomik": that also matches the opposite device role.
+CLIENT_PORT_NAMES = ["enomik3000_client", "client"]
+DONGLE_PORT_NAMES = ["enomik3000_dongle", "dongle"]
+
 # Returned by wait_for(..., allow_esc=True) when the user presses Esc.
 CANCELLED: Any = object()
 
 
 @contextmanager
-def _cbreak_stdin():
-    """Single-key reads (Esc) without waiting for Enter."""
+def cbreak_stdin():
+    """Single-key reads (Enter, Esc, y/n) without waiting for Enter."""
     if not sys.stdin.isatty():
         yield
         return
@@ -32,20 +36,21 @@ def _cbreak_stdin():
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
-def _poll_esc() -> bool:
+def poll_key() -> str | None:
+    """The key pressed since the last call, or None. Needs cbreak_stdin()."""
     if not sys.stdin.isatty():
-        return False
+        return None
     ready, _, _ = select.select([sys.stdin], [], [], 0)
     if not ready:
-        return False
-    return sys.stdin.read(1) == "\x1b"
+        return None
+    return sys.stdin.read(1)
 
 
 def wait_start_or_skip() -> bool:
     """Block until Enter (True, start) or Esc (False, skip)."""
     if not sys.stdin.isatty():
         return input().strip().lower() not in ("s", "skip")
-    with _cbreak_stdin():
+    with cbreak_stdin():
         while True:
             key = sys.stdin.read(1)
             if key in ("\n", "\r"):
@@ -89,10 +94,10 @@ class MidiLink:
         the predicate runs (useful for logging received values).
         """
         deadline = time.monotonic() + timeout
-        ctx = _cbreak_stdin() if allow_esc else nullcontext()
+        ctx = cbreak_stdin() if allow_esc else nullcontext()
         with ctx:
             while time.monotonic() < deadline:
-                if allow_esc and _poll_esc():
+                if allow_esc and poll_key() == "\x1b":
                     return CANCELLED
                 for msg in self.inport.iter_pending():
                     if on_message is not None:
@@ -118,7 +123,7 @@ def _match(names: list[str], needles: list[str]) -> str | None:
 def find_link(needles: list[str], label: str, allow_prompt: bool = True) -> MidiLink:
     """Open the in/out ports for a device matched by name substrings.
 
-    `needles` are tried in order (e.g. ["enomik3000_client", "client", "enomik"]).
+    `needles` are tried in order (e.g. CLIENT_PORT_NAMES).
     Falls back to an interactive picker when nothing matches and a TTY is present.
     """
     inputs, outputs = list_ports()

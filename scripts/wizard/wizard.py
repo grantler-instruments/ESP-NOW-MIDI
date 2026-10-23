@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Interactive test wizard for the ESP-NOW-MIDI client_test firmware.
+"""Board tester for the `client` sketch, the terminal twin of the enomik app's
+tester page (#/tester).
 
 Run via the isolated launcher (recommended — deps stay in scripts/wizard/.venv):
 
@@ -7,12 +8,10 @@ Run via the isolated launcher (recommended — deps stay in scripts/wizard/.venv
 
 Do not run wizard.py directly unless that venv is already active.
 
-Phase 1 - the client board connected directly via USB MIDI
-Phase 2 - the client reached wirelessly through the dongle
-
-Each step performs an automatic check and reports PASS / FAIL. Inputs are
-tested with fake values from the firmware, then with real buttons and a
-potentiometer (Esc skips a step). The process exits non-zero if any step fails.
+Step by step, with the client and the dongle both on USB: set up the pins,
+press the buttons (over the client's USB and wirelessly at the dongle), light
+the LED through MIDI loopback, touch the pads. Then optionally write the
+config the board ships with. Exits non-zero if any test failed.
 """
 
 from __future__ import annotations
@@ -33,700 +32,469 @@ except ImportError:
     )
     sys.exit(1)
 
-import cases as tc
 import enomik_sysex as sx
-from cases import (
-    CC_ANALOG_IN,
-    CC_ANALOG_OUT,
-    CC_DIGITAL_A,
-    CC_DIGITAL_B,
-    ECHO_CHANNEL,
-    IO_CHANNEL,
-    NOTE_PIN_NOTE,
-    PIN_ANALOG_IN,
-    PIN_ANALOG_OUT,
-    PIN_BEND,
-    PIN_DIGITAL_A,
-    PIN_DIGITAL_B,
-    PIN_NOTE,
-)
-from midi_io import CANCELLED, MidiLink, find_link, wait_start_or_skip
+import tester as t
+from midi_io import CLIENT_PORT_NAMES, DONGLE_PORT_NAMES, MidiLink, cbreak_stdin, find_link, poll_key
 
-PASS = "PASS"
-FAIL = "FAIL"
+# Lets the last mark show and the button be released before moving on.
+AUTO_ADVANCE_S = 0.8
+# The firmware stops the raw stream after 10 s without SysEx from the host.
+RAW_KEEPALIVE_S = 4.0
+TTY = sys.stdout.isatty()
 
-# (description, build_set_pin_config arguments)
-PIN_CONFIGS = [
-    (
-        f"pin {PIN_DIGITAL_A} digital -> CC {CC_DIGITAL_A}",
-        dict(pin=PIN_DIGITAL_A, mode=sx.MODE_INPUT_PULLUP, midi_type=sx.MIDI_CONTROL_CHANGE, note_or_cc=CC_DIGITAL_A),
-    ),
-    (
-        f"pin {PIN_DIGITAL_B} digital -> CC {CC_DIGITAL_B}",
-        dict(pin=PIN_DIGITAL_B, mode=sx.MODE_INPUT_PULLUP, midi_type=sx.MIDI_CONTROL_CHANGE, note_or_cc=CC_DIGITAL_B),
-    ),
-    (
-        f"pin {PIN_ANALOG_IN} analog in -> CC {CC_ANALOG_IN}",
-        dict(pin=PIN_ANALOG_IN, mode=sx.MODE_ANALOG_INPUT, midi_type=sx.MIDI_CONTROL_CHANGE, note_or_cc=CC_ANALOG_IN),
-    ),
-    (
-        f"pin {PIN_ANALOG_OUT} analog out <- CC {CC_ANALOG_OUT}",
-        dict(pin=PIN_ANALOG_OUT, mode=sx.MODE_ANALOG_OUTPUT, midi_type=sx.MIDI_CONTROL_CHANGE, note_or_cc=CC_ANALOG_OUT),
-    ),
-    (
-        f"pin {PIN_NOTE} digital -> note {NOTE_PIN_NOTE}",
-        dict(pin=PIN_NOTE, mode=sx.MODE_INPUT_PULLUP, midi_type=sx.MIDI_NOTE_ON, note_or_cc=NOTE_PIN_NOTE),
-    ),
-    (
-        f"pin {PIN_BEND} analog in -> pitch bend",
-        dict(pin=PIN_BEND, mode=sx.MODE_ANALOG_INPUT, midi_type=sx.MIDI_PITCH_BEND, note_or_cc=0),
-    ),
-]
-
-UNUSED_PIN = 47
-UNUSED_COMMAND = 0x3E
-BURST_VELOCITY = 99
+ENTER = ("\n", "\r")
+ESC = "\x1b"
 
 
-class Wizard:
-    def __init__(self, io_mode: str = "both", burst: int = 100) -> None:
+def mark(ok: bool) -> str:
+    return "\033[32m✔\033[0m" if ok and TTY else ("✔" if ok else "·")
+
+
+def chips(paths: list[str], seen) -> str:
+    labels = {"usb": "USB", "wireless": "Wireless"}
+    return "  ".join(f"{mark(path in seen)} {labels[path]}" for path in paths)
+
+
+def ok_line(text: str, ok: bool) -> str:
+    tag = "OK" if ok else "FAIL"
+    if TTY:
+        tag = f"\033[{32 if ok else 31}m{tag}\033[0m"
+    return f"  [{tag}] {text}"
+
+
+class Screen:
+    """A block of lines redrawn in place (on a terminal) whenever it changes."""
+
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def draw(self, lines: list[str]) -> None:
+        if lines == self.lines:
+            return
+        self.clear()
+        print("\n".join(lines), flush=True)
+        self.lines = lines
+
+    def clear(self) -> None:
+        if self.lines and TTY:
+            sys.stdout.write(f"\033[{len(self.lines)}F\033[J")
+        self.lines = []
+
+    def note(self, text: str) -> None:
+        """Print a line above the block; the next draw() puts the block back."""
+        lines = self.lines
+        self.clear()
+        print(text, flush=True)
+        if not TTY:
+            return
+        self.draw(lines)
+
+
+class Session:
+    def __init__(self, client: MidiLink, dongle: MidiLink | None, led_pin: int, touch_pins: list[int]) -> None:
+        self.client = client
+        self.dongle = dongle
+        self.led_pin = led_pin
+        self.touch_pins = touch_pins
+        self.state = t.TesterState(led_pin, touch_pins)
+        # Pins are set up: count MIDI and keep pin 16 configured.
+        self.listening = False
+        self.cycle_sent: tuple[int, ...] | None = None
+        # Latest RAW_VALUE per pin from the client.
+        self.raw: dict[int, dict] = {}
+        self.screen = Screen()
+        self.client_info = t.BoardInfo(None, None)
+        self.dongle_info = t.BoardInfo(None, None)
         self.results: list[tuple[str, bool]] = []
-        self.dongle_mac: list[int] | None = None
-        self.io_mode = io_mode
-        self.burst = burst
 
-    # --- output helpers ------------------------------------------------------
-    def record(self, name: str, ok: bool, detail: str = "") -> bool:
-        tag = PASS if ok else FAIL
-        line = f"  [{tag}] {name}"
-        if detail:
-            line += f" - {detail}"
-        print(line)
-        self.results.append((name, ok))
-        return ok
-
-    @staticmethod
-    def section(title: str) -> None:
-        print(f"\n=== {title} ===")
-
-    @staticmethod
-    def prompt(text: str) -> None:
-        input(f"\n>>> {text} (press Enter to continue) ")
-
-    @staticmethod
-    def send(link: MidiLink, type_: str, fields: dict) -> None:
-        link.send(mido.Message(type_, **fields))
-
-    @staticmethod
-    def drain(link: MidiLink, seconds: float) -> None:
-        """Let in-flight messages arrive, then drop them."""
-        link.wait_for(lambda m: False, timeout=seconds)
-        link.flush()
-
-    # --- sysex helpers -------------------------------------------------------
-    def request(self, link: MidiLink, data: list[int], accept, timeout: float = 2.0):
-        """Send SysEx and return the first parsed reply accepted by `accept`."""
-        link.flush()
-        link.send(mido.Message("sysex", data=data))
-
-        def is_match(msg: mido.Message) -> bool:
-            if msg.type != "sysex":
-                return False
-            parsed = sx.parse(list(msg.data))
-            return bool(parsed and accept(parsed))
-
-        msg = link.wait_for(is_match, timeout=timeout)
-        return sx.parse(list(msg.data)) if msg else None
-
-    def request_sysex(self, link: MidiLink, data: list[int], want_cmd: str, timeout: float = 2.0):
-        return self.request(link, data, lambda p: p.get("cmd") == want_cmd, timeout)
-
-    def request_error(self, link: MidiLink, data: list[int], failed_request: int, timeout: float = 2.0):
-        return self.request(
-            link,
-            data,
-            lambda p: p.get("cmd") == "error" and p.get("failed_request") == failed_request,
-            timeout,
-        )
-
-    def collect_stream(self, link: MidiLink, data: list[int], end_cmd: str, timeout: float = 3.0):
-        """Send a streaming request; return every parsed reply up to `end_cmd`, or None on timeout."""
-        items: list[dict] = []
-
-        def on_message(msg: mido.Message) -> None:
-            if msg.type == "sysex":
-                parsed = sx.parse(list(msg.data))
-                if parsed:
-                    items.append(parsed)
-
-        link.flush()
-        link.send(mido.Message("sysex", data=data))
-        done = link.wait_for(
-            lambda m: bool(items) and items[-1].get("cmd") == end_cmd,
-            timeout=timeout,
-            on_message=on_message,
-        )
-        return items[:-1] if done else None
-
-    def check_error(self, link: MidiLink, name: str, data: list[int], failed_request: int, want: int) -> bool:
-        resp = self.request_error(link, data, failed_request)
-        got = resp["error"] if resp else "no response"
-        ok = bool(resp and resp["error_code"] == want)
-        return self.record(f"SysEx error {name} -> {sx.ERROR_NAMES[want]}", ok, "" if ok else f"got {got}")
-
-    # --- phase 1: USB --------------------------------------------------------
-    def phase1(self, link: MidiLink) -> None:
-        self.section("Phase 1 - Client via USB MIDI")
-
-        # Clean slate so the run is reproducible.
-        self.request_sysex(link, sx.build_reset(), "reset", timeout=2.0)
-
-        self._sysex_basics(link)
-        # Unconnected analog pins read noise and would flood MIDI: fake all inputs
-        self._prime_fake_inputs(link)
-        self._configure_pins(link)
-        self._sysex_errors(link)
-        self._raw_stream(link)
-
-        self._echo(link, tc.channel_voice_cases(), "USB")
-        self._no_echo_on_io_channel(link, "USB")
-        self._echo(link, tc.system_cases(), "USB")
-        self._burst_test(link, "USB", spacing=0.002, max_loss=0.0)
-
-        self._pair_with_dongle(link)
-        self._api_sends(link, "USB")
-        self._io_tests(link, "USB")
-
-    def _sysex_basics(self, link: MidiLink) -> None:
-        resp = self.request_sysex(link, sx.build_get_version(), "version")
-        ok = bool(resp and resp["major"] == sx.PROTOCOL_MAJOR and resp["minor"] == sx.PROTOCOL_MINOR)
-        detail = f"{resp['major']}.{resp['minor']}.{resp['patch']}" if resp else "no response"
-        self.record("SysEx GET_VERSION matches the wizard", ok, detail)
-
-        # GET_MAC proves SysEx works in both directions.
-        resp = self.request_sysex(link, sx.build_get_mac(), "get_mac")
-        self.record("SysEx GET_MAC round-trip", bool(resp), sx.mac_to_string(resp["mac"]) if resp else "no response")
-
-        # MIDI loopback: outgoing Client MIDI is fed back to receive handlers
-        # (so pin 17 -> CC 17 drives analog out pin 21 without a host round-trip).
-        resp = self.request_sysex(link, sx.build_set_midi_loopback(True), "midi_loopback")
-        self.record("SysEx SET_MIDI_LOOPBACK on", bool(resp and resp["enabled"]))
-        resp = self.request_sysex(link, sx.build_get_midi_loopback(), "midi_loopback")
-        self.record("SysEx GET_MIDI_LOOPBACK", bool(resp and resp["enabled"]))
-
-        for enabled in (True, False):
-            resp = self.request_sysex(link, sx.build_set_power_save(enabled), "power_save")
-            self.record(f"SysEx SET_POWER_SAVE {'on' if enabled else 'off'}", bool(resp and resp["enabled"] == enabled))
-            resp = self.request_sysex(link, sx.build_get_power_save(), "power_save")
-            self.record(f"SysEx GET_POWER_SAVE {'on' if enabled else 'off'}", bool(resp and resp["enabled"] == enabled))
-
-        resp = self.request_sysex(link, sx.build_set_name("wizard"), "name")
-        self.record("SysEx SET_NAME", bool(resp and resp["name"] == "wizard"), resp["name"] if resp else "")
-        resp = self.request_sysex(link, sx.build_get_name(), "name")
-        self.record("SysEx GET_NAME", bool(resp and resp["name"] == "wizard"), resp["name"] if resp else "")
-        resp = self.request_sysex(link, sx.build_set_name(""), "name")
-        self.record(
-            "SysEx SET_NAME empty restores the default",
-            bool(resp and resp["name"] and resp["name"] != "wizard"),
-            resp["name"] if resp else "",
-        )
-
-    def _configure_pins(self, link: MidiLink) -> None:
-        for name, args in PIN_CONFIGS:
-            resp = self.request_sysex(
-                link, sx.build_set_pin_config(channel=IO_CHANNEL, **args), "pin_config"
-            )
-            ok = bool(
-                resp
-                and resp["pin"] == args["pin"]
-                and resp["mode"] == args["mode"]
-                and resp["channel"] == IO_CHANNEL
-                and resp["midi_type"] == args["midi_type"]
-                and resp["note_or_cc"] == args["note_or_cc"]
-            )
-            self.record(f"SysEx SET_PIN_CONFIG {name}", ok)
-
-        resp = self.request_sysex(link, sx.build_get_pin_config(PIN_ANALOG_IN), "pin_config")
-        ok = bool(resp and resp["pin"] == PIN_ANALOG_IN and resp["note_or_cc"] == CC_ANALOG_IN)
-        self.record(f"SysEx GET_PIN_CONFIG pin {PIN_ANALOG_IN}", ok)
-
-        items = self.collect_stream(link, sx.build_get_all_pin_configs(), "pin_config_stream_end")
-        pins = sorted(i["pin"] for i in items or [] if i.get("cmd") == "pin_config")
-        want = sorted(args["pin"] for _, args in PIN_CONFIGS)
-        self.record("SysEx GET_ALL_PIN_CONFIGS", pins == want, f"pins {pins}")
-
-    def _sysex_errors(self, link: MidiLink) -> None:
-        self.check_error(
-            link, "unknown command", sx.build_raw(UNUSED_COMMAND), UNUSED_COMMAND, sx.ERR_UNKNOWN_COMMAND
-        )
-        self.check_error(
-            link,
-            "wrong protocol major",
-            sx.build_raw(sx.CMD_GET_VERSION, major=sx.PROTOCOL_MAJOR + 1),
-            sx.CMD_GET_VERSION,
-            sx.ERR_BAD_VERSION,
-        )
-        self.check_error(
-            link, "unconfigured pin", sx.build_get_pin_config(UNUSED_PIN), sx.CMD_GET_PIN_CONFIG, sx.ERR_PIN_NOT_FOUND
-        )
-        self.check_error(
-            link, "short MAC", sx.build_raw(sx.CMD_ADD_PEER, [1, 2, 3]), sx.CMD_ADD_PEER, sx.ERR_DECODE_FAILED
-        )
-
-    def _raw_stream(self, link: MidiLink) -> None:
-        """SET_RAW_STREAM on the fake analog pin: frames arrive, follow a threshold change, stop."""
-        args = dict(next(a for _, a in PIN_CONFIGS if a["pin"] == PIN_ANALOG_IN))
-        self.send(link, *tc.fake_analog(PIN_ANALOG_IN, 64))
-        self.drain(link, 0.3)
-
-        resp = self.request_sysex(link, sx.build_set_raw_stream(PIN_ANALOG_IN, True, 50), "raw_stream")
-        ok = bool(resp and resp["pin"] == PIN_ANALOG_IN and resp["enabled"] and resp["interval_ms"] == 50)
-        self.record("SysEx SET_RAW_STREAM on", ok)
-
-        frames = self._collect_raw_frames(link, 1.0)
-        norms = [f["norm"] for f in frames]
-        ok = 14 <= len(frames) <= 24 and all(f["pin"] == PIN_ANALOG_IN for f in frames) and \
-            bool(norms) and abs(norms[-1] - 64) <= 2
-        self.record("RAW_VALUE frames at 50 ms", ok, f"{len(frames)} frames, norm {norms[-1:]}")
-
-        # Tuning the threshold keeps the stream running.
-        self.request_sysex(
-            link, sx.build_set_pin_config(channel=IO_CHANNEL, threshold=33, **args), "pin_config"
-        )
-        frames = self._collect_raw_frames(link, 0.3)
-        self.record("RAW_VALUE shows new threshold", bool(frames) and frames[-1]["threshold"] == 33)
-        self.request_sysex(link, sx.build_set_pin_config(channel=IO_CHANNEL, **args), "pin_config")
-
-        resp = self.request_sysex(link, sx.build_set_raw_stream(PIN_ANALOG_IN, False), "raw_stream")
-        self.record("SysEx SET_RAW_STREAM off", bool(resp and not resp["enabled"]))
-        self.drain(link, 0.2)
-        frames = self._collect_raw_frames(link, 0.5)
-        self.record("RAW_VALUE frames stop", not frames, f"{len(frames)} after off")
-
-        self.check_error(
-            link, "raw stream on unconfigured pin", sx.build_set_raw_stream(UNUSED_PIN, True),
-            sx.CMD_SET_RAW_STREAM, sx.ERR_PIN_NOT_FOUND,
-        )
-        self._prime_fake_inputs(link)
-
-    @staticmethod
-    def _collect_raw_frames(link: MidiLink, seconds: float) -> list[dict]:
-        frames: list[dict] = []
-
-        def on_message(msg: mido.Message) -> None:
-            if msg.type == "sysex":
-                parsed = sx.parse(list(msg.data))
-                if parsed and parsed.get("cmd") == "raw_value":
-                    frames.append(parsed)
-
-        link.flush()
-        link.wait_for(lambda m: False, timeout=seconds, on_message=on_message)
-        return frames
-
-    def _pair_with_dongle(self, link: MidiLink) -> None:
-        """Store the dongle as a peer (persisted on the client for Phase 2)."""
-        if not self.dongle_mac:
-            self.record("SysEx ADD_PEER (dongle)", False, "no dongle MAC provided")
-            return
-
-        mac_text = sx.mac_to_string(self.dongle_mac)
-        resp = self.request_sysex(link, sx.build_add_peer(self.dongle_mac), "add_peer_ok")
-        self.record("SysEx ADD_PEER (dongle)", bool(resp), mac_text)
-
-        self.check_error(
-            link, "duplicate ADD_PEER", sx.build_add_peer(self.dongle_mac), sx.CMD_ADD_PEER, sx.ERR_PEER_ALREADY_EXISTS
-        )
-
-        resp = self.request_sysex(link, sx.build_get_peer(0), "peer_entry")
-        self.record("SysEx GET_PEER 0", bool(resp and resp["mac"] == self.dongle_mac), mac_text)
-
-        items = self.collect_stream(link, sx.build_get_all_peers(), "peer_stream_end")
-        macs = [i["mac"] for i in items or [] if i.get("cmd") == "peer_entry"]
-        self.record("SysEx GET_ALL_PEERS", self.dongle_mac in macs, f"{len(macs)} peer(s)")
-
-        items = self.collect_stream(link, sx.build_get_config(), "get_config_ok")
-        kinds = {i.get("cmd") for i in items or []}
-        pins = sum(1 for i in items or [] if i.get("cmd") == "pin_config")
-        ok = (
-            items is not None
-            and pins == len(PIN_CONFIGS)
-            and {"peer_entry", "midi_loopback", "power_save", "name"} <= kinds
-        )
-        self.record("SysEx GET_CONFIG stream", ok, f"{pins} pins, {sorted(kinds)}")
-
-    # --- phase 2: ESP-NOW ----------------------------------------------------
-    def phase2(self, link: MidiLink) -> None:
-        self.section("Phase 2 - Client via ESP-NOW (through dongle)")
-        print("  (SysEx configuration is not bridged by the dongle, so it runs in Phase 1 only)")
-
-        self._wait_for_client(link)
-        self._echo(link, tc.channel_voice_cases(), "ESP-NOW")
-        self._no_echo_on_io_channel(link, "ESP-NOW")
-        self._echo(link, tc.system_cases(), "ESP-NOW")
-        self._burst_test(link, "ESP-NOW", spacing=0.005, max_loss=0.05)
-        self._api_sends(link, "ESP-NOW")
-        self._io_tests(link, "ESP-NOW")
-
-    # --- echo ------------------------------------------------------------------
-    def _echo(
-        self,
-        link: MidiLink,
-        echo_cases: list[tc.MidiCase],
-        transport: str,
-        timeout: float = 3.0,
-        first_timeout: float | None = None,
-    ) -> None:
-        for i, case in enumerate(echo_cases):
-            link.flush()
-            self.send(link, case.type, case.message_kwargs())
-            wait = first_timeout if i == 0 and first_timeout else timeout
-            got = link.wait_for(case.matches, timeout=wait)
-            self.record(f"Echo {case.name} ({transport})", got is not None)
-            # Release notes so later tests start clean.
-            if case.type == "note_on":
-                self.send(link, "note_off", {"channel": case.channel - 1, "note": case.fields["note"], "velocity": 0})
-
-    def _no_echo_on_io_channel(self, link: MidiLink, transport: str) -> None:
-        """Traffic on IO_CHANNEL must not be mirrored back."""
-        link.flush()
-        self.send(link, "note_on", {"channel": IO_CHANNEL - 1, "note": 99, "velocity": 1})
-        stray = link.wait_for(lambda m: m.type == "note_on" and m.note == 99, timeout=0.5)
-        self.record(f"No echo on ch {IO_CHANNEL} ({transport})", stray is None)
-        self.send(link, "note_off", {"channel": IO_CHANNEL - 1, "note": 99, "velocity": 0})
-
-    def _burst_test(self, link: MidiLink, transport: str, spacing: float, max_loss: float) -> None:
-        """Send notes back to back and check how many echoes return, and how fast."""
-        if self.burst <= 0:
-            return
-        channel = ECHO_CHANNEL - 1
-        sent: dict[int, float] = {}
-        received: dict[int, float] = {}
-
-        def on_message(msg: mido.Message) -> None:
-            if (
-                msg.type == "note_on"
-                and msg.channel == channel
-                and msg.velocity == BURST_VELOCITY
-                and msg.note in sent
-                and msg.note not in received
-            ):
-                received[msg.note] = time.monotonic()
-
-        link.flush()
-        for note in tc.burst_notes(self.burst):
-            sent[note] = time.monotonic()
-            self.send(link, "note_on", {"channel": channel, "note": note, "velocity": BURST_VELOCITY})
-            link.wait_for(lambda m: False, timeout=spacing, on_message=on_message)
-        if len(received) < len(sent):
-            link.wait_for(lambda m: len(received) == len(sent), timeout=3.0, on_message=on_message)
-
-        for note in sent:
-            self.send(link, "note_off", {"channel": channel, "note": note, "velocity": 0})
-        self.drain(link, 0.5)
-
-        stats = tc.burst_stats(sent, received)
-        detail = f"{stats['received']}/{stats['sent']} echoed"
-        if stats["avg_ms"] is not None:
-            detail += f", round trip avg {stats['avg_ms']:.1f} ms, p95 {stats['p95_ms']:.1f} ms, max {stats['max_ms']:.1f} ms"
-        self.record(f"Burst of {self.burst} notes ({transport})", stats["loss"] <= max_loss, detail)
-
-    # --- API sends -------------------------------------------------------------
-    def _api_sends(self, link: MidiLink, transport: str) -> None:
-        """Have the client call each enomik::Client send function and check what arrives."""
-        for index, case in enumerate(tc.API_CASES):
-            self._expect_after(link, f"API {case.name} ({transport})", tc.api_trigger(index), case.matches)
-        self.drain(link, 0.3)
-
-    # --- inputs ----------------------------------------------------------------
-    def _io_tests(self, link: MidiLink, transport: str) -> None:
-        if self.io_mode in ("virtual", "both"):
-            self._virtual_io(link, transport)
-        if self.io_mode in ("physical", "both"):
-            self.send(link, *tc.fake_clear())  # read the real pins again
-            self._digital_cc_test(link, PIN_DIGITAL_A, CC_DIGITAL_A, transport=transport)
-            self._digital_cc_test(link, PIN_DIGITAL_B, CC_DIGITAL_B, transport=transport)
-            self._analog_cc_test(link, PIN_ANALOG_IN, CC_ANALOG_IN, transport=transport)
-            self._prime_fake_inputs(link)  # quiet again: unconnected pins read noise
-
-    def _wait_for_client(self, link: MidiLink, timeout: float = 15.0) -> None:
-        """Wait until the dongle routes to the client, and quiet its inputs.
-
-        After a reboot the client reads its real pins again; unconnected analog
-        pins then flood MIDI, so the fake inputs are set until an echo comes back.
-        The dongle also has to discover the client (heartbeat) first.
-        """
-        case = tc.channel_voice_cases()[0]
-        deadline = time.monotonic() + timeout
-        got = None
-        while got is None and time.monotonic() < deadline:
-            self._prime_fake_inputs(link)
-            self.send(link, case.type, case.message_kwargs())
-            got = link.wait_for(case.matches, timeout=1.0)
-            self.send(link, "note_off", {"channel": case.channel - 1, "note": case.fields["note"], "velocity": 0})
-        self._prime_fake_inputs(link)
-        self.record("ESP-NOW link to the client", got is not None)
-
-    def _prime_fake_inputs(self, link: MidiLink) -> None:
-        """Release fake buttons and set fake analog inputs to 0, then drop what they sent."""
-        for pin in (PIN_DIGITAL_A, PIN_DIGITAL_B, PIN_NOTE):
-            self.send(link, *tc.fake_release(pin))
-        for pin in (PIN_ANALOG_IN, PIN_BEND):
-            self.send(link, *tc.fake_analog(pin, 0))
-        self.drain(link, 0.5)
-
-    def _expect_after(self, link: MidiLink, name: str, fake: tuple[str, dict], predicate, timeout: float = 3.0) -> bool:
-        link.flush()
-        self.send(link, *fake)
-        return self.record(name, link.wait_for(predicate, timeout=timeout) is not None)
-
-    def _virtual_io(self, link: MidiLink, transport: str) -> None:
-        self._prime_fake_inputs(link)
-
-        for pin, cc in ((PIN_DIGITAL_A, CC_DIGITAL_A), (PIN_DIGITAL_B, CC_DIGITAL_B)):
-            # INPUT_PULLUP is active low: press sends max (127), release min (0).
-            self._expect_after(
-                link, f"Fake press pin {pin} -> CC {cc} = 127 ({transport})",
-                tc.fake_press(pin), tc.io_cc(cc, 127).matches,
-            )
-            self._expect_after(
-                link, f"Fake release pin {pin} -> CC {cc} = 0 ({transport})",
-                tc.fake_release(pin), tc.io_cc(cc, 0).matches,
-            )
-
-        note_on = tc.MidiCase("note", "note_on", {"note": NOTE_PIN_NOTE, "velocity": 127}, channel=IO_CHANNEL)
-        self._expect_after(
-            link, f"Fake press pin {PIN_NOTE} -> note on {NOTE_PIN_NOTE} ({transport})",
-            tc.fake_press(PIN_NOTE), note_on.matches,
-        )
-        self._expect_after(
-            link, f"Fake release pin {PIN_NOTE} -> note off {NOTE_PIN_NOTE} ({transport})",
-            tc.fake_release(PIN_NOTE), lambda m: tc.is_note_release(m, NOTE_PIN_NOTE),
-        )
-
-        for level in tc.ANALOG_SWEEP:
-            self._expect_after(
-                link, f"Fake analog pin {PIN_ANALOG_IN} -> CC {CC_ANALOG_IN} = {level} ({transport})",
-                tc.fake_analog(PIN_ANALOG_IN, level), tc.io_cc(CC_ANALOG_IN, level).matches,
-            )
-
-        for level, pitch, tolerance in tc.BEND_SWEEP:
-            self._expect_after(
-                link, f"Fake analog pin {PIN_BEND} -> pitch bend {pitch} ({transport})",
-                tc.fake_analog(PIN_BEND, level), tc.io_bend(pitch, tolerance).matches,
-            )
-
-    def _digital_cc_test(
-        self, link: MidiLink, pin: int, cc: int, transport: str
-    ) -> bool:
-        name = f"Digital pin {pin} -> CC {cc} ({transport})"
-        print(f"\n  Button on pin {pin}: Enter = start, Esc = skip")
-        if not wait_start_or_skip():
-            return self.record(name, False, "skipped")
-        print("    Press the button now  [Esc = skip]")
-        mido_ch = IO_CHANNEL - 1
-        link.flush()
-
-        def is_press(msg: mido.Message) -> bool:
-            # INPUT_PULLUP active-low → press sends max_midi_value (127).
-            return (
-                msg.type == "control_change"
-                and msg.channel == mido_ch
-                and msg.control == cc
-                and msg.value > 0
-            )
-
-        got = link.wait_for(is_press, timeout=30.0, allow_esc=True)
-        if got is CANCELLED:
-            return self.record(name, False, "skipped")
-        return self.record(name, got is not None)
-
-    def _analog_cc_test(
-        self, link: MidiLink, pin: int, cc: int, transport: str
-    ) -> bool:
-        """Require exact endpoints and midpoint: 0, then 64, then 127."""
-        mido_ch = IO_CHANNEL - 1
-        steps = (
-            ("left (0)", 0),
-            ("center (64)", 64),
-            ("right (127)", 127),
-        )
-        all_ok = True
-
-        def log_cc(msg: mido.Message) -> None:
-            if (
-                msg.type == "control_change"
-                and msg.channel == mido_ch
-                and msg.control == cc
-            ):
-                print(f"    received CC {cc} value={msg.value}")
-
-        print(f"\n  Potentiometer on pin {pin}: Enter = start, Esc = skip")
-        if not wait_start_or_skip():
-            for _, want in steps:
-                self.record(f"Analog pin {pin} -> CC {cc} = {want} ({transport})", False, "skipped")
-            return False
-
-        for label, want in steps:
-            print(
-                f"\n  Turn the potentiometer on pin {pin} to {label}  "
-                f"[Esc = skip]"
-            )
-            link.flush()
-
-            def is_exact(msg: mido.Message, want: int = want) -> bool:
-                return (
-                    msg.type == "control_change"
-                    and msg.channel == mido_ch
-                    and msg.control == cc
-                    and msg.value == want
-                )
-
-            got = link.wait_for(
-                is_exact, timeout=30.0, allow_esc=True, on_message=log_cc
-            )
-            name = f"Analog pin {pin} -> CC {cc} = {want} ({transport})"
-            if got is CANCELLED:
-                self.record(name, False, "skipped")
-                all_ok = False
+    @property
+    def paths(self) -> list[str]:
+        return ["usb", "wireless"] if self.dongle else ["usb"]
+
+    def fail(self, text: str) -> None:
+        self.screen.note(ok_line(text, False))
+
+    # --- MIDI ----------------------------------------------------------------
+    def pump(self, on_sysex=None) -> None:
+        """Handle everything waiting on the client (USB) and dongle (wireless) ports."""
+        sources = [(self.client, "usb"), (self.dongle, "wireless")]
+        for link, path in sources:
+            if link is None:
                 continue
-            if got is None:
-                self.record(name, False, "timeout (no match)")
-                all_ok = False
-            else:
-                self.record(name, True, f"value={got.value}")
-        return all_ok
+            for msg in link.inport.iter_pending():
+                if msg.type == "sysex":
+                    data = list(msg.data)
+                    if on_sysex is not None:
+                        on_sysex(link, data)
+                    if link is self.client:
+                        reply = t.parse_reply(data)
+                        if reply is not None and reply["cmd"] == "raw_value":
+                            self.raw[reply["pin"]] = reply
+                elif self.listening:
+                    self.state.midi(path, msg.bytes())
 
-    # --- run -----------------------------------------------------------------
-    def summary(self) -> int:
-        passed = sum(1 for _, ok in self.results if ok)
-        total = len(self.results)
-        self.section("Summary")
-        for name, ok in self.results:
-            print(f"  [{PASS if ok else FAIL}] {name}")
-        print(f"\nResult: {passed}/{total} passed")
-        return 0 if passed == total else 1
+    def request(self, link: MidiLink, data: list[int], accept, timeout: float = 2.0) -> dict | None:
+        """Send a SysEx request and wait for the first reply `accept` takes, or an
+        error reply for this request's command. Errors for other commands are
+        ignored; MIDI arriving meanwhile still counts for the tests."""
+        found: list[dict] = []
+        command = data[3]
 
+        def on_sysex(source: MidiLink, inner: list[int]) -> None:
+            if source is not link or found:
+                return
+            reply = t.parse_reply(inner)
+            if reply is None:
+                return
+            if reply["failed_request"] == command if reply["cmd"] == "error" else accept(reply):
+                found.append(reply)
 
-def resolve_dongle_mac(cli_mac: str | None) -> list[int] | None:
-    """MAC from --dongle-mac, or interactive prompt when omitted."""
-    if cli_mac is not None:
-        text = cli_mac.strip()
-        if not text:
-            return None
+        link.send(mido.Message("sysex", data=data))
+        deadline = time.monotonic() + timeout
+        while not found and time.monotonic() < deadline:
+            self.pump(on_sysex)
+            time.sleep(0.002)
+        return found[0] if found else None
+
+    def requester(self, link: MidiLink):
+        return lambda data, accept, timeout: self.request(link, data, accept, timeout)
+
+    def sync_cycle_pin(self) -> None:
+        """Pin 16 follows the state: the current MIDI type, or the LED note during
+        loopback. Only changes are sent; a config the board didn't acknowledge is
+        retried once."""
+        while self.listening:
+            data, label = self.state.cycle_config()
+            key = tuple(data)
+            if key == self.cycle_sent:
+                return
+            self.cycle_sent = key
+            request = self.requester(self.client)
+            if not (t.configure_pin(request, t.CYCLE_PIN, data) or t.configure_pin(request, t.CYCLE_PIN, data)):
+                self.fail(f"pin {t.CYCLE_PIN} → {label}")
+                return
+
+    def tick(self) -> str | None:
+        """One round of the step loops: MIDI in, pin 16 synced, a key or None."""
+        self.pump()
+        self.sync_cycle_pin()
+        time.sleep(0.005)
+        return poll_key()
+
+    def set_loopback(self, on: bool) -> None:
+        """MIDI loopback is saved on the device: on only during its step."""
+        if not on:
+            self.state.set_loopback(False)
+        if not t.set_midi_loopback(self.requester(self.client), on):
+            self.fail(f"MIDI loopback {'on' if on else 'off'}")
+        if on:
+            self.state.set_loopback(True)
+        self.sync_cycle_pin()
+
+    # --- Steps ---------------------------------------------------------------
+    def connect(self) -> bool:
+        section("1. Connect client and dongle")
+        print(f"  Client: {self.client.name} · reading firmware and MAC…", flush=True)
+        self.client_info = t.read_board_info(self.requester(self.client))
+        print(f"  Client: {self.client.name} · {self.client_info.text()}")
+        if self.dongle is None:
+            print("  Dongle port not found, wireless not checked")
+        else:
+            self.dongle_info = t.read_board_info(self.requester(self.dongle))
+            print(f"  Dongle: {self.dongle.name} · {self.dongle_info.text()}")
+            if not self.dongle_info.mac:
+                print(
+                    "  The dongle did not report its MAC (dongle firmware before 0.19?), so it\n"
+                    "  can't be added as a peer: wireless presses won't arrive."
+                )
+        input("\n>>> Press Enter to set up the pins (Ctrl-C to quit) ")
+        while True:
+            if self.setup():
+                return True
+            answer = input("\n>>> Setup failed: [r]etry, [c]ontinue anyway, [q]uit? ").strip().lower()
+            if answer.startswith("c"):
+                return True
+            if answer.startswith("q"):
+                return False
+
+    def setup(self) -> bool:
+        lines: list[bool] = []
+
+        def check(text: str, ok: bool) -> None:
+            lines.append(ok)
+            print(ok_line(text, ok), flush=True)
+
+        self.listening = False
+        self.state = t.TesterState(self.led_pin, self.touch_pins)
+        request = self.requester(self.client)
+        # The dongle's own MAC, read when its port was found
+        mac = self.dongle and self.dongle_info.mac
+        if mac:
+            check(f"add dongle {sx.mac_to_string(mac)} as peer", t.add_peer(request, mac))
+        elif self.dongle:
+            check("dongle MAC unknown: not added as peer", False)
+        status, label = t.MIDI_TYPES[0]
+        cycle = t.button_config(t.CYCLE_PIN, status)
+        self.cycle_sent = tuple(cycle)
+        check(
+            f"pin {t.CYCLE_PIN}: input pull-up → {label} {t.CYCLE_PIN}",
+            t.configure_pin(request, t.CYCLE_PIN, cycle),
+        )
+        for pin in t.BUTTON_PINS:
+            if pin != t.CYCLE_PIN:
+                check(f"pin {pin}: input pull-up → CC {pin}", t.configure_pin(request, pin, t.button_config(pin)))
+        check(
+            f"pin {self.led_pin}: output ← note {self.led_pin} (LED)",
+            t.configure_pin(request, self.led_pin, t.led_config(self.led_pin)),
+        )
+        for pin in self.touch_pins:
+            check(
+                f"pin {pin}: touch ({t.TOUCH_THRESHOLD} %) → CC {pin}",
+                t.configure_pin(request, pin, t.touch_config(pin)),
+            )
+        self.listening = True
+        return all(lines)
+
+    def buttons(self) -> None:
+        section("2. Press the buttons")
+        print(f"  Press each button. Pin {t.CYCLE_PIN} sends the next MIDI type after every release.")
+        print("  Enter: next (skips while not all arrived)\n")
+        state = self.state
+
+        def render() -> list[str]:
+            lines = []
+            for pin, status, label in t.ROWS:
+                current = pin == t.CYCLE_PIN and t.MIDI_TYPES[state.type_index][0] == status
+                held = "*" if state.pressed.get(pin) else " "
+                arrow = " ←" if current else ""
+                lines.append(f"  {held}Pin {pin}  {label + arrow:<17} {chips(self.paths, state.buttons[(pin, status)])}")
+            return lines
+
+        self.loop_until(render, lambda: t.buttons_passed(state, self.paths))
+        self.results.append(("Buttons (USB and wireless)", t.buttons_passed(state, self.paths)))
+
+    def loopback(self) -> None:
+        section("3. LED loopback")
+        print(
+            f"  Hold the pin {t.CYCLE_PIN} button: the LED on pin {self.led_pin} should light while\n"
+            "  pressed and go off on release. The note also goes out over USB and\n"
+            "  wirelessly (loopback is on during this step). Esc: skip\n"
+        )
+        self.set_loopback(True)
+        state = self.state
         try:
-            return sx.mac_from_string(text)
-        except ValueError as exc:
-            print(f"Invalid --dongle-mac: {exc}", file=sys.stderr)
-            sys.exit(1)
+            with cbreak_stdin():
+                while True:
+                    lines = [self.loop_note_line()]
+                    if state.loop_note.released:
+                        lines.append("  Did the LED light while pressed? [y/n]")
+                    self.screen.draw(lines)
+                    key = self.tick()
+                    if key == ESC:
+                        break
+                    if state.loop_note.released and key in ("y", "n"):
+                        state.lit = key == "y"
+                        break
+        finally:
+            self.screen.clear()
+            self.set_loopback(False)
+        answer = {True: "LED lit", False: "LED not lit", None: "skipped"}[state.lit]
+        print(f"{self.loop_note_line()}  {answer}")
+        self.results.append(("LED loopback", t.loopback_passed(state, self.paths)))
 
-    print(
-        "\nEnter the dongle's Wi-Fi STA MAC address (needed to pair for Phase 2).\n"
-        "Find it via the print_mac sketch, the dongle display, or its serial log.\n"
-        "Leave blank to skip pairing / Phase 2."
-    )
-    raw = input("Dongle MAC [xx:xx:xx:xx:xx:xx]: ").strip()
-    if not raw:
+    def loop_note_line(self) -> str:
+        note = self.state.loop_note
+        held = "*" if note.held and not note.released else " "
+        seen = {path for path in t.PATHS if getattr(note, path)}
+        return f"  {held}Note {self.led_pin:<12} {chips(self.paths, seen)}"
+
+    def touch(self) -> None:
+        section("4. Touch pins")
+        print(
+            "  Turn the board around and touch the solder joints of the touch pins –\n"
+            "  lick your fingers first :) The bar shows the change from the untouched\n"
+            f"  reading; at {t.TOUCH_THRESHOLD} % it sends CC (pin number). Enter: next\n"
+        )
+        state = self.state
+        live = TTY and t.supports_live_values(self.client_info.version)
+        if not live:
+            reason = "not a terminal" if not TTY else "firmware before 0.19"
+            print(f"  (no live values: {reason})\n")
+        reached: set[int] = set()
+        sent_at = 0.0
+
+        def render() -> list[str]:
+            lines = []
+            for pin in state.touch_pins:
+                value = self.raw.get(pin)
+                if value is not None and value["active"]:
+                    reached.add(pin)
+                bar = ""
+                if live:
+                    if value is None:
+                        bar = f"{'no live value':<20}"
+                    else:
+                        percent = max(0, min(100, value["percent"]))
+                        filled = percent // 10
+                        bar = f"[{'#' * filled}{'-' * (10 - filled)}] {percent:>3} %  "
+                threshold = f"{mark(pin in reached)} threshold  " if live else ""
+                lines.append(f"  Pin {pin:<3} {bar}{threshold}{chips(self.paths, state.touch.get(pin, set()))}")
+            return lines
+
+        def keepalive() -> None:
+            nonlocal sent_at
+            if live and time.monotonic() - sent_at >= RAW_KEEPALIVE_S:
+                self.client.send(mido.Message("sysex", data=sx.build_set_raw_stream(sx.RAW_STREAM_ALL_PINS, True)))
+                sent_at = time.monotonic()
+
+        self.raw.clear()
+        try:
+            self.loop_until(render, lambda: t.touch_passed(state, self.paths), every_tick=keepalive)
+        finally:
+            if live:
+                self.client.send(mido.Message("sysex", data=sx.build_set_raw_stream(sx.RAW_STREAM_ALL_PINS, False)))
+        self.results.append(("Touch pins", t.touch_passed(state, self.paths)))
+
+    def loop_until(self, render, passed, every_tick=None) -> None:
+        """Redraw until Enter, or until `passed` held for AUTO_ADVANCE_S."""
+        passed_at = None
+        with cbreak_stdin():
+            while True:
+                if every_tick is not None:
+                    every_tick()
+                self.screen.draw(render())
+                key = self.tick()
+                if key in ENTER:
+                    break
+                if passed():
+                    passed_at = passed_at or time.monotonic()
+                    if time.monotonic() - passed_at >= AUTO_ADVANCE_S:
+                        break
+        self.print_done(render())
+
+    def print_done(self, lines: list[str]) -> None:
+        """Leave the final state of a step in the scrollback."""
+        self.screen.clear()
+        print("\n".join(lines), flush=True)
+
+    def summary(self) -> int:
+        section("Results")
+        for label, passed in self.results:
+            print(ok_line(label, passed))
+        failed = sum(1 for _, passed in self.results if not passed)
+        if failed:
+            print(f"\n{failed} of {len(self.results)} tests failed")
+        else:
+            print("\nAll tests passed – the board works")
+        return 1 if failed else 0
+
+    def default_config(self) -> None:
+        section("Default configuration")
+        # The tested dongle stays a peer of the board
+        dongle_mac = self.dongle_info.mac if self.dongle else None
+        pins = " and ".join(str(pin) for pin in t.BUTTON_PINS)
+        paired = (
+            f"The dongle {sx.mac_to_string(dongle_mac)} stays paired."
+            if dongle_mac
+            else "No dongle MAC is known, so no dongle is paired."
+        )
+        print(
+            f"  Clears the test setup and leaves the board ready to use: pins {pins} send\n"
+            f"  CC {pins} (channel {t.IO_CHANNEL}), MIDI loopback is on and the LED (pin {self.led_pin})\n"
+            f"  lights while the pin {t.DEFAULT_LED_SOURCE} button is held. {paired}"
+        )
+        if not input("\n>>> Write default configuration? [y/N] ").strip().lower().startswith("y"):
+            return
+        # Stop following presses: pin 16 must not be reconfigured over the default
+        self.listening = False
+        while True:
+            lines = t.write_default_config(self.requester(self.client), self.led_pin, dongle_mac)
+            for text, ok in lines:
+                print(ok_line(text, ok))
+            if all(ok for _, ok in lines):
+                print("\nDefault configuration written")
+                return
+            if not input("\nDefault configuration incomplete. Try again? [y/N] ").strip().lower().startswith("y"):
+                return
+
+
+def section(title: str) -> None:
+    print(f"\n=== {title} ===")
+
+
+def open_dongle(args, client: MidiLink) -> MidiLink | None:
+    """The dongle port, or None (wireless not checked). Never the client's port."""
+    if args.no_dongle:
         return None
+    needles = [args.dongle_port] if args.dongle_port else DONGLE_PORT_NAMES
     try:
-        return sx.mac_from_string(raw)
-    except ValueError as exc:
-        print(f"  Invalid MAC: {exc}")
-        return resolve_dongle_mac(None)
+        dongle = find_link(needles, "dongle", allow_prompt=bool(args.dongle_port))
+    except RuntimeError:
+        if args.dongle_port:
+            raise
+        return None
+    if dongle.name == client.name:
+        dongle.close()
+        return None
+    return dongle
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="ESP-NOW-MIDI client_test wizard")
-    parser.add_argument("--phase", choices=["1", "2", "both"], default="both")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--client-port", help="substring of the client's MIDI port name (default: auto-detect)")
+    parser.add_argument("--dongle-port", help="substring of the dongle's MIDI port name (default: auto-detect)")
+    parser.add_argument("--no-dongle", action="store_true", help="test over the client's USB only")
+    parser.add_argument("--led-pin", type=int, default=t.DEFAULT_LED_PIN, help="onboard LED (default %(default)s)")
     parser.add_argument(
-        "--dongle-mac",
-        metavar="MAC",
-        help="dongle Wi-Fi STA MAC (e.g. 84:F7:03:F2:54:62); skips the MAC prompt",
-    )
-    parser.add_argument("--client-port", help="substring to match the client USB MIDI port")
-    parser.add_argument("--dongle-port", help="substring to match the dongle USB MIDI port")
-    parser.add_argument(
-        "--io",
-        choices=["virtual", "physical", "both"],
-        default="both",
-        help="input tests: fake inputs in the firmware, real buttons/pot, or both (default)",
-    )
-    parser.add_argument(
-        "--burst",
-        type=int,
-        default=100,
-        metavar="N",
-        help="notes in the burst test, 1..128 (0 = skip, default 100)",
+        "--touch-pins",
+        default=", ".join(map(str, t.DEFAULT_TOUCH_PINS)),
+        help='comma separated, "" for none (default "%(default)s")',
     )
     args = parser.parse_args()
 
-    if not 0 <= args.burst <= 128:
-        print("--burst must be 0..128", file=sys.stderr)
-        return 1
+    try:
+        touch_pins = t.parse_pins(args.touch_pins)
+    except ValueError:
+        parser.error("--touch-pins: pin numbers, comma separated")
+    errors = t.settings_errors(args.led_pin, touch_pins)
+    if errors:
+        parser.error("; ".join(errors))
 
-    if args.phase == "2" and not args.dongle_mac:
-        print(
-            "Phase 2 requires a dongle MAC. Pass --dongle-mac or use --phase both.",
-            file=sys.stderr,
-        )
-        return 1
+    print(
+        "Flash the `client` sketch on the board under test and the `dongle` sketch on a\n"
+        f"dongle. Wire buttons from pins {' and '.join(map(str, t.BUTTON_PINS))} to GND. Setup overwrites those pin\n"
+        f"configs (note/CC = pin number, channel {t.IO_CHANNEL}). Pin {t.CYCLE_PIN} sends a different MIDI type\n"
+        "on every press. Connect the dongle too: presses must arrive over the client's\n"
+        "USB and wirelessly at the dongle."
+    )
 
-    print("=== ESP-NOW MIDI Test Wizard ===")
-    print("Flash examples/client_test onto a USB-capable board (S2/S3, TinyUSB).")
-    if args.io == "virtual":
-        print("Inputs are faked by the firmware; no wiring needed.")
-    else:
-        print("Test jig wiring:")
-        print(f"  - Pin {PIN_DIGITAL_A}: button to GND (INPUT_PULLUP) -> CC {CC_DIGITAL_A}")
-        print(f"  - Pin {PIN_DIGITAL_B}: button to GND (INPUT_PULLUP) -> CC {CC_DIGITAL_B}")
-        print(f"  - Pin {PIN_ANALOG_IN}: potentiometer (analog in) -> CC {CC_ANALOG_IN}")
-        print(
-            f"  - Pin {PIN_ANALOG_OUT}: PWM out <- CC {CC_ANALOG_OUT} "
-            f"(loopback from pin {PIN_DIGITAL_B})"
-        )
-
-    wiz = Wizard(io_mode=args.io, burst=args.burst)
-    wiz.dongle_mac = resolve_dongle_mac(args.dongle_mac)
-
-    if args.phase in ("1", "both"):
-        wiz.prompt("Connect the CLIENT board via USB")
-        client_needles = [args.client_port] if args.client_port else [
-            "enomik3000_client",
-            "client",
-            "enomik",
-        ]
-        try:
-            link = find_link(client_needles, "client")
-        except RuntimeError as exc:
-            print(f"  [{FAIL}] {exc}")
+    client = dongle = None
+    session = None
+    try:
+        client = find_link([args.client_port] if args.client_port else CLIENT_PORT_NAMES, "client")
+        dongle = open_dongle(args, client)
+        session = Session(client, dongle, args.led_pin, touch_pins)
+        if not session.connect():
             return 1
-        print(f"  Using client port: {link.name}")
-        try:
-            wiz.phase1(link)
-        finally:
-            link.close()
-
-    if args.phase in ("2", "both"):
-        if wiz.dongle_mac is None and args.phase == "both":
-            print("\nSkipping Phase 2 (no dongle MAC provided).")
-        else:
-            wiz.prompt("Connect the DONGLE via USB and keep the client powered")
-            dongle_needles = [args.dongle_port] if args.dongle_port else [
-                "enomik3000_dongle",
-                "dongle",
-                "enomik",
-            ]
-            try:
-                link = find_link(dongle_needles, "dongle")
-            except RuntimeError as exc:
-                print(f"  [{FAIL}] {exc}")
-                return 1
-            print(f"  Using dongle port: {link.name}")
-            try:
-                wiz.phase2(link)
-            finally:
+        session.buttons()
+        session.loopback()
+        session.touch()
+        code = session.summary()
+        session.default_config()
+        return code
+    except RuntimeError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nStopped.")
+        # Loopback is saved on the device: don't leave it on
+        if session is not None and session.state.loopback_on:
+            t.set_midi_loopback(session.requester(session.client), False)
+        return 130
+    finally:
+        for link in (client, dongle):
+            if link is not None:
                 link.close()
-
-    return wiz.summary()
 
 
 if __name__ == "__main__":
