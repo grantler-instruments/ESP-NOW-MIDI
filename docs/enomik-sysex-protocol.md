@@ -2,6 +2,8 @@
 
 The enomik configuration protocol lets a host configure an ESP-NOW MIDI client over **MIDI System Exclusive (SysEx)**. It is implemented in firmware by `enomik::Client` / `enomik::IO` and used by the [enomik web app](https://grantler-instruments.github.io/enomik-app/) and the library test wizard.
 
+The dongle (`enomik::Dongle`) answers a subset from its USB host: `GET_MAC`, `ADD_PEER`, `GET_PEER`, `GET_ALL_PEERS`, `RESET` and `GET_VERSION`. Its peers are the live ESP-NOW list, auto-discovered clients included. `RESET` removes all peers (live and stored) and turns power save off; auto-discovered clients come back as soon as they send again. Every other command gets `ERROR_RESPONSE` with `NOT_READY` (`0x05`). Config SysEx sent to the dongle is never forwarded to clients. More commands can be added with `Dongle::sysExHandler()`.
+
 All multi-byte values in SysEx payloads are **7-bit** (0–127), as required by MIDI.
 
 ## Source code

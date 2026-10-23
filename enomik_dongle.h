@@ -7,6 +7,7 @@
 #include "include/UsbMidiQueue.h"
 #include "include/UsbSysExQueue.h"
 #include "include/PeerDirectory.h"
+#include "include/enomik_sysex.h"
 #include "include/UsbStallWatchdog.h"
 #include "include/DisplayPacer.h"
 #include "include/MidiInbox.h"
@@ -160,6 +161,9 @@ namespace enomik
             instancePtr = this;
             espnowMIDI.setHandleMessage(onEspNowMessageStatic);
             espnowMIDI.setHandleSysExFrom(handleSysExStatic);
+#ifdef HAS_USB_MIDI
+            setupSysExHandler();
+#endif
         }
 
         /**
@@ -680,6 +684,17 @@ namespace enomik
 #pragma GCC diagnostic pop
         }
 
+        /**
+         * @brief Enomik config SysEx handler for `F0 7D` from the USB host.
+         *
+         * Answers GET_MAC, ADD_PEER, GET_PEER, GET_ALL_PEERS, RESET and GET_VERSION;
+         * other commands get a NOT_READY error. Register more callbacks here.
+         */
+        SysExHandler &sysExHandler()
+        {
+            return _sysexHandler;
+        }
+
         /** @brief Force the next loop() to refresh the display (e.g. after UI input). */
         void invalidateDisplay()
         {
@@ -731,6 +746,26 @@ namespace enomik
         {
             uint8_t mac[6];
             return espnowMIDI.getPeer(index, mac) && removePeer(mac);
+        }
+
+        /**
+         * @brief Removes every peer: live ESP-NOW, stored, mutes and announces.
+         * Auto-discovered clients come back as soon as they send again.
+         */
+        void clearAllPeers()
+        {
+            peerStorage.clear();
+            espnowMIDI.clearPeers();
+            _mutes = PeerMuteList();
+            _directory.clear();
+            invalidateDisplay();
+        }
+
+        /** @brief Back to factory config: no peers, power save off (SysEx RESET). */
+        void reset()
+        {
+            clearAllPeers();
+            setPowerSave(false);
         }
 
         /**
@@ -1012,6 +1047,7 @@ namespace enomik
         UsbMidiQueue _usbMidiQueue;
         UsbSysExQueue _usbSysExQueue;
         UsbSysExPacer _usbSysExPacer;
+        SysExHandler _sysexHandler;
         uint32_t _usbStaleMs = USB_MIDI_STALE_MS;
         uint32_t _lastStaleCheckMs = 0;
         UsbStallWatchdog _usbWatchdog;
@@ -1422,6 +1458,64 @@ namespace enomik
             _usbStatsSavedAt = now;
         }
 
+        // Config SysEx replies go to the USB host only. Requests arrive in loop()
+        // (DONGLE_USBMIDI.read()), so replies are written directly: the SysEx
+        // queue is too short for a GET_ALL_PEERS stream.
+        void setupSysExHandler()
+        {
+            _sysexHandler.setOnSend([this](const midi_sysex_message &msg)
+                                    { writeUsbSysEx(msg.data, msg.length); });
+
+            _sysexHandler.setOnGetMAC([this]()
+                                      { _sysexHandler.sendMACResponse(_baseMac); });
+
+            _sysexHandler.setOnAddPeer([this](const uint8_t mac[6]) -> AddPeerResult
+                                       {
+                if (!_isInitialized)
+                    return AddPeerResult::NotReady;
+                if (espnowMIDI.hasPeer(mac) && peerStorage.exists(mac))
+                    return AddPeerResult::AlreadyExists;
+                if (!peerStorage.exists(mac) && peerStorage.isFull())
+                    return AddPeerResult::TableFull;
+                if (!addPeer(mac))
+                    return AddPeerResult::OperationFailed;
+                invalidateDisplay();
+                return AddPeerResult::Success; });
+
+            // Peers are the live ESP-NOW list, auto-discovered ones included
+            _sysexHandler.setOnGetPeer([this](uint8_t index)
+                                       {
+                uint8_t mac[6];
+                if (getPeer(index, mac))
+                {
+                    _sysexHandler.sendPeerResponse(index, mac, SysExCommand::GET_PEER_RESPONSE);
+                }
+                else
+                {
+                    _sysexHandler.sendErrorResponse(
+                        static_cast<uint8_t>(SysExCommand::GET_PEER),
+                        SysExErrorCode::PEER_NOT_FOUND,
+                        index);
+                } });
+
+            _sysexHandler.setOnGetAllPeers([this]()
+                                           {
+                uint8_t mac[6];
+                for (uint8_t index = 0; index < MAX_PEERS && getPeer(index, mac); index++)
+                {
+                    _sysexHandler.sendPeerResponse(index, mac, SysExCommand::GET_ALL_PEERS_RESPONSE);
+                }
+                _sysexHandler.sendStreamEnd(SysExCommand::GET_ALL_PEERS_RESPONSE); });
+
+            _sysexHandler.setOnReset([this]()
+                                     {
+                reset();
+                _sysexHandler.sendSimpleResponse(SysExCommand::RESET_RESPONSE); });
+
+            _sysexHandler.setOnGetVersion([this]()
+                                          { _sysexHandler.sendVersionResponse(); });
+        }
+
         void drainUsbSysExQueue()
         {
             if (!TinyUSBDevice.mounted() || TinyUSBDevice.suspended() || !TinyUSBDevice.ready())
@@ -1436,17 +1530,26 @@ namespace enomik
             {
                 if (!from || !isMuted(from))
                 {
-                    // Whole USB-MIDI packets, waiting for buffer space so a long
-                    // SysEx is not cut off (the host would wait for F7 forever)
-                    _usbSysExPacer.write(
-                        data, length,
-                        [](const uint8_t packet[4]) { return g_dongle_usb_midi.writePacket(packet); },
-                        []() { return TinyUSBDevice.mounted() && !TinyUSBDevice.suspended(); },
-                        []() { return static_cast<uint32_t>(millis()); },
-                        []() { delay(1); });
+                    writeUsbSysEx(data, length);
                 }
                 _usbSysExQueue.consumeHead();
             }
+        }
+
+        // Whole USB-MIDI packets, waiting for buffer space so a long
+        // SysEx is not cut off (the host would wait for F7 forever)
+        void writeUsbSysEx(const uint8_t *data, uint16_t length)
+        {
+            if (!TinyUSBDevice.mounted() || TinyUSBDevice.suspended() || !TinyUSBDevice.ready())
+            {
+                return;
+            }
+            _usbSysExPacer.write(
+                data, length,
+                [](const uint8_t packet[4]) { return g_dongle_usb_midi.writePacket(packet); },
+                []() { return TinyUSBDevice.mounted() && !TinyUSBDevice.suspended(); },
+                []() { return static_cast<uint32_t>(millis()); },
+                []() { delay(1); });
         }
 
         void logUsbState(unsigned long now)
@@ -1701,9 +1804,12 @@ namespace enomik
         {
             if (!instancePtr || data == nullptr || length == 0)
                 return;
-            // Enomik config SysEx (manufacturer 0x7D) stays USB-only
-            if (length > 1 && data[1] == 0x7D)
+            // Enomik config SysEx (manufacturer 0x7D) is for the dongle, never forwarded
+            if (length > 1 && data[1] == SysExPacket::MANUFACTURER_ID)
+            {
+                instancePtr->_sysexHandler.handleSysEx(data, static_cast<uint16_t>(length));
                 return;
+            }
             if (length > esp_now_midi_sysex::MAX_MESSAGE)
             {
                 EspNowMidiLog::w("USB SysEx too large (%u), dropping", static_cast<unsigned>(length));

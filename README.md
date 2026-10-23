@@ -32,7 +32,7 @@ Full guide: [grantler-instruments.github.io/ESP-NOW-MIDI](https://grantler-instr
 - **`enomik::Client`**: SysEx-configurable MIDI client — map pins to MIDI (e.g. digital input → CC) without hard-coding every route. Works with the [enomik web app](https://grantler-instruments.github.io/enomik-app/).
 - **MIDI wrapper**: ESP-NOW setup plus a common interface for USB and ESP-NOW MIDI.
 - **`enomik::Dongle`**: USB MIDI ↔ ESP-NOW bridge for a host-connected board. Optional status display via `Dongle::Display` + `setDisplay()`.
-- **SysEx over ESP-NOW**: MIDI SysEx up to 1024 bytes, fragmented into versioned frames (240-byte payloads). Dongle bridges USB ↔ ESP-NOW SysEx; Enomik *config* SysEx (`F0 7D … F7`) stays USB-only.
+- **SysEx over ESP-NOW**: MIDI SysEx up to 1024 bytes, fragmented into versioned frames (240-byte payloads). Dongle bridges USB ↔ ESP-NOW SysEx; Enomik *config* SysEx (`F0 7D … F7`) stays USB-only, and the dongle answers part of it itself (MAC, peers, version, reset).
 
 ### SysEx transport notes
 

@@ -22,8 +22,14 @@ inline esp_err_t esp_wifi_stop()
 inline esp_err_t esp_wifi_start() { return ESP_OK; }
 inline esp_err_t esp_wifi_set_ps(int) { return ESP_OK; }
 inline esp_err_t esp_wifi_set_max_tx_power(int) { return ESP_OK; }
+// MAC esp_wifi_get_mac() reports; all zeros unless a test sets it.
+inline uint8_t *stubWifiMac()
+{
+    static uint8_t mac[6] = {};
+    return mac;
+}
 inline esp_err_t esp_wifi_get_mac(int, uint8_t mac[6])
 {
-    memset(mac, 0, 6);
+    memcpy(mac, stubWifiMac(), 6);
     return ESP_OK;
 }

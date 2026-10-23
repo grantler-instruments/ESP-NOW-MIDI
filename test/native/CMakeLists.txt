@@ -47,6 +47,20 @@ target_include_directories(native_tests PRIVATE
 )
 target_link_libraries(native_tests PRIVATE Catch2::Catch2WithMain)
 
+# Dongle with USB MIDI (TinyUSB stubbed). Its own executable: the Dongle class
+# differs with HAS_USB_MIDI, so it must not share a binary with the tests above.
+add_executable(native_dongle_usb_tests
+  test_dongle_sysex.cpp
+)
+target_compile_definitions(native_dongle_usb_tests PRIVATE HAS_USB_MIDI)
+target_include_directories(native_dongle_usb_tests PRIVATE
+  "${LIB_ROOT}"
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+)
+target_link_libraries(native_dongle_usb_tests PRIVATE Catch2::Catch2WithMain)
+
 include(CTest)
 include(Catch)
 catch_discover_tests(native_tests)
+catch_discover_tests(native_dongle_usb_tests)

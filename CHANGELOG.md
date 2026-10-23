@@ -14,6 +14,7 @@
 - SysEx over ESP-NOW: versioned fragment protocol (max 1024 bytes, 240-byte payloads), receive callback (`setHandleSysEx`; the Client runs it in `loop()`), Client/Dongle bridging, auto-discovery accepts SysEx frames
 - Breaking: replaces the unused fixed 129-byte SysEx blob; CircuitPython `send_sysex` updated to match
 - Enomik config SysEx stays USB-only: Client config replies are no longer sent over ESP-NOW, and the Dongle does not forward host config SysEx (`F0 7D`) to clients
+- Dongle: answers Enomik config SysEx from the USB host for `GET_MAC`, `ADD_PEER`, `GET_PEER`, `GET_ALL_PEERS`, `RESET` and `GET_VERSION`, same wire format as the Client; other commands get a `NOT_READY` error. `sysExHandler()` gives access to the handler to add more commands. New `clearAllPeers()` and `reset()` (no peers, power save off).
 - `midi_sysex_message` capacity expanded to 256 bytes for USB/config path
 - Fixed: SysEx buffer overflows. The SysEx config handler rejects packets longer than 256 bytes, and the Client no longer passes longer USB SysEx to it.
 - IO: `setAnalogReader()` / `setDigitalReader()` replace `analogRead()` / `digitalRead()` for input pins, e.g. to fake sensors in tests.
