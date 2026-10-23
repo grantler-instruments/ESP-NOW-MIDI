@@ -32,6 +32,12 @@ jobs:
       - name: Check SysEx constant sync
         run: python3 scripts/check_sysex_constants.py
 
+      - name: Install Pure Data (pd-patches tests)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends puredata-core
+          echo "PD=$(command -v pd || command -v puredata || echo /usr/lib/puredata/bin/pd)" >> "$GITHUB_ENV"
+
       - name: Run protocol constant tests
         run: python3 -m unittest discover -s test/protocol -v
 

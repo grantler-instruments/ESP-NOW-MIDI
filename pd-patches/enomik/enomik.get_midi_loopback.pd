@@ -1,0 +1,9 @@
+#N canvas 100 100 900 700 12;
+#X obj 20 20 inlet;
+#X msg 20 60 14;
+#X obj 20 100 enomik.send \$1;
+#X text 206 20 enomik.get_midi_loopback [port], f 45;
+#X text 206 45 Ask whether MIDI loopback is on., f 45;
+#X text 206 70 Inlet: bang, f 45;
+#X connect 0 0 1 0;
+#X connect 1 0 2 0;

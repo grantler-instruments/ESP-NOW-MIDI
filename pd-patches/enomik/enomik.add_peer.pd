@@ -1,0 +1,11 @@
+#N canvas 100 100 900 700 12;
+#X obj 20 20 inlet;
+#X obj 20 60 enomik.mac;
+#X obj 20 100 list prepend 7;
+#X obj 20 140 enomik.send \$1;
+#X text 206 20 enomik.add_peer [port], f 45;
+#X text 206 45 Inlet: symbol 84:F7:03:F2:54:62 or list of 6 octets, f 45;
+#X text 206 90 Sent as 12 nibbles (see enomik.mac)., f 45;
+#X connect 0 0 1 0;
+#X connect 1 0 2 0;
+#X connect 2 0 3 0;

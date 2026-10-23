@@ -140,7 +140,9 @@ This repo uses Semantic Versioning. Strict adherence starts at 1.0.0; until then
 
 ## Contributing
 
-Bugs and PRs are welcome on GitHub. Before tagging a release, run the interactive hardware test wizard (`examples/client_test` + `examples/dongle`); see [scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/README.md).
+Bugs and PRs are welcome on GitHub. Before tagging a release, run the interactive client_test wizard (`examples/client_test` + `examples/dongle`, `scripts/wizard/run.sh client_test`); see [scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/README.md).
+
+Enable the git hooks once per clone with `git config core.hooksPath .githooks`. The pre-commit hook checks that versions and SysEx constants are in sync (`scripts/check_versions.py`, `scripts/check_sysex_constants.py`). The pre-push hook runs the Pd patch tests (`test/protocol/test_pd_patches.py`) in `scripts/wizard/.venv`, which it creates on first push; they are skipped when Pure Data is not installed (set `PD=/path/to/pd` if it is not found).
 
 ## License
 

@@ -1,0 +1,9 @@
+#N canvas 100 100 900 700 12;
+#X obj 20 20 inlet;
+#X obj 20 60 list prepend 2;
+#X obj 20 100 enomik.send \$1;
+#X text 206 20 enomik.get_pin_config [port], f 45;
+#X text 206 45 Ask for one pin config., f 45;
+#X text 206 70 Inlet: pin, f 45;
+#X connect 0 0 1 0;
+#X connect 1 0 2 0;

@@ -1,0 +1,9 @@
+#N canvas 100 100 900 700 12;
+#X obj 20 20 inlet;
+#X obj 20 60 list prepend 11;
+#X obj 20 100 enomik.send \$1;
+#X text 215 20 enomik.get_peer [port], f 45;
+#X text 215 45 Ask for the peer in one storage slot., f 45;
+#X text 215 70 Inlet: index, f 45;
+#X connect 0 0 1 0;
+#X connect 1 0 2 0;
