@@ -24,6 +24,7 @@
       F0 7D 7F 7F 4E 00 F7                     mapping mode off
       F0 7D 7F 7F 4E 01 F7                     mapping mode on
       F0 7D 7F 7F 4E 02 F7                     delete all mappings
+      F0 7D 7F 7F 4E 03 F7                     send all mappings (one 13 each, then 14)
 
     from this client:
       F0 7D 7F 7F 4E 10 <uid> F7               tag placed (mapping mode only)
@@ -31,7 +32,8 @@
       F0 7D 7F 7F 4E 12 <on> F7                mapping mode is now off (00) / on (01)
       F0 7D 7F 7F 4E 13 <uid> tt cc d1 d2 F7   tag mapped: tt = type (08 note off, 09 note on,
                                                0B CC, 0C program change), cc = channel 1..16
-      F0 7D 7F 7F 4E 14 <count> F7             all mappings deleted / mapping table full (count)
+      F0 7D 7F 7F 4E 14 <count> F7             end of mapping list / all mappings deleted /
+                                               mapping table full (count)
 
     <uid> = length n (4 or 7), then 2n nibbles, high nibble first.
             UID 04 A2 3B 1C -> 04 00 04 0A 02 03 0B 01 0C
@@ -61,6 +63,7 @@ enum NfcCommand : uint8_t {
   CMD_MAPPING_OFF = 0x00,
   CMD_MAPPING_ON = 0x01,
   CMD_CLEAR = 0x02,
+  CMD_GET_MAPPINGS = 0x03,
   REPORT_TAG_PLACED = 0x10,
   REPORT_TAG_REMOVED = 0x11,
   REPORT_MAPPING_STATE = 0x12,
@@ -325,6 +328,10 @@ void onSysEx(uint8_t *data, unsigned int length) {
       _armedTag = Tag();
       saveMappings();
       Serial.println(F("all NFC mappings deleted"));
+      reportMappingCount();
+      break;
+    case CMD_GET_MAPPINGS:
+      for (uint8_t i = 0; i < _mappingCount; i++) reportMapped(_mappings[i]);
       reportMappingCount();
       break;
   }
