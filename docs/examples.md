@@ -30,6 +30,9 @@ Pure ESP-IDF ports of the main Client / Dongle / client_test flows are under
   as MIDI control changes.
 - **`client_vl53l0x`**: reads a VL53L0X time-of-flight sensor and sends distance
   as MIDI control changes.
+- **`client_nfc`**: reads NFC tags with a PN532 (I2C) and sends a MIDI
+  message per tag; tags are mapped in a SysEx-switched mapping mode (place tag,
+  then send it a MIDI message), which also reports tag UIDs via SysEx.
 - **`client_waveshare-esp32-s3-relay-6ch`**: note-driven relay controller for the
   Waveshare ESP32-S3 6-channel relay board (e.g. solenoids).
 
