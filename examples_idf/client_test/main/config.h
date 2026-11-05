@@ -1,6 +1,6 @@
 #pragma once
 
-// USB MIDI (wizard Phase 1) comes from utils/esp.h on ESP32-S2/S3
+// USB MIDI (the wizard's USB path) comes from utils/esp.h on ESP32-S2/S3
 // (HAS_USB_MIDI). Build with idf.py set-target esp32s2 or esp32s3.
 
 // Channel the test client echoes back on. Incoming channel-voice messages on
@@ -32,5 +32,5 @@
 #define TEST_API_CHANNEL 12
 
 // Heartbeat (SysEx ANNOUNCE) interval while idle. Shorter than the library
-// default of 60 s so the dongle discovers this client within seconds in Phase 2.
+// default of 60 s so the dongle discovers this client within seconds.
 #define TEST_HEARTBEAT_INTERVAL_MS 2000

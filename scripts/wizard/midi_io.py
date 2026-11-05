@@ -7,19 +7,14 @@ import sys
 import termios
 import time
 import tty
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
 
 import mido
 
 # Do not fall back to "enomik": that also matches the opposite device role.
 CLIENT_PORT_NAMES = ["enomik3000_client", "client"]
 DONGLE_PORT_NAMES = ["enomik3000_dongle", "dongle"]
-
-# Returned by wait_for(..., allow_esc=True) when the user presses Esc.
-CANCELLED: Any = object()
-
 
 @contextmanager
 def cbreak_stdin():
@@ -44,19 +39,6 @@ def poll_key() -> str | None:
     if not ready:
         return None
     return sys.stdin.read(1)
-
-
-def wait_start_or_skip() -> bool:
-    """Block until Enter (True, start) or Esc (False, skip)."""
-    if not sys.stdin.isatty():
-        return input().strip().lower() not in ("s", "skip")
-    with cbreak_stdin():
-        while True:
-            key = sys.stdin.read(1)
-            if key in ("\n", "\r"):
-                return True
-            if key == "\x1b":
-                return False
 
 
 @dataclass
@@ -85,26 +67,21 @@ class MidiLink:
         self,
         predicate,
         timeout: float = 2.0,
-        allow_esc: bool = False,
         on_message=None,
     ):
-        """Return the first matching MIDI message, None on timeout, or CANCELLED.
+        """Return the first matching MIDI message, or None on timeout.
 
         If `on_message` is set, it is called for every incoming message before
         the predicate runs (useful for logging received values).
         """
         deadline = time.monotonic() + timeout
-        ctx = cbreak_stdin() if allow_esc else nullcontext()
-        with ctx:
-            while time.monotonic() < deadline:
-                if allow_esc and poll_key() == "\x1b":
-                    return CANCELLED
-                for msg in self.inport.iter_pending():
-                    if on_message is not None:
-                        on_message(msg)
-                    if predicate(msg):
-                        return msg
-                time.sleep(0.005)
+        while time.monotonic() < deadline:
+            for msg in self.inport.iter_pending():
+                if on_message is not None:
+                    on_message(msg)
+                if predicate(msg):
+                    return msg
+            time.sleep(0.005)
         return None
 
 

@@ -1,0 +1,51 @@
+distance: 1 m
+obstacles: 0
+indoor: 1
+library: 0.19.1
+port: enomik3000_dongle
+gap: 10 ms
+
+rounds: 10
+samples: 10000
+lost: 0
+loss_rate: 0.000000
+min: 4.550000
+max: 39.958000
+mean: 5.896307
+median: 4.914000
+p95: 13.992000
+p99: 24.537060
+p99.9: 29.667015
+sigma_sample: 3.370980
+iqr: 0.288250
+mad: 0.135000
+
+# jitter (late_*: % more than N ms over the median; bucket_*: % per range)
+p95_minus_median: 9.078000
+late_2ms_pct: 9.030000
+late_5ms_pct: 7.270000
+late_10ms_pct: 4.010000
+consecutive_delta: 2.019460
+bucket_0_8ms_pct: 91.950000
+bucket_8_12ms_pct: 0.940000
+bucket_12_20ms_pct: 5.770000
+bucket_20_30ms_pct: 1.300000
+bucket_30_upms_pct: 0.040000
+
+# spread between rounds (min .. max)
+round_median: 4.893500 .. 4.932000
+round_p95: 13.239350 .. 14.695200
+round_p99: 18.677280 .. 24.755230
+round_max: 26.706000 .. 39.958000
+
+# per round: file median p95 p99 max lost
+round01.txt 4.893 13.846 18.677 29.820 0
+round02.txt 4.929 13.924 23.870 29.655 0
+round03.txt 4.928 13.776 24.524 26.706 0
+round04.txt 4.896 13.320 22.083 29.604 0
+round05.txt 4.899 14.025 24.755 34.401 0
+round06.txt 4.932 14.248 24.496 39.958 0
+round07.txt 4.902 14.695 24.046 29.682 0
+round08.txt 4.917 14.400 20.483 31.533 0
+round09.txt 4.924 14.552 20.597 29.763 0
+round10.txt 4.915 13.239 21.316 29.772 0

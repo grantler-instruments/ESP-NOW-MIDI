@@ -1,0 +1,15 @@
+source_file: round03.txt
+samples: 1000
+min: 4.573000
+max: 29.722000
+mean: 6.325524
+median: 4.947500
+p95: 14.080250
+p99: 24.656230
+sigma_sample: 3.705680
+sigma_population: 3.703826
+p25: 4.804750
+p75: 5.374750
+iqr: 0.570000
+mad: 0.173500
+peak_to_peak: 25.149000

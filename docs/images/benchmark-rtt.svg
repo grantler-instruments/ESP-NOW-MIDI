@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="40 40 1620 560" role="img" aria-labelledby="title desc">
   <title id="title">Round-trip benchmark setup</title>
-  <desc id="desc">Pure Data on the MIDI host sends a note over USB MIDI to the ESP-NOW MIDI dongle, which sends it over ESP-NOW to a client running client_echo. The client sends it back the same way; Pure Data measures the round-trip time, 1,000 notes per run, at distances from 1 to 75 m.</desc>
+  <desc id="desc">The MIDI host sends a control change over USB MIDI to the ESP-NOW MIDI dongle, which sends it over ESP-NOW to a client running client_echo. The client sends it back the same way; the host measures the round-trip time, 1,000 messages per run, at distances from 1 to 75 m.</desc>
   <style>
     .label { fill: #000; font: 600 25px system-ui, sans-serif; letter-spacing: .5px; }
     .small-label { fill: #e5a3bd; font: 600 22px system-ui, sans-serif; letter-spacing: 1px; }
@@ -36,7 +36,7 @@
     <rect class="outline" x="105" y="218" width="258" height="150" rx="10"/>
     <path class="outline" d="M78 400h312l-32-32H110zM204 400h60"/>
     <text class="label" x="234" y="462" text-anchor="middle">MIDI HOST</text>
-    <text class="small-label" x="234" y="497" text-anchor="middle">PURE DATA TIMER</text>
+    <text class="small-label" x="234" y="497" text-anchor="middle">BENCHMARK_RTT.PY</text>
   </g>
 
   <g aria-label="USB MIDI connection">
@@ -70,7 +70,7 @@
     <path class="flow-head" d="m1530 268-10-18h20z"/>
     <path class="flow" d="M1500 258V140H250V198"/>
     <path class="flow-head" d="m250 208-10-18h20z"/>
-    <text class="note" x="875" y="78" text-anchor="middle">NOTE →  (next one only after the echo arrived, 1,000 per run)</text>
-    <text class="note" x="875" y="122" text-anchor="middle">←  ECHO, round-trip time measured in Pure Data</text>
+    <text class="note" x="875" y="78" text-anchor="middle">CC →  (next one 10 ms after the echo arrived, 1,000 per run)</text>
+    <text class="note" x="875" y="122" text-anchor="middle">←  ECHO, round-trip time measured on the host</text>
   </g>
 </svg>

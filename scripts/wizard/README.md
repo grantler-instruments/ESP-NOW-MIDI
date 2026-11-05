@@ -80,102 +80,95 @@ Flags:
 ## client_test wizard (`client_test.py`)
 
 Regression harness for the `examples/client_test` firmware, run before a
-release. It checks each step automatically and reports PASS / FAIL. All checks
-use **MIDI only** (channel voice, system messages and SysEx); there is no
-serial side-channel.
+release. Laid out like the board tester: the client and the dongle are both on
+USB from the start, every check is one row with a mark per path, **USB** (the
+client's own port) and **Wireless** (through the dongle, over ESP-NOW), and
+steps move on by themselves. All checks use **MIDI only** (channel voice,
+system messages and SysEx); there is no serial side-channel.
 
-Inputs are tested twice: first with **fake values** (the wizard tells
-`client_test` over channel 15 what each input pin should read), then with real
-buttons and a potentiometer. Press **Esc** to skip a physical step, or use
-`--io virtual` to run only the fake inputs.
+```
+=== 3. Echo ===
+  note on                  ✔ USB  ✔ Wireless
+  note on velocity 127     ✔ USB  · Wireless
+```
 
-### What it tests
+### Steps
 
-**Phase 1 — client over USB MIDI**
-1. SysEx: `RESET`, `GET_VERSION` (matches the wizard), `GET_MAC`,
-   `SET/GET_MIDI_LOOPBACK`, `SET/GET_POWER_SAVE`, `SET/GET_NAME` and clearing the
-   name
-2. `SET_PIN_CONFIG` for every input type, then `GET_PIN_CONFIG` and
-   `GET_ALL_PIN_CONFIGS`:
+1. **Connect client and dongle**: finds both MIDI ports and shows each board's
+   firmware version and MAC. Enter sets up the client: firmware matches the
+   wizard, `RESET`, `SET_PIN_CONFIG` for every input type, the dongle added as
+   peer (its MAC comes from the dongle, no typing), then waits up to 15 s until
+   an echo comes back through the dongle. On a failure: retry, continue anyway,
+   or quit.
    - pin 16 / 17 digital INPUT_PULLUP → CC 16 / 17
    - pin 10 analog input → CC 10
    - pin 21 analog output ← CC 17 (driven via loopback when pin 17 fires)
    - pin 18 digital INPUT_PULLUP → note 60
    - pin 11 analog input → pitch bend
-3. SysEx error replies: unknown command, wrong protocol version, unconfigured
-   pin, malformed MAC
-   Raw stream: `SET_RAW_STREAM` on analog pin 10 sends `RAW_VALUE` frames
-   every 50 ms with the fake level, a threshold change shows up in the frames,
-   frames stop after `SET_RAW_STREAM` off, unconfigured pin → `PIN_NOT_FOUND`
-4. Echo on **channel 10** of every channel voice message, including edge values
-   (velocity 1/127, CC 0/127, program 0/127, pitch bend min/max/center,
-   aftertouch 0/127); channel 1 is **not** echoed
-5. Echo of system messages: clock, start, continue, stop, song position
-   (0, 1000, 16383), song select
-6. Burst: 100 notes back to back; all must come back. Prints round-trip times.
-7. `ADD_PEER` with the dongle MAC (stored on the client for Phase 2), duplicate
-   `ADD_PEER` error, `GET_PEER`, `GET_ALL_PEERS`, `GET_CONFIG` stream
-8. API sends: the client calls each `enomik::Client` send function (note
-   on/off, CC, program change, pitch bend min/center/max, aftertouch, poly
+2. **SysEx over USB** (the dongle does not bridge configuration SysEx):
+   `SET/GET_MIDI_LOOPBACK`, `SET/GET_POWER_SAVE`, `SET/GET_NAME` and clearing the
+   name, `GET_PIN_CONFIG`, `GET_ALL_PIN_CONFIGS`, error replies (unknown command,
+   wrong protocol version, unconfigured pin, malformed MAC), the raw stream
+   (`RAW_VALUE` frames every 50 ms with the fake level, a threshold change shows
+   up, frames stop after off, unconfigured pin → `PIN_NOT_FOUND`), duplicate
+   `ADD_PEER`, `GET_PEER`, `GET_ALL_PEERS`, `GET_CONFIG` stream
+3. **Echo**: every channel voice message on **channel 10**, including edge
+   values (velocity 1/127, CC 0/127, program 0/127, pitch bend min/max/center,
+   aftertouch 0/127), and system messages (clock, start, continue, stop, song
+   position 0/1000/16383, song select). Each goes in over USB and through the
+   dongle and must come back the same way. Channel 1 is **not** echoed.
+4. **Burst**: 100 notes back to back over each path, with round-trip times. All
+   must come back over USB; up to 5 % may get lost wirelessly.
+5. **Client send API**: the client calls each `enomik::Client` send function
+   (note on/off, CC, program change, pitch bend min/center/max, aftertouch, poly
    aftertouch, clock, start, continue, stop, song position, song select, and
-   SysEx of 8, 22 and 300 bytes) and the wizard checks what arrives on channel 12
-9. Fake inputs: press/release pins 16, 17 and 18, analog pin 10 through CC 64,
-   0, 127, 32, 96, analog pin 11 through pitch bend max, center and min
-10. Real inputs: press the buttons on pins 16 and 17, turn the potentiometer on
-    pin 10 to 0, 64 and 127
+   SysEx of 8, 22 and 300 bytes). One trigger over USB: the client sends to USB
+   and ESP-NOW at once, so each row needs both marks. The 300-byte SysEx is
+   split into two ESP-NOW frames and reassembled by the dongle.
+6. **Fake inputs**: the wizard tells `client_test` over channel 15 what each
+   input pin reads: press/release pins 16, 17 and 18, analog pin 10 through CC
+   64, 0, 127, 32, 96, analog pin 11 through pitch bend max, center and min.
+7. **Buttons and potentiometer**: press the buttons on pins 16 and 17, turn the
+   potentiometer on pin 10 to 0, 64 and 127. Moves on once every row has all
+   marks; **Enter** skips what is missing (counts as failed).
 
-**Phase 2 — client over ESP-NOW (through the dongle)**
+Then the **results**: pass/fail per step and every failed row with the path
+that failed. Exits non-zero if any check failed.
 
-First waits until an echo comes back over the dongle (up to 15 s) and sets the
-fake inputs: after a reboot the client reads its real pins, and unconnected
-analog pins read noise and flood MIDI.
-
-Steps 4, 5, 6, 8, 9 and 10 again over the air. The burst allows up to 5% loss.
-The 300-byte SysEx is split into two ESP-NOW frames and reassembled by the dongle.
-
-> The dongle does not bridge configuration SysEx, so SysEx steps run in Phase 1 only.
+Without a dongle (`--no-dongle`, or none found) only USB is checked.
 
 ### Run
 
 ```bash
 cd scripts/wizard
-./run.sh client_test              # both phases
-./run.sh client_test --phase 1    # USB only
-./run.sh client_test --phase 2    # ESP-NOW only
+./run.sh client_test
+./run.sh client_test --io virtual     # no wiring: skip step 7
+./run.sh client_test --no-dongle      # USB only
 ```
 
 Hardware:
 - Flash `examples/client_test` onto a USB-capable board (ESP32-S2/S3, TinyUSB).
-- For the real-input steps (skip them with Esc or `--io virtual`):
+- Flash the `dongle` example (0.19 or later) onto a second board. Older dongles
+  don't report their MAC: then the wizard asks for it (`print_mac`, dongle
+  display or serial log), or pass `--dongle-mac`.
+- For step 7 (skip it with `--io virtual`):
   - Pins **16** and **17**: momentary buttons to GND (INPUT_PULLUP).
   - Pin **10**: potentiometer (wiper to GPIO, ends to 3V3 / GND).
   - Pin **21**: optional PWM / LED load (driven by CC 17 via MIDI loopback).
-- For Phase 2, flash the `dongle` example onto a second board. With the dongle
-  plugged in at the start, the wizard reads its MAC (`GET_MAC`, dongle firmware
-  0.19+); otherwise it asks for it (`print_mac`, dongle display or serial log).
 
 Flags:
-- `--dongle-mac XX:XX:XX:XX:XX:XX` — dongle MAC (default: read from the dongle, else asked)
 - `--client-port SUBSTR` / `--dongle-port SUBSTR` to force a MIDI port by name
   when auto-detection picks the wrong one.
-- `--io virtual|physical|both` — fake inputs, real buttons/pot, or both (default)
+- `--no-dongle` — USB only
+- `--dongle-mac XX:XX:XX:XX:XX:XX` — dongle MAC (default: read from the dongle, else asked)
+- `--io virtual|physical|both` — fake inputs (step 6), real buttons/pot (step 7), or both (default)
 - `--burst N` — notes in the burst test, 1..128 (`0` skips it, default 100)
-
-Example:
-
-```bash
-./run.sh client_test --dongle-mac 84:F7:03:F2:54:62
-./run.sh client_test --phase 1 --io virtual
-```
-
-It exits with a non-zero status if any step fails.
 
 ### Notes
 - Channels are 1-based here to match the library (`mido` uses 0-based on the
   wire; the wizard converts internally).
-- Each real button / pot test waits for **Enter** before it listens, so a
-  floating pin cannot pass it early; **Esc** skips it. During a step, MIDI
-  advances it automatically; **Esc** still skips.
+- MIDI loopback is switched on in step 2 and stays on (it is saved on the
+  device), so pin 17 drives pin 21.
 - Test cases live in `cases.py` (no MIDI dependency); `test/protocol` unit-tests
   them.
 - The firmware sends a SysEx ANNOUNCE every 2 s while idle so the dongle
@@ -191,3 +184,5 @@ It exits with a non-zero status if any step fails.
   `test/protocol/test_wizard_cases.py` tests them)
 - `enomik_sysex.py`: enomik SysEx builders and parser
 - `midi_io.py`: port detection and key input
+- `ui.py`: terminal output both scripts share (OK/FAIL lines, USB/Wireless
+  marks, a block redrawn in place)

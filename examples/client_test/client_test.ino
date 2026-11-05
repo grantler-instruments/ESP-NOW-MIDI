@@ -3,10 +3,10 @@
 // This is NOT a product sketch. It is a fixed-behaviour firmware that the
 // scripts/wizard harness drives step by step:
 //
-//   Phase 1 (USB):     wizard talks to this board directly over USB MIDI
-//                      (SysEx configuration, echo, burst, inputs)
-//   Phase 2 (ESP-NOW): wizard talks to the dongle; this board is reached
-//                      wirelessly. Same echo, burst and input checks.
+//   USB:      wizard talks to this board directly over USB MIDI
+//             (SysEx configuration, echo, burst, inputs)
+//   ESP-NOW:  at the same time, wizard talks to the dongle and reaches this
+//             board wirelessly. Same echo, burst and input checks.
 //
 // Contract relied on by the wizard (MIDI only — no side-channel protocol):
 //   * channel-voice messages on TEST_ECHO_CHANNEL are echoed back verbatim

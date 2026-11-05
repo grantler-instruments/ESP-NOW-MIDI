@@ -1,15 +1,23 @@
 """
-ESP-NOW MIDI Library for CircuitPython
+ESP-NOW MIDI Library for CircuitPython (ESP32 boards)
 Handles MIDI message transmission over ESP-NOW protocol
 Based on the C++ esp_now_midi library - packet format compatible
+
+Uses CircuitPython's `espnow` module (espnow.Peer, e.peers, e.send(msg, peer),
+e.read()) and `wifi` module. MicroPython is not supported.
 """
 
 import espnow
+from time import monotonic_ns as _monotonic_ns
+
+
+def _now_ms():
+    return _monotonic_ns() // 1000000
 
 # Keep in sync with version.h
 VERSION_MAJOR = 0
 VERSION_MINOR = 19
-VERSION_PATCH = 0
+VERSION_PATCH = 1
 VERSION = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
 
 
@@ -58,6 +66,13 @@ SYSEX_MAX_PAYLOAD = 240
 SYSEX_MAX_MESSAGE = 1024
 SYSEX_MAX_FRAME = SYSEX_HEADER_SIZE + SYSEX_MAX_PAYLOAD
 SYSEX_REASSEMBLY_TIMEOUT_MS = 100
+
+# Enomik SysEx ANNOUNCE (docs/enomik-sysex-protocol.md)
+ENOMIK_MANUFACTURER_ID = 0x7D
+ENOMIK_CMD_ANNOUNCE = 0x15
+DEVICE_KIND_CLIENT = 0x00
+DEVICE_KIND_DONGLE = 0x01
+ANNOUNCE_MAX_NAME = 16
 
 
 def _sysex_fragment_count(msg_len):
@@ -139,29 +154,69 @@ def _sysex_parse_frame(data):
     }
 
 
+# System status bytes that are not a complete message, or undefined
+_INVALID_SHORT_STATUS = (MIDI_SYSEX, SYSEX_END, 0xF4, 0xF5, 0xF9, 0xFD)
+
+
+def _midi_data_size(status_byte):
+    """Bytes in a short MIDI message with this status byte (1-3)."""
+    if status_byte >= 0xF0:
+        if status_byte in (MIDI_TIME_CODE, MIDI_SONG_SELECT):
+            return 2
+        if status_byte == MIDI_SONG_POS_POINTER:
+            return 3
+        if status_byte in (MIDI_TUNE_REQUEST, MIDI_TIME_CLOCK, MIDI_START, MIDI_CONTINUE,
+                           MIDI_STOP, MIDI_ACTIVE_SENSING, MIDI_SYSTEM_RESET):
+            return 1
+        return 3
+    if (status_byte & 0xF0) in (MIDI_PROGRAM_CHANGE, MIDI_AFTERTOUCH):
+        return 2
+    return 3
+
+
+def is_midi_packet(data):
+    """
+    True when an ESP-NOW payload is a packet this library sends.
+    Matches C++ isMidiPacket(): a 1-3 byte MIDI message whose length matches
+    its status byte, or a SysEx transport frame.
+    """
+    if not data:
+        return False
+    if len(data) > 3:
+        return _sysex_parse_frame(data) is not None
+    status_byte = data[0]
+    if status_byte < 0x80 or status_byte in _INVALID_SHORT_STATUS:
+        return False
+    if _midi_data_size(status_byte) != len(data):
+        return False
+    for b in data[1:]:
+        if b & 0x80:
+            return False
+    return True
+
+
 class ESPNowMidi:
     """
     ESP-NOW MIDI communication class
-    
-    Packet format matches C++ midi_message_packet exactly:
-    - statusByte: status (upper 4 bits) | channel 0-15 (lower 4 bits)
-    - data1: first data byte (0-127)
-    - data2: second data byte (0-127)
-    
-    Internal format (not transmitted):
-    - channel: 1-16 (user-facing, converted to 0-15 for transmission)
-    - status: MIDI status byte
-    - firstByte: first data byte
-    - secondByte: second data byte
+
+    Packet format matches C++ midi_message_packet: 1-3 bytes, status byte
+    (status | 0-based channel) followed by the data bytes. Channels are 1-16 in
+    this API. SysEx goes out as fragmented transport frames.
     """
-    
+
     def __init__(self):
         self.e = None
         self.peers = []
         self._max_peers = MAX_PEERS
         self._auto_peer_discovery = True
-        
+        self._peer_objects = {}  # mac -> espnow.Peer
+        self._channel = ESP_NOW_MIDI_CHANNEL
+        self._last_seen = {}  # mac -> ms of the last valid packet
+        self._last_sender_mac = None
+        self._last_send_ms = None
+
         # MIDI Handlers (matching C++ private members)
+        self._on_message_handler = None
         self._on_note_on_handler = None
         self._on_note_off_handler = None
         self._on_control_change_handler = None
@@ -179,148 +234,171 @@ class ESPNowMidi:
         self._on_active_sensing_handler = None
         self._on_system_reset_handler = None
         self._on_sysex_handler = None
-        # Single-sender reassembly (mac -> assembly state)
+        self._on_sysex_from_handler = None
+        # Single-sender reassembly
         self._sysex_assembly = None
-    
+
     def begin(self, reduce_power_at_cost_of_latency=False, auto_peer_discovery=True, channel=ESP_NOW_MIDI_CHANNEL):
         """
-        Initialize ESP-NOW
-        
+        Initialize ESP-NOW. Calling it again starts over with no peers.
+
         Args:
-            reduce_power_at_cost_of_latency: Not implemented in CircuitPython
-            auto_peer_discovery: Enable automatic peer discovery on receive
+            reduce_power_at_cost_of_latency: Not implemented in Python
+            auto_peer_discovery: Add senders of valid MIDI packets as peers
             channel: WiFi channel for ESP-NOW (default matches C++ ESP_NOW_MIDI_CHANNEL)
 
         Returns:
             True when ESP-NOW is ready.
         """
+        if self.e is not None:
+            self.deinit()
         self._auto_peer_discovery = auto_peer_discovery
+        self._channel = channel
         self._configure_wifi_channel(channel)
         try:
             self.e = espnow.ESPNow()
-            self.e.active(True)
         except Exception as exc:
             print("ESP-NOW MIDI init failed:", exc)
+            self.e = None
             return False
         print("ESP-NOW MIDI initialized")
         return True
-    
+
     def _configure_wifi_channel(self, channel):
-        """Best-effort WiFi channel setup before ESP-NOW init."""
+        """
+        Put the radio on the ESP-NOW channel before ESP-NOW init.
+
+        CircuitPython has no channel setter. Starting an access point on the
+        channel and stopping it right away leaves the radio there (the approach
+        Adafruit's ESP-NOW guide uses). When connected to a WiFi network the
+        radio has to stay on that network's channel, so it is left alone.
+        """
         try:
             import wifi
-            wifi.radio.configure(channel=channel)
-        except (ImportError, AttributeError, TypeError):
-            try:
-                import network
-                wlan = network.WLAN(network.STA_IF)
-                if not wlan.active():
-                    wlan.active(True)
-            except ImportError:
-                pass
-    
+        except ImportError:
+            return
+        try:
+            wifi.radio.enabled = True
+            if wifi.radio.connected:
+                ap = wifi.radio.ap_info
+                if ap is not None and ap.channel != channel:
+                    print("ESP-NOW MIDI: WiFi is connected on channel", ap.channel,
+                          "- peers on channel", channel, "will not hear this device")
+                return
+            wifi.radio.start_ap(" ", "", channel=channel)
+            wifi.radio.stop_ap()
+        except Exception as exc:
+            print("ESP-NOW MIDI: could not set WiFi channel:", exc)
+
+    # espnow calls
+
+    def _backend_add_peer(self, mac):
+        # channel=0: send on whatever channel the radio is on. A fixed channel
+        # makes every send raise when the radio is elsewhere (e.g. connected
+        # to WiFi); _configure_wifi_channel already moved the radio.
+        peer = espnow.Peer(mac=mac, channel=0)
+        self.e.peers.append(peer)
+        self._peer_objects[mac] = peer
+
+    def _backend_remove_peer(self, mac):
+        peer = self._peer_objects.pop(mac, None)
+        if peer is not None:
+            self.e.peers.remove(peer)
+
+    def _backend_send(self, mac, data):
+        """Send to one peer; raises on failure."""
+        self.e.send(data, self._peer_objects[mac])
+
+    def _backend_receive(self):
+        """Yield (mac, msg) for every packet waiting, without blocking."""
+        while True:
+            packet = self.e.read()
+            if packet is None:
+                return
+            yield bytes(packet.mac), bytes(packet.msg)
+
     def _create_packet(self, status, channel, first_byte, second_byte):
         """
         Create MIDI packet matching C++ midi_message_packet::fromMessage
-        
-        Converts internal message format to 3-byte transmission packet:
-        - Combines status and 0-based channel into statusByte
-        - Ensures data bytes are 7-bit
-        
+
         Returns:
             bytes: Variable length packet (1-3 bytes)
         """
-        # Convert 1-based channel to 0-based
         channel_zero_based = (channel - 1) & 0x0F
-        
+
         # System messages (0xF0-0xFF) don't use channel bits
         if status >= 0xF0:
             status_byte = status
         else:
             status_byte = status | channel_zero_based
-        
+
         data1 = first_byte & 0x7F
         data2 = second_byte & 0x7F
-        
-        # Get actual data size (matches C++ getDataSize())
+
         size = self._get_data_size(status_byte)
-        
         if size == 1:
             return bytes([status_byte])
         elif size == 2:
             return bytes([status_byte, data1])
-        else:  # size == 3
-            return bytes([status_byte, data1, data2])
-    
+        return bytes([status_byte, data1, data2])
+
     def _get_data_size(self, status_byte):
-        """
-        Get the size of actual MIDI data (matches C++ getDataSize())
-        
-        Returns:
-            int: Number of bytes (1, 2, or 3)
-        """
-        status = status_byte & 0xF0
-        
-        # System messages
-        if status_byte >= 0xF0:
-            if status_byte in (MIDI_TIME_CODE, MIDI_SONG_SELECT):
-                return 2  # status + 1 data byte
-            elif status_byte == MIDI_SONG_POS_POINTER:
-                return 3  # status + 2 data bytes
-            elif status_byte in (MIDI_TUNE_REQUEST, MIDI_TIME_CLOCK, 
-                                MIDI_START, MIDI_CONTINUE, MIDI_STOP,
-                                MIDI_ACTIVE_SENSING, MIDI_SYSTEM_RESET):
-                return 1  # status only
-            else:
-                return 3  # default to full size
-        
-        # Channel messages
-        if status in (MIDI_PROGRAM_CHANGE, MIDI_AFTERTOUCH):
-            return 2  # status + 1 data byte
-        else:
-            return 3  # status + 2 data bytes
-    
+        """Size of a short MIDI message (matches C++ getDataSize())."""
+        return _midi_data_size(status_byte)
+
     def add_peer(self, mac_address):
         """
         Add a peer by MAC address
-        
+
         Args:
-            mac_address: bytes object of length 6 (e.g., b'\\xff\\xff\\xff\\xff\\xff\\xff')
-                        or list/tuple of 6 integers
-        
+            mac_address: bytes of length 6 or list/tuple of 6 integers
+
         Returns:
             bool: True if peer was added successfully, False otherwise
         """
         if len(self.peers) >= self._max_peers:
-            print(f"Maximum number of peers reached")
+            print("Maximum number of peers reached")
             return False
-        
-        # Convert to bytes if needed
-        if isinstance(mac_address, (list, tuple)):
-            mac_address = bytes(mac_address)
-        
+
+        mac_address = bytes(mac_address)
         if len(mac_address) != 6:
             print("MAC address must be 6 bytes")
             return False
-        
-        # Check if peer already exists
+
         if mac_address in self.peers:
             print("Peer already registered")
             return False
-        
-        # Debug print (matches C++ output)
+
         mac_str = ':'.join(['%02X' % b for b in mac_address])
         print(f"Adding peer: {mac_str}")
-        
+
         try:
-            self.e.add_peer(mac_address)
-            self.peers.append(mac_address)
-            print(f"Peer added successfully. Total peers: {len(self.peers)}")
-            return True
+            self._backend_add_peer(mac_address)
         except Exception as ex:
-            print(f"Failed to add peer")
+            print("Failed to add peer:", ex)
             return False
-    
+        self.peers.append(mac_address)
+        print(f"Peer added successfully. Total peers: {len(self.peers)}")
+        return True
+
+    def remove_peer(self, mac_address):
+        """
+        Remove one peer. Matches C++ removePeer.
+
+        Returns:
+            bool: True if the peer was registered and is removed
+        """
+        mac_address = bytes(mac_address)
+        if mac_address not in self.peers:
+            return False
+        try:
+            self._backend_remove_peer(mac_address)
+        except Exception:
+            print("Failed to remove peer")
+        self.peers.remove(mac_address)
+        self._last_seen.pop(mac_address, None)
+        return True
+
     def clear_peers(self):
         """
         Remove all registered peers from ESP-NOW
@@ -329,18 +407,20 @@ class ESPNowMidi:
         print("Clearing all peers from ESP-NOW...")
         for peer in self.peers:
             try:
-                self.e.remove_peer(peer)
+                self._backend_remove_peer(peer)
                 mac_str = ':'.join(['%02X' % b for b in peer])
                 print(f"Removed peer: {mac_str}")
             except Exception:
                 print("Failed to remove peer")
         self.peers = []
+        self._peer_objects = {}
+        self._last_seen = {}
         print("All peers cleared")
-    
+
     def get_peers_count(self):
         """Get the number of registered peers"""
         return len(self.peers)
-    
+
     def print_peers(self):
         """Print all registered peers (matches C++ format)"""
         print("=== Registered ESP-NOW Peers ===")
@@ -348,30 +428,84 @@ class ESPNowMidi:
             mac_str = ':'.join(['%02X' % b for b in peer])
             print(f"Peer {i}: {mac_str}")
         print("================================")
-    
+
     def send_to_all_peers(self, data):
         """
         Send data to all registered peers
-        
+
         Args:
             data: bytes object to send
-        
+
         Returns:
             bool: True if sent to at least one peer successfully
         """
-        if not self.peers:
+        if self.e is None or not self.peers:
             return False
-        
+
         success = False
         for peer in self.peers:
             try:
-                self.e.send(peer, data)
+                self._backend_send(peer, data)
                 success = True
-            except Exception as ex:
+            except Exception:
                 pass  # Silent failure like C++ version
-        
+
+        if success:
+            self._last_send_ms = _now_ms()
         return success
-    
+
+    def get_last_send_time(self):
+        """
+        When a packet was last sent (ms, same clock as get_peer_last_seen).
+        Matches C++ getLastSendTime.
+
+        Returns:
+            int or None when nothing was sent yet
+        """
+        return self._last_send_ms
+
+    def get_peer_last_seen(self, mac):
+        """
+        When a peer last sent a valid packet (ms). Matches C++ getPeerLastSeen.
+
+        Returns:
+            int, or None when the MAC is not a peer or nothing arrived from it
+        """
+        mac = bytes(mac)
+        if mac not in self.peers:
+            return None
+        return self._last_seen.get(mac)
+
+    def last_sender_mac(self):
+        """
+        MAC of the peer that sent the last valid packet. Matches C++ lastSenderMac.
+
+        Returns:
+            bytes, or None when nothing was received yet
+        """
+        return self._last_sender_mac
+
+    def send_announce(self, name="", kind=DEVICE_KIND_CLIENT):
+        """
+        Tell peers who this device is with an enomik ANNOUNCE (0x15), like the
+        C++ Client does after begin() and after adding a peer. The dongle keeps
+        the name and tracks online status (Dongle::getPeerName/getPeerStatus).
+
+        Args:
+            name: up to 16 printable ASCII characters
+            kind: DEVICE_KIND_CLIENT or DEVICE_KIND_DONGLE
+
+        Returns:
+            bool: True if sent to at least one peer
+        """
+        name_bytes = bytes(c if 0x20 <= c <= 0x7E else 0x5F
+                           for c in name.encode()[:ANNOUNCE_MAX_NAME])
+        message = bytes([
+            MIDI_SYSEX, ENOMIK_MANUFACTURER_ID, VERSION_MAJOR, VERSION_MINOR,
+            ENOMIK_CMD_ANNOUNCE, kind & 0x7F, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH,
+        ]) + name_bytes + bytes([SYSEX_END])
+        return self.send_sysex(message)
+
     def send_note_on(self, note, velocity, channel):
         """
         Send MIDI Note On message
@@ -662,6 +796,10 @@ class ESPNowMidi:
             return None
 
         mac_key = bytes(mac) if mac is not None else b""
+        now = _now_ms()
+        asm = self._sysex_assembly
+        if asm is not None and now - asm["last_ms"] > SYSEX_REASSEMBLY_TIMEOUT_MS:
+            self._sysex_assembly = None  # fragments stopped arriving
         if frame["seq"] == 0:
             self._sysex_assembly = {
                 "mac": mac_key,
@@ -669,6 +807,7 @@ class ESPNowMidi:
                 "total": frame["total"],
                 "expected_seq": 0,
                 "buffer": bytearray(frame["msg_len"]),
+                "last_ms": now,
             }
 
         asm = self._sysex_assembly
@@ -683,6 +822,7 @@ class ESPNowMidi:
         payload = frame["payload"]
         asm["buffer"][offset:offset + len(payload)] = payload
         asm["expected_seq"] = frame["seq"] + 1
+        asm["last_ms"] = now
 
         if not frame["last"]:
             return None
@@ -704,9 +844,9 @@ class ESPNowMidi:
         Returns:
             tuple: (status, channel, first_byte, second_byte) or None if invalid
         """
-        if len(data) < 1:
+        if len(data) > 3 or not is_midi_packet(data):
             return None
-        
+
         status_byte = data[0]
         data1 = data[1] if len(data) > 1 else 0
         data2 = data[2] if len(data) > 2 else 0
@@ -725,30 +865,40 @@ class ESPNowMidi:
     
     def _on_data_recv(self, mac, msg):
         """
-        Internal callback for processing received MIDI messages
-        Matches C++ OnDataRecv logic
-        
-        Args:
-            mac: bytes, MAC address of sender
-            msg: bytes, received message data
+        Process one received ESP-NOW packet. Matches C++ OnDataRecv: anything
+        that is not a MIDI packet or SysEx frame (other ESP-NOW apps, corrupt
+        data) is ignored and does not add its sender as peer.
         """
-        # Auto peer discovery (matches C++ behavior)
-        if self._auto_peer_discovery and mac not in self.peers:
-            self.add_peer(mac)
-        
-        # SysEx transport frames are always longer than short MIDI (1–3 bytes).
+        if not is_midi_packet(msg):
+            return
+        if mac is not None:
+            mac = bytes(mac)
+            self._last_sender_mac = mac
+            if (self._auto_peer_discovery and mac not in self.peers
+                    and len(self.peers) < self._max_peers):
+                self.add_peer(mac)
+            if mac in self.peers:
+                self._last_seen[mac] = _now_ms()
+
+        # SysEx transport frames are always longer than short MIDI (1-3 bytes).
         if len(msg) > 3:
             complete = self._feed_sysex_frame(mac, msg)
-            if complete is not None and self._on_sysex_handler:
-                self._on_sysex_handler(complete, len(complete))
+            if complete is not None:
+                if self._on_sysex_handler:
+                    self._on_sysex_handler(complete, len(complete))
+                if self._on_sysex_from_handler:
+                    self._on_sysex_from_handler(mac, complete, len(complete))
             return
-        
+
         # Parse the packet
         result = self._parse_packet(msg)
         if not result:
             return
         
         status, channel, first_byte, second_byte = result
+
+        if self._on_message_handler:
+            self._on_message_handler(mac, result)
         
         # Route to appropriate handler (matches C++ switch statement)
         if status == MIDI_NOTE_ON:
@@ -823,7 +973,7 @@ class ESPNowMidi:
         """
         Poll for incoming MIDI messages and dispatch to handlers
         
-        Note: Unlike C++, CircuitPython requires polling in main loop.
+        Note: Unlike C++, CircuitPython has no receive callback; poll in the main loop.
         Call this method regularly (e.g., in while True loop)
         
         Usage:
@@ -831,13 +981,11 @@ class ESPNowMidi:
                 midi.read()
                 # your code here
         """
-        if not self.e:
+        if self.e is None:
             return
-        
-        # Process all pending messages
-        for mac, msg in self.e:
+        for mac, msg in self._backend_receive():
             self._on_data_recv(mac, msg)
-    
+
     # Handler setters (matching C++ setHandleXXX methods)
     
     def set_handle_note_on(self, callback):
@@ -1013,6 +1161,28 @@ class ESPNowMidi:
             callback: function(data, length) where data is bytes
         """
         self._on_sysex_handler = callback
+
+    def set_handle_sysex_from(self, callback):
+        """
+        Like set_handle_sysex, with the sender MAC. Called after the
+        set_handle_sysex handler when both are set. Matches C++ setHandleSysExFrom.
+
+        Args:
+            callback: function(mac, data, length)
+        """
+        self._on_sysex_from_handler = callback
+
+    def set_handle_message(self, callback):
+        """
+        One handler for every received short MIDI message, before the per-type
+        handlers. Matches C++ setHandleMessage.
+
+        Args:
+            callback: function(mac, message) where message is the tuple
+                      (status, channel, first_byte, second_byte); channel is
+                      1-16, or 0 for system messages
+        """
+        self._on_message_handler = callback
     
     def has_peer(self, mac):
         """
@@ -1030,6 +1200,15 @@ class ESPNowMidi:
         return mac in self.peers
     
     def deinit(self):
-        """Clean up ESP-NOW resources"""
-        if self.e:
-            self.e.active(False)
+        """Clean up ESP-NOW resources and forget peers and partial SysEx."""
+        if self.e is not None:
+            try:
+                self.clear_peers()
+                self.e.deinit()
+            except Exception:
+                pass
+        self.e = None
+        self.peers = []
+        self._peer_objects = {}
+        self._last_seen = {}
+        self._sysex_assembly = None

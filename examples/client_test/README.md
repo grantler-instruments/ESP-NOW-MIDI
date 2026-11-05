@@ -4,8 +4,8 @@ A deterministic device-under-test firmware for the test wizard
 (`scripts/wizard`). It is **not** a product sketch — its behaviour is fixed so a
 host script can drive and verify it step by step.
 
-All interaction with the harness is over **MIDI only** (USB in Phase 1, ESP-NOW
-via the dongle in Phase 2). There is no parallel serial protocol.
+All interaction with the harness is over **MIDI only**: directly over USB and
+through the dongle over ESP-NOW, both at once. There is no parallel serial protocol.
 
 ## Behaviour contract
 
@@ -40,6 +40,6 @@ via the dongle in Phase 2). There is no parallel serial protocol.
   GPIO 10, PWM/LED on GPIO 21.
 
 `HAS_USB_MIDI` is enabled in this example's `config.h`; that is what exposes the
-USB MIDI port used in Phase 1.
+USB MIDI port the wizard talks to directly.
 
 Drive it with `scripts/wizard/run.sh client_test`; see `scripts/wizard/README.md`.

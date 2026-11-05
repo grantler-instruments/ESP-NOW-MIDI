@@ -35,59 +35,12 @@ except ImportError:
 import enomik_sysex as sx
 import tester as t
 from midi_io import CLIENT_PORT_NAMES, DONGLE_PORT_NAMES, MidiLink, cbreak_stdin, find_link, poll_key
+from ui import ENTER, ESC, TTY, Screen, chips, mark, ok_line, section
 
 # Lets the last mark show and the button be released before moving on.
 AUTO_ADVANCE_S = 0.8
 # The firmware stops the raw stream after 10 s without SysEx from the host.
 RAW_KEEPALIVE_S = 4.0
-TTY = sys.stdout.isatty()
-
-ENTER = ("\n", "\r")
-ESC = "\x1b"
-
-
-def mark(ok: bool) -> str:
-    return "\033[32m✔\033[0m" if ok and TTY else ("✔" if ok else "·")
-
-
-def chips(paths: list[str], seen) -> str:
-    labels = {"usb": "USB", "wireless": "Wireless"}
-    return "  ".join(f"{mark(path in seen)} {labels[path]}" for path in paths)
-
-
-def ok_line(text: str, ok: bool) -> str:
-    tag = "OK" if ok else "FAIL"
-    if TTY:
-        tag = f"\033[{32 if ok else 31}m{tag}\033[0m"
-    return f"  [{tag}] {text}"
-
-
-class Screen:
-    """A block of lines redrawn in place (on a terminal) whenever it changes."""
-
-    def __init__(self) -> None:
-        self.lines: list[str] = []
-
-    def draw(self, lines: list[str]) -> None:
-        if lines == self.lines:
-            return
-        self.clear()
-        print("\n".join(lines), flush=True)
-        self.lines = lines
-
-    def clear(self) -> None:
-        if self.lines and TTY:
-            sys.stdout.write(f"\033[{len(self.lines)}F\033[J")
-        self.lines = []
-
-    def note(self, text: str) -> None:
-        """Print a line above the block; the next draw() puts the block back."""
-        lines = self.lines
-        self.clear()
-        print(text, flush=True)
-        if not TTY:
-            return
-        self.draw(lines)
 
 
 class Session:
@@ -337,7 +290,7 @@ class Session:
                         percent = max(0, min(100, value["percent"]))
                         filled = percent // 10
                         bar = f"[{'#' * filled}{'-' * (10 - filled)}] {percent:>3} %  "
-                threshold = f"{mark(pin in reached)} threshold  " if live else ""
+                threshold = f"{mark(True if pin in reached else None)} threshold  " if live else ""
                 lines.append(f"  Pin {pin:<3} {bar}{threshold}{chips(self.paths, state.touch.get(pin, set()))}")
             return lines
 
@@ -370,12 +323,7 @@ class Session:
                     passed_at = passed_at or time.monotonic()
                     if time.monotonic() - passed_at >= AUTO_ADVANCE_S:
                         break
-        self.print_done(render())
-
-    def print_done(self, lines: list[str]) -> None:
-        """Leave the final state of a step in the scrollback."""
-        self.screen.clear()
-        print("\n".join(lines), flush=True)
+        self.screen.done(render())
 
     def summary(self) -> int:
         section("Results")
@@ -416,10 +364,6 @@ class Session:
                 return
             if not input("\nDefault configuration incomplete. Try again? [y/N] ").strip().lower().startswith("y"):
                 return
-
-
-def section(title: str) -> None:
-    print(f"\n=== {title} ===")
 
 
 def open_dongle(args, client: MidiLink) -> MidiLink | None:

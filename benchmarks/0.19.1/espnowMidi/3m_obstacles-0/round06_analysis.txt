@@ -1,0 +1,15 @@
+source_file: round06.txt
+samples: 1000
+min: 4.556000
+max: 29.554000
+mean: 5.989815
+median: 4.910500
+p95: 14.448000
+p99: 24.762170
+sigma_sample: 3.743587
+sigma_population: 3.741715
+p25: 4.783000
+p75: 5.072250
+iqr: 0.289250
+mad: 0.137500
+peak_to_peak: 24.998000

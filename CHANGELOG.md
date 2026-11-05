@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.19.1
+
+- `client_nfc` example: NFC tags send MIDI; map tags from the host over SysEx (`F0 7D 7F 7F 4E …`), including `03` to list all mappings.
+- Fixed: the CircuitPython library used MicroPython's `espnow` API (`active()`, `add_peer()`, `send(mac, msg)`), so `begin()` failed on CircuitPython. It now uses CircuitPython's (`espnow.Peer`, `peers.append()`, `send(msg, peer)`, `read()`); MicroPython is not supported. `begin()` moves the radio to the ESP-NOW channel (6 by default) by briefly starting an access point, and peers follow the radio's channel, so sends no longer fail with a channel error. Every send function returned `False` without sending, and `deinit()` did nothing, while no packet was waiting: an `ESPNow` object with an empty receive buffer counts as false (`len()` is the number of waiting packets). With a full peer table, packets from new senders no longer print `Maximum number of peers reached` each time.
+- CircuitPython: brought up to the 0.19 core. Packets that are not MIDI or SysEx frames are ignored and their sender is not added as peer (`is_midi_packet()`); partial SysEx is dropped after 100 ms without a fragment; calling `begin()` again starts with no peers. New `set_handle_message()`, `set_handle_sysex_from()`, `remove_peer()`, `last_sender_mac()`, `get_peer_last_seen()`, `get_last_send_time()`, and `send_announce(name)`, which gives the dongle the device's name and online status.
+- `examples/hello_midi.py`: called a missing `setup()` and imported MicroPython's `network`; now runs on CircuitPython, announces itself and prints received MIDI.
+
 ## 0.19.0
 
 - Fixed: under sustained sending (hundreds of packets per second) the ESP-NOW driver stopped confirming sends and then refused every send (`ESP_ERR_ESPNOW_NO_MEM`) until reboot; only receiving kept working. Sends now wait for the previous confirmation (`ESP_NOW_MIDI_MAX_IN_FLIGHT`, default 1, up to `ESP_NOW_MIDI_SEND_WAIT_MS` = 5 ms, then dropped and counted in `getSendStats().throttled`); on hardware this survived 175,000 packets at ~350/s where it hung within minutes before. As a safety net, `service()` (called by every send and by Client/Dongle `loop()`) restarts ESP-NOW when nothing was confirmed for `ESP_NOW_MIDI_STALL_MS` (1 s), the second time also Wi-Fi (`getSendStats().restarts` / `wifiRestarts`).

@@ -1,7 +1,7 @@
 #pragma once
 
 // Enable the USB MIDI side of enomik::Client so the wizard can talk to this
-// board directly over USB (Phase 1) before testing the ESP-NOW path (Phase 2).
+// board directly over USB as well as through the dongle over ESP-NOW.
 // Requires a USB-capable board (ESP32-S2 / S3 with TinyUSB).
 #define HAS_USB_MIDI 1
 
@@ -34,7 +34,7 @@
 #define TEST_API_CHANNEL 12
 
 // Heartbeat (SysEx ANNOUNCE) interval while idle. Shorter than the library
-// default of 60 s so the dongle discovers this client within seconds in Phase 2.
+// default of 60 s so the dongle discovers this client within seconds.
 #define TEST_HEARTBEAT_INTERVAL_MS 2000
 
 // Serial dump of the live ESP-NOW peers and send counters (0 = off).
