@@ -25,6 +25,7 @@ header with setup and losses), a `*_analysis.txt` per round and `summary.txt`
 
 | | 1 m, 0 obstacles | 3 m, 0 obstacles | 5 m, 1 obstacle |
 | --- | --- | --- | --- |
+| mean | 5.90 ms | 6.15 ms | 5.88 ms |
 | median | 4.91 ms | 4.93 ms | 4.90 ms |
 | p95 | 13.99 ms | 14.37 ms | 13.77 ms |
 | p99.9 | 29.67 ms | 29.65 ms | 29.65 ms |

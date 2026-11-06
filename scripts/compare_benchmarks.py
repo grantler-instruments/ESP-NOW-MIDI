@@ -72,7 +72,7 @@ def row(version, series, lost, timer):
     median = statistics.median(pooled)
     timer_note = "" if "perf_counter" in timer else " ¹"
     lost_text = "?" if lost is None else str(lost)
-    return (f"| {version}{timer_note} | {len(pooled)} | {lost_text} | {median:.2f} | "
+    return (f"| {version}{timer_note} | {len(pooled)} | {lost_text} | {statistics.fmean(pooled):.2f} | {median:.2f} | "
             f"{percentile(pooled, 0.95):.2f} | {percentile(pooled, 0.99):.2f} | {pooled[-1]:.2f} | "
             f"{statistics.stdev(pooled):.2f} | {j['p95_minus_median']:.2f} | {j['consecutive_delta']:.2f} | "
             f"{j['late_10ms_pct']:.1f} |"), j
@@ -94,8 +94,8 @@ def report(versions, transport):
     for condition in conditions:
         distance, obstacles = condition_key(condition)
         lines += [f"## {distance:g} m, {obstacles} obstacle{'s' if obstacles != 1 else ''}", "",
-                  "| version | samples | lost | median | p95 | p99 | max | sigma | p95−med | Δconsec | late>10 % |",
-                  "|---|---|---|---|---|---|---|---|---|---|---|"]
+                  "| version | samples | lost | mean | median | p95 | p99 | max | sigma | p95−med | Δconsec | late>10 % |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|---|"]
         buckets = []
         for v in versions:
             if condition in data[v]:
