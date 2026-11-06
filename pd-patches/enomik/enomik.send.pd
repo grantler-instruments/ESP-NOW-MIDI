@@ -1,7 +1,7 @@
 #N canvas 100 100 900 700 12;
 #X obj 20 20 inlet;
 #X obj 95 20 r enomik.debug;
-#X obj 20 60 list prepend 240 125 0 19;
+#X obj 20 60 list prepend 240 125 1 0;
 #X obj 20 100 list append 247;
 #X obj 20 140 t a a;
 #X obj 275 60 spigot;

@@ -186,6 +186,7 @@ void setup() {
   _client.begin();
   _client.io.setAnalogReader(readAnalog);
   _client.io.setDigitalReader(readDigital);
+  _client.setReduceJitterAtCostOfLatency(true);
 
   _client.setHandleNoteOn(onNoteOn);
   _client.setHandleNoteOff(onNoteOff);

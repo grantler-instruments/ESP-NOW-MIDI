@@ -14,10 +14,10 @@ from time import monotonic_ns as _monotonic_ns
 def _now_ms():
     return _monotonic_ns() // 1000000
 
-# Keep in sync with version.h
-VERSION_MAJOR = 0
-VERSION_MINOR = 19
-VERSION_PATCH = 1
+# Keep in sync with version.h (timed/jitter buffer not ported to CP yet)
+VERSION_MAJOR = 1
+VERSION_MINOR = 0
+VERSION_PATCH = 0
 VERSION = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
 
 
