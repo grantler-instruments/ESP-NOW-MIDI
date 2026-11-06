@@ -1,0 +1,47 @@
+{
+  "boards": [
+    {
+      "id": "lolin_s2_mini",
+      "label": "LOLIN S2 Mini",
+      "requiresManualBootloader": true,
+      "resetMode": "no_reset",
+      "hardResetAfterFlash": false
+    },
+    {
+      "id": "esp32s2",
+      "label": "ESP32-S2",
+      "requiresManualBootloader": true,
+      "resetMode": "no_reset",
+      "hardResetAfterFlash": false
+    },
+    {
+      "id": "esp32s3",
+      "label": "ESP32-S3",
+      "requiresManualBootloader": false,
+      "resetMode": "usb_reset",
+      "hardResetAfterFlash": true
+    }
+  ],
+  "roles": [
+    {
+      "label": "Dongle",
+      "sketch": "dongle",
+      "description": "interface to MIDI host"
+    },
+    {
+      "label": "Grantler Dongle",
+      "sketch": "grantler_instruments_dongle",
+      "description": "interface to MIDI host with display and menu"
+    },
+    {
+      "label": "Client",
+      "sketch": "client",
+      "description": "board to connect sensors and actuators"
+    },
+    {
+      "label": "Print MAC",
+      "sketch": "print_mac",
+      "description": "prints the MAC address to serial (use this if you are not using a dongle with display)"
+    }
+  ]
+}

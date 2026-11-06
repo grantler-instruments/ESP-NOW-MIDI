@@ -17,7 +17,11 @@ struct PinConfig
     uint8_t pin;
     /** ENOMIK input mode. */
     uint8_t mode;
-    /** Trigger threshold for modes that support one. */
+    /**
+     * Touch pins: 0 = continuous (0-127 normalized between the untouched
+     * reading and the strongest touch seen), 1-127 = on/off, switching on
+     * when the reading changes by this many percent from the untouched reading.
+     */
     uint8_t threshold = 0;
     /** MIDI channel, from 1 to 16. */
     uint8_t midi_channel = 1;

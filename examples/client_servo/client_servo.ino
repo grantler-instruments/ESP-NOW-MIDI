@@ -28,7 +28,7 @@
 #include <ESP32Servo.h>
 
 // GPIO for servo signal (PWM-capable pin for your board)
-#define SERVO_PIN 21 // i ran into issues with the default pin 18, needs to be double checked, but pin 21 works fine
+#define SERVO_PIN 40
 
 // MIDI routing — match your DAW / dongle
 #define SERVO_CC SERVO_PIN
@@ -75,6 +75,7 @@ void setup() {
   _servo.attach(SERVO_PIN, 500, 2400);
   _servo.write(90);
 
+  _client.setName("client_servo"); // optional
   _client.begin();
   // _client.addPeer(peerMacAddress);
   _client.setHandleControlChange(onControlChange);

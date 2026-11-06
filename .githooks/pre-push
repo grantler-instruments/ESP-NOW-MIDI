@@ -1,0 +1,20 @@
+#!/bin/sh
+# Enable with: git config core.hooksPath .githooks
+# Pd patch tests skip when Pure Data is not installed (set PD=/path/to/pd).
+# They run in the wizard venv (mido + python-rtmidi) so the MIDI port test runs too.
+set -e
+
+repo_root="$(git rev-parse --show-toplevel)"
+wizard="$repo_root/scripts/wizard"
+py="$wizard/.venv/bin/python"
+
+if [ ! -x "$py" ]; then
+  echo "Creating isolated venv at scripts/wizard/.venv ..."
+  python3 -m venv "$wizard/.venv"
+fi
+if ! "$py" -c "import mido, rtmidi" >/dev/null 2>&1; then
+  echo "Installing Python dependencies into scripts/wizard/.venv ..."
+  "$py" -m pip install --disable-pip-version-check -q -r "$wizard/requirements.txt"
+fi
+
+"$py" -m unittest discover -s "$repo_root/test/protocol" -p "test_pd_patches.py" -v

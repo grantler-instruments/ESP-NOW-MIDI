@@ -1,0 +1,15 @@
+source_file: round08.txt
+samples: 1000
+min: 4.559000
+max: 29.919000
+mean: 5.983996
+median: 4.918500
+p95: 14.556350
+p99: 24.667450
+sigma_sample: 3.521467
+sigma_population: 3.519706
+p25: 4.796750
+p75: 5.123000
+iqr: 0.326250
+mad: 0.146500
+peak_to_peak: 25.360000

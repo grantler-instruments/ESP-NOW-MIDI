@@ -1,4 +1,4 @@
-"""Thin helpers around mido for the test wizard."""
+"""Thin helpers around mido for the board tester and the client_test wizard."""
 
 from __future__ import annotations
 
@@ -7,19 +7,18 @@ import sys
 import termios
 import time
 import tty
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
 
 import mido
 
-# Returned by wait_for(..., allow_esc=True) when the user presses Esc.
-CANCELLED: Any = object()
-
+# Do not fall back to "enomik": that also matches the opposite device role.
+CLIENT_PORT_NAMES = ["enomik3000_client", "client"]
+DONGLE_PORT_NAMES = ["enomik3000_dongle", "dongle"]
 
 @contextmanager
-def _cbreak_stdin():
-    """Single-key reads (Esc) without waiting for Enter."""
+def cbreak_stdin():
+    """Single-key reads (Enter, Esc, y/n) without waiting for Enter."""
     if not sys.stdin.isatty():
         yield
         return
@@ -32,13 +31,14 @@ def _cbreak_stdin():
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
-def _poll_esc() -> bool:
+def poll_key() -> str | None:
+    """The key pressed since the last call, or None. Needs cbreak_stdin()."""
     if not sys.stdin.isatty():
-        return False
+        return None
     ready, _, _ = select.select([sys.stdin], [], [], 0)
     if not ready:
-        return False
-    return sys.stdin.read(1) == "\x1b"
+        return None
+    return sys.stdin.read(1)
 
 
 @dataclass
@@ -63,18 +63,25 @@ class MidiLink:
     def send(self, msg: mido.Message) -> None:
         self.outport.send(msg)
 
-    def wait_for(self, predicate, timeout: float = 2.0, allow_esc: bool = False):
-        """Return the first matching MIDI message, None on timeout, or CANCELLED."""
+    def wait_for(
+        self,
+        predicate,
+        timeout: float = 2.0,
+        on_message=None,
+    ):
+        """Return the first matching MIDI message, or None on timeout.
+
+        If `on_message` is set, it is called for every incoming message before
+        the predicate runs (useful for logging received values).
+        """
         deadline = time.monotonic() + timeout
-        ctx = _cbreak_stdin() if allow_esc else nullcontext()
-        with ctx:
-            while time.monotonic() < deadline:
-                if allow_esc and _poll_esc():
-                    return CANCELLED
-                for msg in self.inport.iter_pending():
-                    if predicate(msg):
-                        return msg
-                time.sleep(0.005)
+        while time.monotonic() < deadline:
+            for msg in self.inport.iter_pending():
+                if on_message is not None:
+                    on_message(msg)
+                if predicate(msg):
+                    return msg
+            time.sleep(0.005)
         return None
 
 
@@ -93,7 +100,7 @@ def _match(names: list[str], needles: list[str]) -> str | None:
 def find_link(needles: list[str], label: str, allow_prompt: bool = True) -> MidiLink:
     """Open the in/out ports for a device matched by name substrings.
 
-    `needles` are tried in order (e.g. ["enomik3000_client", "client", "enomik"]).
+    `needles` are tried in order (e.g. CLIENT_PORT_NAMES).
     Falls back to an interactive picker when nothing matches and a TTY is present.
     """
     inputs, outputs = list_ports()

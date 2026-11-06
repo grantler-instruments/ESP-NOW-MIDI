@@ -1,5 +1,7 @@
 # ESP-NOW-MIDI
 
+![ESP-NOW MIDI topology: MIDI hosts connected via USB to ESP-NOW MIDI dongles, which talk wirelessly to multiple ESP32 boards](docs/images/topology.svg)
+
 Library for sending and receiving MIDI messages via the ESP-NOW protocol.
 A typical setup uses two ESP-NOW capable boards: a USB MIDI **dongle** connected to your computer (or other USB MIDI host), and one or more remote ESP boards. The dongle shows up as a class-compliant MIDI device, use it with any DAW, Max, pd, Processing, openFrameworks, game engines that support MIDI, or even in the browser or on a phone.
 
@@ -30,6 +32,13 @@ Full guide: [grantler-instruments.github.io/ESP-NOW-MIDI](https://grantler-instr
 - **`enomik::Client`**: SysEx-configurable MIDI client — map pins to MIDI (e.g. digital input → CC) without hard-coding every route. Works with the [enomik web app](https://grantler-instruments.github.io/enomik-app/).
 - **MIDI wrapper**: ESP-NOW setup plus a common interface for USB and ESP-NOW MIDI.
 - **`enomik::Dongle`**: USB MIDI ↔ ESP-NOW bridge for a host-connected board. Optional status display via `Dongle::Display` + `setDisplay()`.
+- **SysEx over ESP-NOW**: MIDI SysEx up to 1024 bytes, fragmented into versioned frames (240-byte payloads). Dongle bridges USB ↔ ESP-NOW SysEx; Enomik *config* SysEx (`F0 7D … F7`) stays USB-only, and the dongle answers part of it itself (MAC, peers, version, reset).
+
+### SysEx transport notes
+
+- Short MIDI remains 1–3 raw bytes. Packets longer than 3 bytes must be SysEx frames (`0xF0` marker + flags/seq/total/msg_len + payload); see `include/esp_now_midi_sysex.h`.
+- Use `esp_now_midi::sendSysex` / `setHandleSysEx` (or `enomik::Client::sendSysEx` / `setHandleSysEx`). Large sends are sequential and may briefly delay voice messages; there is no ACK/retry.
+- ESP-NOW SysEx on a Client does **not** feed the Enomik config IO — only the user SysEx callback.
 
 ## Logging
 
@@ -149,7 +158,9 @@ This repo uses Semantic Versioning — see [CHANGELOG.md](CHANGELOG.md). Since 1
 
 ## Contributing
 
-Bugs and PRs are welcome on GitHub. Before tagging a release, run the interactive hardware test wizard (`examples/client_test` + `examples/dongle`); see [scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/README.md).
+Bugs and PRs are welcome on GitHub. Before tagging a release, run the interactive client_test wizard (`examples/client_test` + `examples/dongle`, `scripts/wizard/run.sh client_test`); see [scripts/wizard/README.md](https://github.com/grantler-instruments/ESP-NOW-MIDI/blob/main/scripts/wizard/README.md).
+
+Enable the git hooks once per clone with `git config core.hooksPath .githooks`. The pre-commit hook checks that versions and SysEx constants are in sync (`scripts/check_versions.py`, `scripts/check_sysex_constants.py`). The pre-push hook runs the Pd patch tests (`test/protocol/test_pd_patches.py`) in `scripts/wizard/.venv`, which it creates on first push; they are skipped when Pure Data is not installed (set `PD=/path/to/pd` if it is not found).
 
 ## License
 

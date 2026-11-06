@@ -10,6 +10,7 @@
 #include "../include/esp_now_midi_log.h"
 #include "../include/esp_now_midi_compat.h"
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 
 #define MAC_ADDRESS_SIZE 6
@@ -110,6 +111,44 @@ inline void macPrint(const uint8_t mac[MAC_ADDRESS_SIZE]) {
 // Log MAC address (alias of macPrint)
 inline void macPrintln(const uint8_t mac[MAC_ADDRESS_SIZE]) {
     EspNowMidiLog::mac("", mac);
+}
+
+// USB string descriptors hold at most 32 characters (Adafruit TinyUSB buffer).
+static constexpr size_t USB_SERIAL_MAX_LENGTH = 32;
+// Name characters kept after "<MAC>-": whatever is left of the 32.
+static constexpr size_t USB_SERIAL_SUFFIX_MAX = USB_SERIAL_MAX_LENGTH - 2 * MAC_ADDRESS_SIZE - 1;
+
+// Writes "<MAC>-<suffix>", e.g. "48F6EE7A42D2-client_test", or just the MAC without
+// a suffix. Characters other than A-Z a-z 0-9 _ - become '_' (Windows builds device
+// IDs from the serial and refuses some characters).
+inline void formatUsbSerial(char *out, size_t size, const uint8_t mac[MAC_ADDRESS_SIZE], const char *suffix) {
+    if (!out || size == 0) return;
+    snprintf(out, size, "%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    if (!suffix || !suffix[0]) return;
+    size_t len = strlen(out);
+    if (len + 1 < size) out[len++] = '-';
+    for (size_t i = 0; suffix[i] && i < USB_SERIAL_SUFFIX_MAX && len + 1 < size; i++) {
+        const char c = suffix[i];
+        out[len++] = (isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-') ? c : '_';
+    }
+    out[len] = '\0';
+}
+
+// USB serial number from the WiFi STA MAC plus a role or name, e.g.
+// "48F6EE7A42D2-client_test". macOS caches a MIDI port name per serial: with the
+// role/name in it, a board that changes firmware gets the right name at once.
+inline const char *usbSerialFromMac(const char *suffix = nullptr) {
+    static char serial[USB_SERIAL_MAX_LENGTH + 1] = "";
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
+    uint8_t mac[MAC_ADDRESS_SIZE];
+    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+        formatUsbSerial(serial, sizeof(serial), mac, suffix);
+    }
+#else
+    (void)suffix;
+#endif
+    return serial;
 }
 
 } // namespace enomik

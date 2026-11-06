@@ -12,6 +12,7 @@ void handleEvent(AceButton *, uint8_t, uint8_t);
 void setup() {
   Serial.begin(115200);
   delay(1000);
+  _client.setName("client_buttons"); // optional
   _client.begin();
   uint8_t peerMacAddress[6] = { 0x84, 0xF7, 0x03, 0xF2, 0x54, 0x62 };
   _client.addPeer(peerMacAddress);

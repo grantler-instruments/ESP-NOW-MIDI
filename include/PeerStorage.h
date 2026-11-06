@@ -11,10 +11,10 @@
 
 #include <cstdint>
 #include <cstring>
+#include "./esp_now_midi_helpers.h"
 #include "./esp_now_midi_log.h"
 
 #define MAC_ADDRESS_SIZE 6
-#define MAX_PEERS 20
 
 namespace enomik {
 
@@ -43,6 +43,10 @@ public:
 #endif
     }
 
+    // Owns the NVS handle (closed in the destructor): a copy would close it twice
+    PeerStorage(const PeerStorage &) = delete;
+    PeerStorage &operator=(const PeerStorage &) = delete;
+
 #if defined(ESP_PLATFORM) && !defined(ARDUINO)
     ~PeerStorage() {
         if (initialized) {
@@ -58,6 +62,12 @@ public:
         }
 
 #ifdef ARDUINO
+        if (eepromAddr + sizeof(StorageFormat) > eepromSize) {
+            EspNowMidiLog::e("PeerStorage: %u bytes at %u do not fit in EEPROM size %u",
+                             static_cast<unsigned>(sizeof(StorageFormat)),
+                             static_cast<unsigned>(eepromAddr), static_cast<unsigned>(eepromSize));
+            return false;
+        }
         if (!EEPROM.begin(eepromSize)) {
             EspNowMidiLog::e("PeerStorage: Failed to initialize EEPROM");
             return false;
@@ -80,6 +90,8 @@ public:
             EspNowMidiLog::e("PeerStorage: nvs_open failed: %d", static_cast<int>(err));
             return false;
         }
+#else
+        (void)eepromSize;
 #endif
 
         load();
@@ -206,18 +218,27 @@ private:
 #if defined(ESP_PLATFORM) && !defined(ARDUINO)
     nvs_handle_t nvsHandle;
     char nvsKey[16];
+#elif !defined(ARDUINO)
+    StorageFormat ramStore_{};
+    bool ramValid_ = false;
 #endif
 
     void load() {
         StorageFormat storage;
+        bool found = false;
 
 #ifdef ARDUINO
         EEPROM.get(eepromAddr, storage);
-        bool found = true;
+        found = true;
 #elif defined(ESP_PLATFORM)
         size_t length = sizeof(storage);
         esp_err_t err = nvs_get_blob(nvsHandle, nvsKey, &storage, &length);
-        bool found = (err == ESP_OK && length == sizeof(storage));
+        found = (err == ESP_OK && length == sizeof(storage));
+#else
+        found = ramValid_;
+        if (found) {
+            storage = ramStore_;
+        }
 #endif
 
         if (!found || storage.validFlag != VALID_FLAG) {
@@ -258,6 +279,9 @@ private:
         if (err != ESP_OK) {
             EspNowMidiLog::e("PeerStorage: nvs_commit failed: %d", static_cast<int>(err));
         }
+#else
+        ramStore_ = storage;
+        ramValid_ = true;
 #endif
     }
 

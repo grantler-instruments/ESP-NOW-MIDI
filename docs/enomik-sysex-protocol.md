@@ -2,6 +2,8 @@
 
 The enomik configuration protocol lets a host configure an ESP-NOW MIDI client over **MIDI System Exclusive (SysEx)**. It is implemented in firmware by `enomik::Client` / `enomik::IO` and used by the [enomik web app](https://grantler-instruments.github.io/enomik-app/) and the library test wizard.
 
+The dongle (`enomik::Dongle`) answers a subset from its USB host: `GET_MAC`, `ADD_PEER`, `GET_PEER`, `GET_ALL_PEERS`, `RESET` and `GET_VERSION`. Its peers are the live ESP-NOW list, auto-discovered clients included. `RESET` removes all peers (live and stored) and turns power save off; auto-discovered clients come back as soon as they send again. Every other command gets `ERROR_RESPONSE` with `NOT_READY` (`0x05`). Config SysEx sent to the dongle is never forwarded to clients. More commands can be added with `Dongle::sysExHandler()`.
+
 All multi-byte values in SysEx payloads are **7-bit** (0–127), as required by MIDI.
 
 ## Source code
@@ -44,9 +46,12 @@ When building messages for Web MIDI / `mido`, the inner data is everything **bet
 
 | Kind | Rule | Range (current) |
 |---|---|---|
-| Request | assigned sequentially | `0x01` … `0x10` |
-| Success response | **request + 64** (`0x40`) | `0x41` … `0x50` |
+| Request | assigned sequentially | `0x01` … `0x12`, `0x16` |
+| Success response | **request + 64** (`0x40`) | `0x41` … `0x52`, `0x56` |
+| Notification | never answered | `0x15` (ANNOUNCE, device → device), `0x17` (RAW_VALUE, device → host) |
 | Error response | fixed **`0x7F`** | always `0x7F` |
+
+`0x13` and `0x14` are reserved.
 
 **Reserved:** request `0x3F` must not be used — its success pair would be `0x7F`, which is reserved for errors. Future requests should stay ≤ `0x3E` if the `+ 64` rule is kept.
 
@@ -63,13 +68,16 @@ When building messages for Web MIDI / `mido`, the inner data is everything **bet
 | `0x07` | ADD_PEER | [12 MAC nibbles](#mac-address-encoding) (not 6 raw octets) | `0x47` + `1` on success; [errors](#errors) on failure |
 | `0x08` | GET_ALL_PEERS | (none) | one `0x48` + [peer entry](#peer-entry-payload) per peer, then empty `0x48` |
 | `0x09` | RESET | (none) | `0x49` (empty) |
-| `0x0A` | GET_VERSION | (none) | `0x4A` + major + minor |
+| `0x0A` | GET_VERSION | (none) | `0x4A` + major + minor + patch |
 | `0x0B` | GET_PEER | index (1 byte) | `0x4B` + peer entry, or [error](#errors) |
-| `0x0C` | GET_CONFIG | (none) | all `0x44` pin configs, then all `0x48` peer entries, then `0x4E` loopback, then `0x50` power-save, then empty `0x4C` |
+| `0x0C` | GET_CONFIG | (none) | all `0x44` pin configs, then all `0x48` peer entries, then `0x4E` loopback, then `0x50` power-save, then `0x52` name, then empty `0x4C` |
 | `0x0D` | SET_MIDI_LOOPBACK | `0`=off or `1`=on | `0x4D` + same byte, or [error](#errors) |
 | `0x0E` | GET_MIDI_LOOPBACK | (none) | `0x4E` + `0`/`1` |
 | `0x0F` | SET_POWER_SAVE | `0`=off or `1`=on | `0x4F` + same byte, or [error](#errors) |
 | `0x10` | GET_POWER_SAVE | (none) | `0x50` + `0`/`1` |
+| `0x11` | SET_NAME | [name](#name-payload) (0–16 bytes, empty = clear) | `0x51` + effective name, or [error](#errors) |
+| `0x12` | GET_NAME | (none) | `0x52` + effective name |
+| `0x16` | SET_RAW_STREAM | pin + enable + interval (3 bytes) | `0x56` + pin + enable + effective interval, then [RAW_VALUE](#raw-stream) frames while on, or [error](#errors) |
 
 ### Pin config payload
 
@@ -79,7 +87,7 @@ Used in SET (`0x01`) requests and in pin-config success responses (`0x41`, `0x42
 |---|---|---|
 | 0 | pin | GPIO pin number |
 | 1 | mode | [Pin mode](#pin-modes) |
-| 2 | threshold | Debounce / analog threshold (device-specific) |
+| 2 | threshold | Touch pins: `0` = continuous, `1`–`127` = on/off at this % change ([touch inputs](#touch-inputs)). Ignored by other modes. |
 | 3 | midi_channel | MIDI channel 1–16 |
 | 4 | midi_type | MIDI status ÷ 2 (see [MIDI type](#midi-type-encoding)) |
 | 5 | note_or_cc | Note number or CC number |
@@ -230,9 +238,10 @@ One-shot full board snapshot for **pins + peers + device flags** (v0.14+; v0.13 
 2. Every stored peer as `0x48` (same [peer entry](#peer-entry-payload) as GET_ALL_PEERS).
 3. One `0x4E` + loopback byte (same payload as [GET_MIDI_LOOPBACK](#get_midi_loopback-0x4e)).
 4. One `0x50` + power-save byte (same payload as [GET_POWER_SAVE](#get_power_save-0x50)).
-5. Empty `0x4C` — **done** (no separate empty `0x44` / `0x48` in this stream).
+5. One `0x52` + client name (same payload as [GET_NAME](#get_name-0x52), v0.19+).
+6. Empty `0x4C` — **done** (no separate empty `0x44` / `0x48` in this stream).
 
-Order is always **pins, peers, loopback, power-save**. Empty board on v0.14+ → flag responses (usually `0`) then empty `0x4C`. Older firmware may omit newer flag responses and end on `0x4C` only. Hosts should ignore unknown mid-stream response cmds until `0x4C`.
+Order is always **pins, peers, loopback, power-save, name**. Empty board on v0.14+ → flag responses (usually `0`) then empty `0x4C`. Older firmware may omit newer flag responses and end on `0x4C` only. Hosts should ignore unknown mid-stream response cmds until `0x4C`.
 
 ### SET_MIDI_LOOPBACK → `0x4D`
 
@@ -250,13 +259,93 @@ Payload: one byte, `0` (off) or `1` (on). Other values → [DECODE_FAILED](#erro
 
 Payload: one byte, `0` or `1`.
 
+### SET_NAME → `0x51`
+
+<a id="name-payload"></a>Payload: the name as raw bytes, printable ASCII (`0x20`–`0x7E`), at most 16, no terminator. Longer names or other bytes → [DECODE_FAILED](#error-codes). An empty payload clears the app override. Success returns the **effective** name in `0x51` (after clearing: the sketch default).
+
+The effective name is the app override if one is stored, else the sketch's `Client::setName()` default, else `"enomik"`. The override is stored in NVS and survives reboots. It is dropped by RESET, an empty SET_NAME, or flashing a different firmware (the client compares the firmware's ELF SHA-256 on boot), so a new sketch always starts with its own name.
+
+```
+Set "pad left":  F0 7D 00 13 11 70 61 64 20 6C 65 66 74 F7
+Response:        F0 7D 00 13 51 70 61 64 20 6C 65 66 74 F7
+Clear override:  F0 7D 00 13 11 F7
+```
+
+### GET_NAME → `0x52`
+
+Payload: effective name (0–16 printable ASCII bytes).
+
 ### RESET → `0x49`
 
-Empty payload. Clears pin configs and invokes device reset hooks.
+Empty payload. Clears pin configs, stored flags and the name override, and invokes device reset hooks.
 
 ### GET_VERSION → `0x4A`
 
-Payload: major (1 byte), minor (1 byte) — protocol/library version.
+Payload: major (1 byte), minor (1 byte), patch (1 byte, v0.19+) — protocol/library version. Older firmware sends only major and minor; hosts should read the first two bytes and treat patch as optional.
+
+## Touch inputs
+
+Raw touch readings differ by chip: about 10–80 on the ESP32, lower on touch; about 10,000–200,000+ on the ESP32-S2/S3/P4, higher on touch. The C3/C6/H2 have no touch sensor. So the firmware works with the **change from the untouched reading** (baseline) in the touch direction, and the same pin config behaves the same on every chip:
+
+- **Baseline:** average of 16 readings when the pin is configured or the device boots, so keep fingers off the pad then. It follows slow drift (temperature, humidity) while the pad is not touched. A SET_PIN_CONFIG that changes only the threshold keeps the baseline; any other change measures it again.
+- **Threshold `0` (continuous):** 0 at the baseline, 127 at the strongest touch seen since the baseline was measured (at least 5 % change, `TOUCH_MIN_PEAK_PCT`), mapped onto min/max (min > max inverts). The first touch after boot reads 127 until a firmer one raises the peak.
+- **Threshold `1`–`127` (on/off):** sends max when the change reaches threshold %, min when it falls below ¾ of it.
+
+To tune a pad, use the [raw stream](#raw-stream): touch it, read `percent`, and set the threshold to about half of what a light touch reaches.
+
+## Raw stream
+
+Live readings of input pins, e.g. for a tuning view in an app: turn it on with SET_RAW_STREAM, adjust the pin with SET_PIN_CONFIG while frames keep coming, turn it off.
+
+**SET_RAW_STREAM (`0x16`)** payload:
+
+| Byte | Value |
+|---|---|
+| 0 | pin, or `0x7F` for every configured input pin |
+| 1 | `1` on, `0` off |
+| 2 | frame interval in 5 ms units; `0` = 50 ms; shorter than 20 ms is raised to 20 ms |
+
+The response `0x56` repeats pin and enable with the interval in effect. Turning it on for a pin that is not a configured input answers [PIN_NOT_FOUND](#error-codes). The stream is not stored: it ends with SET_RAW_STREAM off, RESET, a reboot, or **10 s without any SysEx from the host**. Send SET_RAW_STREAM on again every few seconds as a keepalive.
+
+**RAW_VALUE (`0x17`)**, one per streamed pin each interval, never answered:
+
+| Byte | Field | Value |
+|---|---|---|
+| 0 | pin | |
+| 1 | mode | [Pin mode](#pin-modes) |
+| 2–6 | raw | last reading: `touchRead()`, `analogRead()` or digital 0/1 |
+| 7–11 | baseline | touch: untouched reading; else 0 |
+| 12–16 | peak | touch continuous: change from baseline that maps to 127; else 0 |
+| 17 | percent | touch: change from baseline in %, at most 127; else 0 |
+| 18 | norm | reading as 0–127 (touch threshold mode: 0 / 127) |
+| 19 | threshold | the pin's threshold |
+| 20 | active | touch threshold mode: `1` while on |
+
+32-bit values are 5 bytes of 7 bits, most significant first: `value = b0<<28 | b1<<21 | b2<<14 | b3<<7 | b4`.
+
+```
+Stream pin 4 every 50 ms:  F0 7D 00 13 16 04 01 0A F7
+Response:                  F0 7D 00 13 56 04 01 0A F7
+Stop:                      F0 7D 00 13 16 04 00 00 F7
+```
+
+Frames go to USB like every config reply, so the client must be connected over USB.
+
+## ANNOUNCE (`0x15`)
+
+A device tells its ESP-NOW peers who it is. It is a notification: receivers never answer, and the dongle never forwards it to the USB host. A Client sends it after `begin()`, after a peer is added, and as heartbeat when it sent nothing else over ESP-NOW for `setHeartbeatInterval()` (default 60 s).
+
+| Byte | Value |
+|---|---|
+| 0 | kind: `0x00` client, `0x01` dongle |
+| 1–3 | library version: major, minor, patch |
+| 4… | name, 0–16 printable ASCII bytes |
+
+```
+F0 7D 00 13 15 00 00 13 00 63 6C 69 65 6E 74 5F 74 65 73 74 F7   ← client "client_test", v0.19.0
+```
+
+The dongle keeps the last announce per peer (`Dongle::getPeerAnnounce()`, `getPeerName()`). Any valid packet from a peer counts as a sign of life: `Dongle::getPeerStatus()` is Online when the peer was heard within the peer timeout (default 180 s), Offline when it announced before but has been silent longer, and Unknown otherwise (including older clients that never announce).
 
 ## Errors
 
@@ -382,6 +471,9 @@ When adding a new command:
 
 | Change | Notes |
 |---|---|
+| v0.19 raw stream + touch | `SET_RAW_STREAM` (`0x16`/`0x56`) and `RAW_VALUE` (`0x17`) notifications; touch threshold is % change from a baseline instead of a raw reading |
+| v0.19 announce | `ANNOUNCE` (`0x15`) replaces the CC 127 = 127 on channel 16 handshake; sent at boot, after pairing and as idle heartbeat |
+| v0.19 client name | `SET_NAME`/`GET_NAME` (`0x11`/`0x12`); `GET_CONFIG` streams `0x52` before empty `0x4C`; GET_VERSION adds patch byte |
 | v0.14 MIDI loopback + power save | `SET_MIDI_LOOPBACK`/`GET_MIDI_LOOPBACK` (`0x0D`/`0x0E`); `SET_POWER_SAVE`/`GET_POWER_SAVE` (`0x0F`/`0x10`); `GET_CONFIG` streams `0x4E` then `0x50` before empty `0x4C` |
 | v0.13 ADD_PEER errors | Failures use `0x7F` with PEER_TABLE_FULL / PEER_ALREADY_EXISTS / OPERATION_FAILED |
 | v0.13 GET_CONFIG | One request streams `0x44` pins + `0x48` peers + empty `0x4C` done |

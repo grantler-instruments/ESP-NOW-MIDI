@@ -32,7 +32,14 @@ namespace esp_now_midi_wifi
 inline bool ensureWifiSta()
 {
 #ifdef ARDUINO
-  if (WiFi.getMode() != WIFI_MODE_STA)
+  // Adds STA to a running access point instead of replacing it
+  const wifi_mode_t mode = WiFi.getMode();
+  if (mode == WIFI_MODE_AP)
+  {
+    WiFi.mode(WIFI_AP_STA);
+    delay(100);
+  }
+  else if (mode != WIFI_MODE_STA && mode != WIFI_MODE_APSTA)
   {
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();

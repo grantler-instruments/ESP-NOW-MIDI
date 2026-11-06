@@ -46,6 +46,7 @@ void setup() {
   DIN_MIDI.setHandleContinue(onDinContinue);
   DIN_MIDI.setHandleStop(onDinStop);
 
+  _client.setName("din_midi_bridge"); // optional
   _client.begin();
   // _client.addPeer(peerMacAddress);
 
@@ -62,9 +63,6 @@ void setup() {
   _client.setHandleStart(            []()                                  { DIN_MIDI.sendStart();                        });
   _client.setHandleContinue(         []()                                  { DIN_MIDI.sendContinue();                     });
   _client.setHandleStop(             []()                                  { DIN_MIDI.sendStop();                         });
-
-  // Register with the dongle
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

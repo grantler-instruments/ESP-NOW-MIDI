@@ -160,4 +160,29 @@ private:
 
 #endif
 
+    inline void savePowerSavePreference(bool enabled)
+    {
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
+        Preferences prefs;
+        prefs.begin("enomik", false);
+        prefs.putUChar("pwr_save", enabled ? 1 : 0);
+        prefs.end();
+#else
+        (void)enabled;
+#endif
+    }
+
+    inline bool loadPowerSavePreference()
+    {
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
+        Preferences prefs;
+        prefs.begin("enomik", true);
+        const uint8_t value = prefs.getUChar("pwr_save", 0);
+        prefs.end();
+        return value != 0;
+#else
+        return false;
+#endif
+    }
+
 } // namespace enomik

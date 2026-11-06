@@ -120,6 +120,24 @@ class TestWizardParserPeers(unittest.TestCase):
         parsed = sx.parse(response(sx.RESP_SET_POWER_SAVE, [0]))
         self.assertEqual(parsed, {"cmd": "power_save", "enabled": False})
 
+    def test_build_name_requests(self):
+        self.assertEqual(
+            sx.build_set_name("pad left"),
+            [sx.MANUFACTURER_ID, sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR, 0x11]
+            + list(b"pad left"),
+        )
+        self.assertEqual(sx.build_set_name("")[3:], [sx.CMD_SET_NAME])
+        self.assertEqual(sx.build_get_name()[3:], [0x12])
+        with self.assertRaises(ValueError):
+            sx.build_set_name("x" * 17)
+
+    def test_parse_name_response(self):
+        parsed = sx.parse(response(sx.RESP_GET_NAME, list(b"client_buttons")))
+        self.assertEqual(parsed, {"cmd": "name", "name": "client_buttons"})
+        parsed = sx.parse(response(sx.RESP_SET_NAME, []))
+        self.assertEqual(parsed, {"cmd": "name", "name": ""})
+        self.assertEqual(sx.RESP_GET_NAME, 0x52)
+
 
 class TestWizardParserAddPeerAndErrors(unittest.TestCase):
     def test_parse_add_peer_ok(self):
@@ -184,7 +202,7 @@ class TestWizardParserMacAndVersion(unittest.TestCase):
 
     def test_parse_version(self):
         parsed = sx.parse(
-            response(sx.RESP_GET_VERSION, [sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR])
+            response(sx.RESP_GET_VERSION, [sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR, 2])
         )
         self.assertEqual(
             parsed,
@@ -192,8 +210,14 @@ class TestWizardParserMacAndVersion(unittest.TestCase):
                 "cmd": "version",
                 "major": sx.PROTOCOL_MAJOR,
                 "minor": sx.PROTOCOL_MINOR,
+                "patch": 2,
             },
         )
+        # Older firmware sends only major.minor
+        parsed = sx.parse(
+            response(sx.RESP_GET_VERSION, [sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR])
+        )
+        self.assertIsNone(parsed["patch"])
 
     def test_rejects_non_enomik_manufacturer(self):
         self.assertIsNone(sx.parse([0x7E, 0, 13, sx.RESP_GET_VERSION, 0, 13]))
@@ -204,3 +228,66 @@ class TestWizardParserMacAndVersion(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWizardAnnounce(unittest.TestCase):
+    def test_build_announce(self):
+        data = sx.build_announce(sx.DEVICE_KIND_CLIENT, (0, 19, 0), "client_test")
+        self.assertEqual(data[:4], [sx.MANUFACTURER_ID, sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR, sx.CMD_ANNOUNCE])
+        self.assertEqual(data[4:8], [sx.DEVICE_KIND_CLIENT, 0, 19, 0])
+        self.assertEqual(bytes(data[8:]).decode("ascii"), "client_test")
+        self.assertTrue(all(0 <= b <= 127 for b in data))
+
+    def test_parse_announce(self):
+        data = sx.build_announce(sx.DEVICE_KIND_DONGLE, (0, 19, 2), "dongle")
+        self.assertEqual(
+            sx.parse(data),
+            {"cmd": "announce", "kind": "dongle", "version": (0, 19, 2), "name": "dongle"},
+        )
+
+    def test_parse_announce_without_name(self):
+        parsed = sx.parse(sx.build_announce(sx.DEVICE_KIND_CLIENT, (0, 19, 0), ""))
+        self.assertEqual((parsed["cmd"], parsed["name"]), ("announce", ""))
+
+    def test_announce_rejects_bad_names(self):
+        with self.assertRaises(ValueError):
+            sx.build_announce(sx.DEVICE_KIND_CLIENT, (0, 19, 0), "x" * 17)
+        with self.assertRaises(ValueError):
+            sx.build_announce(sx.DEVICE_KIND_CLIENT, (0, 19, 0), "tab\there")
+
+    def test_announce_is_not_a_request_with_response(self):
+        self.assertFalse(hasattr(sx, "RESP_ANNOUNCE"))
+
+    def test_build_set_raw_stream(self):
+        self.assertEqual(
+            sx.build_set_raw_stream(4, True, 50),
+            [sx.MANUFACTURER_ID, sx.PROTOCOL_MAJOR, sx.PROTOCOL_MINOR, 0x16, 4, 1, 10],
+        )
+        self.assertEqual(sx.build_set_raw_stream(sx.RAW_STREAM_ALL_PINS, False)[-3:], [0x7F, 0, 0])
+
+    def test_parse_raw_stream_response(self):
+        self.assertEqual(
+            sx.parse(response(sx.RESP_SET_RAW_STREAM, [4, 1, 4])),
+            {"cmd": "raw_stream", "pin": 4, "enabled": True, "interval_ms": 20},
+        )
+
+    def test_parse_raw_value(self):
+        def septets(value: int) -> list[int]:
+            return [(value >> (7 * i)) & 0x7F for i in range(4, -1, -1)]
+
+        payload = [12, 5] + septets(0xFFFFFFF0) + septets(180000) + septets(9000) + [40, 64, 30, 1]
+        self.assertEqual(
+            sx.parse(response(sx.CMD_RAW_VALUE, payload)),
+            {
+                "cmd": "raw_value",
+                "pin": 12,
+                "mode": 5,
+                "raw": 0xFFFFFFF0,
+                "baseline": 180000,
+                "peak": 9000,
+                "percent": 40,
+                "norm": 64,
+                "threshold": 30,
+                "active": True,
+            },
+        )

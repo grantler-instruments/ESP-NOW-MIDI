@@ -39,6 +39,14 @@ CMD_SET_MIDI_LOOPBACK = 0x0D
 CMD_GET_MIDI_LOOPBACK = 0x0E
 CMD_SET_POWER_SAVE = 0x0F
 CMD_GET_POWER_SAVE = 0x10
+CMD_SET_NAME = 0x11
+CMD_GET_NAME = 0x12
+# Device -> device notification (hello and heartbeat), never answered
+CMD_ANNOUNCE = 0x15
+CMD_SET_RAW_STREAM = 0x16
+# Device -> host notification while the raw stream is on, never answered
+CMD_RAW_VALUE = 0x17
+RAW_STREAM_ALL_PINS = 0x7F
 
 # Response codes (request + 64)
 RESP_SET_PIN_CONFIG = CMD_SET_PIN_CONFIG + 0x40
@@ -57,6 +65,9 @@ RESP_SET_MIDI_LOOPBACK = CMD_SET_MIDI_LOOPBACK + 0x40
 RESP_GET_MIDI_LOOPBACK = CMD_GET_MIDI_LOOPBACK + 0x40
 RESP_SET_POWER_SAVE = CMD_SET_POWER_SAVE + 0x40
 RESP_GET_POWER_SAVE = CMD_GET_POWER_SAVE + 0x40
+RESP_SET_NAME = CMD_SET_NAME + 0x40
+RESP_GET_NAME = CMD_GET_NAME + 0x40
+RESP_SET_RAW_STREAM = CMD_SET_RAW_STREAM + 0x40
 
 RESP_ERROR = 0x7F
 
@@ -96,6 +107,14 @@ PEER_ENTRY_RESPONSES = {
 
 PEER_ENTRY_PAYLOAD_SIZE = 13
 
+# Client name: printable ASCII (0x20-0x7E), at most 16 characters
+MAX_NAME_LENGTH = 16
+
+# Device kind in ANNOUNCE (enomik::DeviceKind)
+DEVICE_KIND_CLIENT = 0x00
+DEVICE_KIND_DONGLE = 0x01
+DEVICE_KIND_NAMES = {DEVICE_KIND_CLIENT: "client", DEVICE_KIND_DONGLE: "dongle"}
+
 # Pin modes (enomik_io.h)
 MODE_INPUT = 0x00
 MODE_OUTPUT = 0x01
@@ -108,6 +127,7 @@ MODE_INPUT_TOUCH = 0x05
 MIDI_NOTE_OFF = 0x80
 MIDI_NOTE_ON = 0x90
 MIDI_CONTROL_CHANGE = 0xB0
+MIDI_PITCH_BEND = 0xE0
 
 
 def _header(cmd: int) -> list[int]:
@@ -130,6 +150,11 @@ def _nibbles_to_mac(nibbles: list[int]) -> list[int]:
 
 
 # --- Builders ----------------------------------------------------------------
+def build_raw(cmd: int, payload: list[int] | None = None, major: int = PROTOCOL_MAJOR) -> list[int]:
+    """Any command with any payload, e.g. to test the firmware's error replies."""
+    return [MANUFACTURER_ID, major, PROTOCOL_MINOR, cmd] + list(payload or [])
+
+
 def build_get_mac() -> list[int]:
     return _header(CMD_GET_MAC)
 
@@ -168,6 +193,41 @@ def build_set_power_save(enabled: bool) -> list[int]:
 
 def build_get_power_save() -> list[int]:
     return _header(CMD_GET_POWER_SAVE)
+
+
+def build_set_name(name: str) -> list[int]:
+    """Override the client name. An empty name clears the override."""
+    data = list(name.encode("ascii"))
+    if len(data) > MAX_NAME_LENGTH or any(b < 0x20 or b > 0x7E for b in data):
+        raise ValueError(f"name must be printable ASCII, at most {MAX_NAME_LENGTH} characters")
+    return _header(CMD_SET_NAME) + data
+
+
+def build_announce(kind: int, version: tuple[int, int, int], name: str) -> list[int]:
+    if len(name) > MAX_NAME_LENGTH or not all(0x20 <= ord(c) <= 0x7E for c in name):
+        raise ValueError("name must be at most 16 printable ASCII characters")
+    return _header(CMD_ANNOUNCE) + [kind, *version] + list(name.encode("ascii"))
+
+
+def build_get_name() -> list[int]:
+    return _header(CMD_GET_NAME)
+
+
+def build_set_raw_stream(pin: int, enable: bool, interval_ms: int = 0) -> list[int]:
+    """Start/stop RAW_VALUE frames for one pin (or RAW_STREAM_ALL_PINS).
+
+    interval_ms is sent in 5 ms units; 0 = firmware default (50 ms), minimum 20 ms.
+    The firmware stops on its own after 10 s without any SysEx from the host,
+    so re-send this as a keepalive while streaming.
+    """
+    return _header(CMD_SET_RAW_STREAM) + [pin & 0x7F, 1 if enable else 0, min(interval_ms // 5, 0x7F)]
+
+
+def _septets32(data: list[int]) -> int:
+    value = 0
+    for b in data:
+        value = (value << 7) | (b & 0x7F)
+    return value
 
 
 def build_get_peer(index: int) -> list[int]:
@@ -269,6 +329,39 @@ def parse(data: list[int]) -> dict | None:
     if cmd in (RESP_SET_POWER_SAVE, RESP_GET_POWER_SAVE) and len(payload) >= 1:
         return {"cmd": "power_save", "enabled": bool(payload[0])}
 
+    if cmd == CMD_ANNOUNCE and len(payload) >= 4:
+        return {
+            "cmd": "announce",
+            "kind": DEVICE_KIND_NAMES.get(payload[0], f"unknown_0x{payload[0]:02X}"),
+            "version": tuple(payload[1:4]),
+            "name": bytes(payload[4:]).decode("ascii", errors="replace"),
+        }
+
+    if cmd == RESP_SET_RAW_STREAM and len(payload) >= 3:
+        return {
+            "cmd": "raw_stream",
+            "pin": payload[0],
+            "enabled": bool(payload[1]),
+            "interval_ms": payload[2] * 5,
+        }
+
+    if cmd == CMD_RAW_VALUE and len(payload) == 21:
+        return {
+            "cmd": "raw_value",
+            "pin": payload[0],
+            "mode": payload[1],
+            "raw": _septets32(payload[2:7]),
+            "baseline": _septets32(payload[7:12]),
+            "peak": _septets32(payload[12:17]),
+            "percent": payload[17],
+            "norm": payload[18],
+            "threshold": payload[19],
+            "active": bool(payload[20]),
+        }
+
+    if cmd in (RESP_SET_NAME, RESP_GET_NAME):
+        return {"cmd": "name", "name": bytes(payload).decode("ascii", errors="replace")}
+
     if cmd == RESP_CLEAR_PIN_CONFIGS:
         return {"cmd": "clear_pin_configs"}
 
@@ -283,6 +376,7 @@ def parse(data: list[int]) -> dict | None:
             "cmd": "version",
             "major": payload[0] if len(payload) > 0 else None,
             "minor": payload[1] if len(payload) > 1 else None,
+            "patch": payload[2] if len(payload) > 2 else None,
         }
 
     if cmd == RESP_ADD_PEER and len(payload) >= 1 and payload[0] == 1:

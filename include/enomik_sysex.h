@@ -24,6 +24,8 @@ namespace enomik
         using PeerQueryCallback = std::function<void(uint8_t index)>;
         using BoolCallback = std::function<void(bool)>;
         using VoidCallback = std::function<void()>;
+        using NameCallback = std::function<void(const char *name)>;
+        using RawStreamCallback = std::function<void(const RawStreamRequest &)>;
         using AddPeerCallback = std::function<AddPeerResult(const uint8_t mac[6])>;
         using SendCallback = std::function<void(const midi_sysex_message &)>;
 
@@ -41,6 +43,9 @@ namespace enomik
         void setOnGetMidiLoopback(VoidCallback cb) { _onGetMidiLoopback = cb; }
         void setOnSetPowerSave(BoolCallback cb) { _onSetPowerSave = cb; }
         void setOnGetPowerSave(VoidCallback cb) { _onGetPowerSave = cb; }
+        void setOnSetName(NameCallback cb) { _onSetName = cb; }
+        void setOnGetName(VoidCallback cb) { _onGetName = cb; }
+        void setOnSetRawStream(RawStreamCallback cb) { _onSetRawStream = cb; }
         void setOnReset(VoidCallback cb) { _onReset = cb; }
         void setOnGetVersion(VoidCallback cb) { _onGetVersion = cb; }
         void setOnSend(SendCallback cb) { _onSend = cb; }
@@ -48,8 +53,7 @@ namespace enomik
         // Main entry point for handling incoming SysEx messages
         void handleSysEx(const uint8_t *data, uint16_t length)
         {
-            // Validate minimum length
-            if (length < SysExPacket::MIN_PACKET_SIZE)
+            if (!data || length < SysExPacket::MIN_PACKET_SIZE || length > SysExPacket::MAX_DATA_SIZE)
             {
                 EspNowMidiLog::w("SysEx: Invalid packet length");
                 sendErrorResponse(0, SysExErrorCode::DECODE_FAILED);
@@ -199,6 +203,36 @@ namespace enomik
             sendByteResponse(responseCmd, enabled ? 1 : 0);
         }
 
+        void sendNameResponse(SysExCommand responseCmd, const char *name)
+        {
+            if (!_onSend)
+                return;
+
+            SysExPacket pkt = SysExEncoder::encodeName(name, responseCmd);
+            midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
+            _onSend(msg);
+        }
+
+        void sendRawStreamResponse(const RawStreamRequest &req)
+        {
+            if (!_onSend)
+                return;
+
+            SysExPacket pkt = SysExEncoder::encodeRawStream(req, SysExCommand::SET_RAW_STREAM_RESPONSE);
+            midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
+            _onSend(msg);
+        }
+
+        void sendRawValue(const RawValue &value)
+        {
+            if (!_onSend)
+                return;
+
+            SysExPacket pkt = SysExEncoder::encodeRawValue(value);
+            midi_sysex_message msg = SysExEncoder::toMidiMessage(pkt);
+            _onSend(msg);
+        }
+
     private:
         PinConfigCallback _onSetPinConfig;
         PinQueryCallback _onGetPinConfig;
@@ -214,6 +248,9 @@ namespace enomik
         VoidCallback _onGetMidiLoopback;
         BoolCallback _onSetPowerSave;
         VoidCallback _onGetPowerSave;
+        NameCallback _onSetName;
+        VoidCallback _onGetName;
+        RawStreamCallback _onSetRawStream;
         VoidCallback _onReset;
         VoidCallback _onGetVersion;
         SendCallback _onSend;
@@ -283,6 +320,24 @@ namespace enomik
             case SysExCommand::GET_POWER_SAVE:
                 handleGetPowerSave();
                 break;
+
+            case SysExCommand::SET_NAME:
+                handleSetName(payload, payloadLen);
+                break;
+
+            case SysExCommand::ANNOUNCE:
+                break; // device-to-device notification, never answered
+
+            case SysExCommand::GET_NAME:
+                handleGetName();
+                break;
+
+            case SysExCommand::SET_RAW_STREAM:
+                handleSetRawStream(payload, payloadLen);
+                break;
+
+            case SysExCommand::RAW_VALUE:
+                break; // device-to-host notification, never answered
 
             case SysExCommand::RESET:
                 handleReset();
@@ -551,6 +606,63 @@ namespace enomik
             else
             {
                 sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_POWER_SAVE), SysExErrorCode::NOT_READY);
+            }
+        }
+
+        void handleSetName(const uint8_t *payload, uint16_t length)
+        {
+            if (!_onSetName)
+            {
+                EspNowMidiLog::w("SysEx: No SET_NAME handler");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_NAME), SysExErrorCode::NOT_READY);
+                return;
+            }
+
+            char name[MAX_NAME_LENGTH + 1];
+            if (SysExDecoder::decodeName(payload, length, name))
+            {
+                EspNowMidiLog::d("SysEx: Setting name '%s'", name);
+                _onSetName(name);
+            }
+            else
+            {
+                EspNowMidiLog::w("SysEx: Failed to decode name");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_NAME), SysExErrorCode::DECODE_FAILED);
+            }
+        }
+
+        void handleGetName()
+        {
+            if (_onGetName)
+            {
+                EspNowMidiLog::d("SysEx: Getting name");
+                _onGetName();
+            }
+            else
+            {
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::GET_NAME), SysExErrorCode::NOT_READY);
+            }
+        }
+
+        void handleSetRawStream(const uint8_t *payload, uint16_t length)
+        {
+            if (!_onSetRawStream)
+            {
+                EspNowMidiLog::w("SysEx: No SET_RAW_STREAM handler");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_RAW_STREAM), SysExErrorCode::NOT_READY);
+                return;
+            }
+
+            RawStreamRequest req;
+            if (SysExDecoder::decodeRawStream(payload, length, req))
+            {
+                EspNowMidiLog::d("SysEx: Raw stream pin %u %s", req.pin, req.enable ? "on" : "off");
+                _onSetRawStream(req);
+            }
+            else
+            {
+                EspNowMidiLog::w("SysEx: Failed to decode raw stream request");
+                sendErrorResponse(static_cast<uint8_t>(SysExCommand::SET_RAW_STREAM), SysExErrorCode::DECODE_FAILED);
             }
         }
 

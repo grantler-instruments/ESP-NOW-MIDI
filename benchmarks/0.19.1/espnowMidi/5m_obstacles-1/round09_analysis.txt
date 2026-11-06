@@ -1,0 +1,15 @@
+source_file: round09.txt
+samples: 1000
+min: 4.649000
+max: 29.628000
+mean: 5.866857
+median: 4.905500
+p95: 13.107800
+p99: 24.880050
+sigma_sample: 3.626775
+sigma_population: 3.624961
+p25: 4.805750
+p75: 5.055000
+iqr: 0.249250
+mad: 0.114500
+peak_to_peak: 24.979000

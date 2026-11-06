@@ -23,3 +23,14 @@ struct SerialStub
 inline SerialStub Serial;
 
 using String = std::string;
+
+inline unsigned long &millisNow()
+{
+    static unsigned long value = 0;
+    return value;
+}
+
+inline unsigned long millis()
+{
+    return millisNow();
+}

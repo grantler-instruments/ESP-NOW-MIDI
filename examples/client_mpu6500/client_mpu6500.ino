@@ -50,6 +50,7 @@ void setup() {
   Serial.begin(115200);
   Wire.begin();
 
+  _client.setName("client_mpu6500"); // optional
   _client.begin();
 
   _mpuOk = myMPU6500.init();
@@ -73,8 +74,6 @@ void setup() {
   myMPU6500.setAccDLPF(MPU6500_DLPF_6);
 
   delay(200);
-
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

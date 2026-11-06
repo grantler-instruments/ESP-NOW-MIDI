@@ -1,25 +1,41 @@
 #pragma once
 
 // Enable the USB MIDI side of enomik::Client so the wizard can talk to this
-// board directly over USB (Phase 1) before testing the ESP-NOW path (Phase 2).
+// board directly over USB as well as through the dongle over ESP-NOW.
 // Requires a USB-capable board (ESP32-S2 / S3 with TinyUSB).
 #define HAS_USB_MIDI 1
 
 // Channel the test client echoes back on. Incoming channel-voice messages on
 // this channel are mirrored straight back out (USB + ESP-NOW). All other
-// channels are ignored by the echo, so button notes (channel 1) never collide
+// channels are ignored by the echo, so I/O CCs (channel 1) never collide
 // with echo traffic.
 #define TEST_ECHO_CHANNEL 10
 
-// Buttons (INPUT_PULLUP, active low). Configured over SysEx by the wizard.
-#define TEST_BUTTON_PIN_A 16
-#define TEST_BUTTON_PIN_B 17
-#define TEST_BUTTON_PIN_C 9
-#define TEST_NOTE_A 60
-#define TEST_NOTE_B 61
-#define TEST_NOTE_C 62
+// Pins configured over SysEx by the wizard (documentation only — not used by
+// this sketch). Digital buttons are INPUT_PULLUP / active low.
+#define TEST_DIGITAL_PIN_A 16  // -> CC 16
+#define TEST_DIGITAL_PIN_B 17  // -> CC 17
+#define TEST_ANALOG_IN_PIN 10  // -> CC 10
+#define TEST_ANALOG_OUT_PIN 21 // <- CC 17 (via MIDI loopback)
+#define TEST_NOTE_PIN 18       // -> note 60
+#define TEST_BEND_PIN 11       // -> pitch bend
 
-// How often (ms) to send a registration handshake to known peers. This lets the
-// dongle auto-discover this client in Phase 2 once the dongle MAC has been
-// stored via the ADD_PEER SysEx in Phase 1.
-#define TEST_HANDSHAKE_INTERVAL_MS 2000
+// Channel the wizard uses to drive fake inputs (CC n = analog level of pin n,
+// note on/off n = press/release pin n, program change = read the pins again).
+// Lets the wizard test all inputs without buttons or a potentiometer.
+#define TEST_FAKE_CHANNEL 15
+
+// Pins 0..TEST_FAKE_PIN_COUNT-1 can be faked.
+#define TEST_FAKE_PIN_COUNT 64
+
+// Program change p on this channel makes the board send API case p with the
+// enomik::Client send functions; channel voice messages go out on TEST_API_CHANNEL.
+#define TEST_API_TRIGGER_CHANNEL 14
+#define TEST_API_CHANNEL 12
+
+// Heartbeat (SysEx ANNOUNCE) interval while idle. Shorter than the library
+// default of 60 s so the dongle discovers this client within seconds.
+#define TEST_HEARTBEAT_INTERVAL_MS 2000
+
+// Serial dump of the live ESP-NOW peers and send counters (0 = off).
+#define TEST_DEBUG_INTERVAL_MS 2000

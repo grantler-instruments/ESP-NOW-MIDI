@@ -20,6 +20,7 @@ extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "starting enomik::Client IDF example");
 
+    g_client.setName("idf_client"); // optional
     if (!g_client.begin())
     {
         ESP_LOGE(TAG, "enomik::Client::begin() failed");

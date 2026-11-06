@@ -44,6 +44,7 @@ void setup() {
     pinMode(_relayPins[i], OUTPUT);
   }
 
+  _client.setName("waveshare_relay"); // optional
   _client.begin();
   _client.addPeer(peerMacAddress);
 
@@ -54,9 +55,6 @@ void setup() {
   _client.setHandlePitchBend(onPitchBend);
   _client.setHandleAfterTouchChannel(onAfterTouch);
   _client.setHandleAfterTouchPoly(onPolyAfterTouch);
-
-  //register at the dongle, by sending a message
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

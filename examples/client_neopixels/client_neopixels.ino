@@ -96,6 +96,7 @@ void setup() {
   _strip.clear();
   _strip.show();
 
+  _client.setName("client_neopixels"); // optional
   _client.begin();
   // _client.addPeer(peerMacAddress);
   _client.setHandleNoteOn(onNoteOn);

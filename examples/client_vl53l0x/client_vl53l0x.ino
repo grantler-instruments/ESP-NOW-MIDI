@@ -33,6 +33,7 @@ void setup() {
   delay(2000);
   Wire.begin();
 
+  _client.setName("client_vl53l0x"); // optional
   _client.begin();
 
   _vl53Ok = lox.begin();
@@ -43,8 +44,6 @@ void setup() {
   Serial.println(F("VL53L0X is connected"));
 
   delay(200);
-
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {

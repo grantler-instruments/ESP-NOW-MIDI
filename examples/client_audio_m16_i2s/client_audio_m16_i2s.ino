@@ -52,13 +52,12 @@ void setup() {
 
   audioStart();
 
+  _client.setName("audio_m16_i2s"); // optional
   _client.begin();
   _client.addPeer(peerMacAddress);
   _client.espnowMIDI.setHandleNoteOn(onNoteOn);
   _client.espnowMIDI.setHandleNoteOff(onNoteOff);
 
-  delay(1000);
-  _client.sendControlChange(127, 127, 16);
 }
 
 void loop() {
