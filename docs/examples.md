@@ -22,7 +22,7 @@ Pure ESP-IDF ports of the main Client / Dongle / client_test flows are under
 
 - **`client_buttons`**: turns button presses into Note On and Note Off events.
 - **`client_servo`**: controls a servo using MIDI control changes.
-- **`din_midi_bridge`**: bridges five-pin DIN MIDI and ESP-NOW.
+- **`client_din_midi`**: bridges five-pin DIN MIDI and ESP-NOW.
 - **`client_dmx`**: controls DMX fixtures wirelessly.
 - **`client_neopixels`**: drives a WS2812 strip from Note On/Off (pitch → LED
   index, channel → RGB component).
