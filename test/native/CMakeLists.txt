@@ -16,6 +16,7 @@ set(LIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 
 add_executable(native_tests
   test_midi_packet.cpp
+  test_midi_timed_packet.cpp
   test_enomik_sysex.cpp
   test_enomik_sysex_handler.cpp
   test_esp_now_midi_sysex.cpp

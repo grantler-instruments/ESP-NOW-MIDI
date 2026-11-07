@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0
+
+- Optional jitter reduction via timed ESP-NOW frames and a receive-side jitter buffer (`setReduceJitterAtCostOfLatency`)
+
 ## 0.19.1
 
 - `client_nfc` example: NFC tags send MIDI; map tags from the host over SysEx (`F0 7D 7F 7F 4E …`), including `03` to list all mappings.

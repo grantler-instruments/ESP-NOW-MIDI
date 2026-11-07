@@ -1,7 +1,7 @@
 #pragma once
-#define ESP_NOW_MIDI_VERSION_MAJOR 0
-#define ESP_NOW_MIDI_VERSION_MINOR 19
-#define ESP_NOW_MIDI_VERSION_PATCH 1
+#define ESP_NOW_MIDI_VERSION_MAJOR 1
+#define ESP_NOW_MIDI_VERSION_MINOR 0
+#define ESP_NOW_MIDI_VERSION_PATCH 0
 
 /**
  * @brief Returns the library version as a semantic-version string.

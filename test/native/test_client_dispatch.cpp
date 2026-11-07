@@ -248,3 +248,43 @@ TEST_CASE("client runs the ESP-NOW SysEx handler in loop()", "[client][sysex]")
     client.loop();
     REQUIRE(received == std::vector<uint8_t>(sysex, sysex + sizeof(sysex)));
 }
+
+TEST_CASE("client handles timed MIDI frames", "[client][dispatch][jitter]")
+{
+    enomik::Client client;
+    client.io.begin();
+    REQUIRE(client.espnowMIDI.begin());
+    g_noteOns = 0;
+    client.setHandleNoteOn(countNoteOn);
+
+    // magic, tick (LE), note on
+    const uint8_t timedNoteOn[6] = {ESP_NOW_MIDI_TIMED_MAGIC, 0x10, 0x00, 0x90, 60, 100};
+    REQUIRE(esp_now_midi::isMidiPacket(timedNoteOn, 6));
+
+    SECTION("jitter reduction off: dispatched on the next loop()")
+    {
+        client.espnowMIDI.OnDataRecv(kDongle, timedNoteOn, 6);
+        client.loop();
+        REQUIRE(g_noteOns == 1);
+    }
+
+    SECTION("jitter reduction on: held in the buffer, then delivered by update()")
+    {
+        client.setReduceJitterAtCostOfLatency(true);
+        client.setJitterBufferMs(8);
+        client.espnowMIDI.OnDataRecv(kDongle, timedNoteOn, 6);
+        client.setReduceJitterAtCostOfLatency(false); // update() flushes the buffer
+        client.loop();
+        client.loop();
+        REQUIRE(g_noteOns == 1);
+    }
+
+    SECTION("malformed timed frame is counted and dropped")
+    {
+        const uint8_t bad[5] = {ESP_NOW_MIDI_TIMED_MAGIC, 0x10, 0x00, 0x40, 0x40};
+        client.espnowMIDI.OnDataRecv(kDongle, bad, 5);
+        client.loop();
+        REQUIRE(g_noteOns == 0);
+        REQUIRE(client.espnowMIDI.getTimedPacketErrorCount() == 1);
+    }
+}
