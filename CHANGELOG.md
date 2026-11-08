@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.19.2
+
+- `client_nfc`: fixed tags not being read. The reader's answer was read a fixed 40 ms after starting a detection; when it was not ready yet, the read returned garbage and the late answer collided with the next command. Polling now waits until the PN532 reports ready (`NFC_RESPONSE_TIMEOUT_MS`, 200 ms). A reader that stops answering is restarted after `NFC_MAX_START_FAILS` failed detections in a row.
+- `client_nfc`: the reader is set up before `begin()`, whose USB re-attach dropped the serial output printed meanwhile. When the reader does not answer, setup reports the I2C pins, a bus scan and wiring hints, and retries every 5 s (`NFC_RETRY_INTERVAL_MS`). New in `config.h`: `NFC_LOG_LEVEL` (0 = off, the default; 1 = setup and errors; 2 = tag and mapping events; 3 = reader statistics) and `NFC_I2C_CLOCK_HZ`. Power the PN532 from 5 V: on 3V3 it browns out under RF load while its power LED stays lit.
+- Example `din_midi_bridge` renamed to `client_din_midi`.
+- `dongle` example: display off by default (`HAS_DISPLAY 0` in `config.h`).
+
 ## 0.19.1
 
 - `client_nfc` example: NFC tags send MIDI; map tags from the host over SysEx (`F0 7D 7F 7F 4E …`), including `03` to list all mappings.
