@@ -6,6 +6,9 @@
 
   Wiring: PN532 in I2C mode (DIP switches / jumpers: SEL0 = 1, SEL1 = 0), SDA / SCL
   to the board's I2C pins, VCC, GND. IRQ and RESET are optional, see config.h.
+  Power the PN532 from 5V (VBUS), not 3V3: its RF field draws current peaks that a
+  3V3 rail can't supply, the chip browns out and drops off the bus while the power
+  LED stays lit. The I2C lines stay at 3.3 V, so SDA / SCL are safe on the ESP32.
 
   Behaviour:
     * In mapping mode, every tag that is placed or removed is reported via SysEx (UID).
@@ -49,6 +52,13 @@
 #include <Adafruit_PN532.h>
 #include <Preferences.h>
 #include <Wire.h>
+
+// Serial logging, see NFC_LOG_LEVEL in config.h. The level is a compile-time
+// constant, so disabled log calls are removed by the compiler.
+#define NFC_LOG_ERRORS 1
+#define NFC_LOG_EVENTS 2
+#define NFC_LOG_STATS 3
+#define NFC_LOG(level, ...) do { if (NFC_LOG_LEVEL >= (level)) Serial.printf(__VA_ARGS__); } while (0)
 
 enomik::Client _client;
 
@@ -110,7 +120,7 @@ static void loadMappings() {
     _mappingCount = 0;
   }
   _prefs.end();
-  Serial.printf("%u NFC mapping(s) loaded\n", _mappingCount);
+  NFC_LOG(NFC_LOG_EVENTS, "%u NFC mapping(s) loaded\n", _mappingCount);
 }
 
 static void saveMappings() {
@@ -185,6 +195,7 @@ static void reportMapped(const Mapping &m) {
 }
 
 static void printTag(const char *label, const Tag &tag) {
+  if (NFC_LOG_LEVEL < NFC_LOG_EVENTS) return;
   Serial.print(label);
   for (uint8_t i = 0; i < tag.length; i++) Serial.printf(" %02X", tag.uid[i]);
   Serial.println();
@@ -197,7 +208,7 @@ static void learn(uint8_t type, uint8_t channel, uint8_t data1, uint8_t data2) {
   int index = findMapping(_armedTag);
   if (index < 0) {
     if (_mappingCount >= NFC_MAX_MAPPINGS) {
-      Serial.println(F("NFC mapping table full"));
+      NFC_LOG(NFC_LOG_ERRORS, "NFC mapping table full\n");
       reportMappingCount();
       return;
     }
@@ -275,33 +286,172 @@ static void onNoTagSeen() {
   onTagRemoved(removed);
 }
 
+// --- PN532 setup ------------------------------------------------------------------------
+static const uint8_t kPn532I2cAddress = PN532_I2C_ADDRESS; // 0x24, fixed in the chip
+uint32_t _nfcRetryMs = 0;
+
+static bool pn532Ready();
+
+// Reads and drops a response the library leaves unread (setPassiveActivationRetries
+// only checks the ACK). Otherwise it is still pending when the next command starts.
+static void discardPn532Response(uint32_t timeoutMs) {
+  const uint32_t startMs = millis();
+  while (millis() - startMs < timeoutMs) {
+    if (pn532Ready()) {
+      Wire.requestFrom(kPn532I2cAddress, (uint8_t)16);
+      while (Wire.available()) Wire.read();
+      return;
+    }
+    delay(1);
+  }
+}
+
+static bool i2cDevicePresent(uint8_t address) {
+  Wire.beginTransmission(address);
+  return Wire.endTransmission() == 0;
+}
+
+static void printI2cScan() {
+  uint8_t found = 0;
+  Serial.print(F("  I2C devices found:"));
+  for (uint8_t address = 1; address < 127; address++) {
+    if (!i2cDevicePresent(address)) continue;
+    Serial.printf(" 0x%02X", address);
+    found++;
+  }
+  if (!found) Serial.print(F(" none"));
+  Serial.println();
+}
+
+// Starts the PN532 and logs why it failed. The full report (pins, bus scan, hints)
+// is printed on the first attempt; retries from loop() only print one line.
+static bool initNfc(bool verbose) {
+#if NFC_I2C_SDA_PIN >= 0 && NFC_I2C_SCL_PIN >= 0
+  const int sdaPin = NFC_I2C_SDA_PIN, sclPin = NFC_I2C_SCL_PIN;
+#else
+  const int sdaPin = SDA, sclPin = SCL;
+#endif
+  if (verbose)
+    NFC_LOG(NFC_LOG_ERRORS, "PN532: I2C on SDA %d, SCL %d, %lu Hz, address 0x%02X\n", sdaPin, sclPin,
+            (unsigned long)NFC_I2C_CLOCK_HZ, kPn532I2cAddress);
+
+  if (!nfc.begin()) {
+    NFC_LOG(NFC_LOG_ERRORS, "PN532: I2C bus could not be started\n");
+    return false;
+  }
+  Wire.setClock(NFC_I2C_CLOCK_HZ); // nfc.begin() calls Wire.begin() again
+  const uint32_t version = nfc.getFirmwareVersion();
+  if (!version) {
+    const bool present = i2cDevicePresent(kPn532I2cAddress);
+    NFC_LOG(NFC_LOG_ERRORS, "PN532 does not respond (address 0x%02X %s), retrying every %u ms\n", kPn532I2cAddress,
+                  present ? "acknowledges" : "not found", (unsigned)NFC_RETRY_INTERVAL_MS);
+    if (verbose && NFC_LOG_LEVEL >= NFC_LOG_ERRORS) {
+      printI2cScan();
+      if (present) {
+        Serial.println(F("  The chip is on the bus but sends no firmware version: power-cycle the reader"));
+        Serial.println(F("  (unplug it, not only the ESP32) and check its supply voltage."));
+      } else {
+        Serial.println(F("  Check: reader mode switches set to I2C (Elechouse V3: SW1 ON, SW2 OFF,"));
+        Serial.println(F("  power-cycle after changing), SDA/SCL not swapped, VCC on 5V (3V3 browns"));
+        Serial.println(F("  out, LED stays lit), NFC_I2C_SDA_PIN / NFC_I2C_SCL_PIN in config.h match."));
+      }
+    }
+    return false;
+  }
+  NFC_LOG(NFC_LOG_ERRORS, "PN532 found: chip PN5%02lX, firmware %lu.%lu - waiting for tags\n",
+                (unsigned long)(version >> 24) & 0xFF, (unsigned long)(version >> 16) & 0xFF,
+                (unsigned long)(version >> 8) & 0xFF);
+
+  // SAMConfig is the first command that switches the antenna on. A reader that
+  // answers getFirmwareVersion but fails here usually browns out from the RF current.
+  if (!nfc.SAMConfig()) {
+    NFC_LOG(NFC_LOG_ERRORS, "PN532: SAMConfig failed (address 0x%02X %s) - the reader stops answering once\n",
+                  kPn532I2cAddress, i2cDevicePresent(kPn532I2cAddress) ? "acknowledges" : "not found");
+    NFC_LOG(NFC_LOG_ERRORS, "  the antenna turns on: check its supply (try 5 V on VCC, add 10-100 uF near the reader).\n");
+    return false;
+  }
+  if (!nfc.setPassiveActivationRetries(0x01)) { // answer quickly when no tag is present
+    NFC_LOG(NFC_LOG_ERRORS, "PN532: setPassiveActivationRetries failed\n");
+    return false;
+  }
+  discardPn532Response(50);
+  return true;
+}
+
 // --- PN532 polling ----------------------------------------------------------------------
-// Non-blocking: start a detection, return to loop(), read the answer later.
+// Non-blocking: start a detection, return to loop(), read the answer once the reader
+// reports ready (status byte 0x01). Reading before that returns garbage and leaves
+// the real answer to collide with the next command.
+struct NfcStats {
+  uint32_t polls = 0, tags = 0, noTag = 0, startFailed = 0, timeouts = 0;
+} _nfcStats;
+
+static bool pn532Ready() {
+  if (Wire.requestFrom(kPn532I2cAddress, (uint8_t)1) != 1) return false;
+  return Wire.read() == 0x01;
+}
+
+static void printNfcStats() {
+#if NFC_LOG_LEVEL >= NFC_LOG_STATS
+  static uint32_t lastMs = 0;
+  if (millis() - lastMs < NFC_STATS_INTERVAL_MS) return;
+  lastMs = millis();
+  Serial.printf("NFC: %lu polls, %lu with tag, %lu without, %lu start failed, %lu timed out\n",
+                (unsigned long)_nfcStats.polls, (unsigned long)_nfcStats.tags, (unsigned long)_nfcStats.noTag,
+                (unsigned long)_nfcStats.startFailed, (unsigned long)_nfcStats.timeouts);
+#endif
+}
+
 static void pollNfc() {
   static bool waiting = false;
   static uint32_t startedMs = 0;
+  static uint8_t consecutiveStartFails = 0;
   const uint32_t now = millis();
+
+  printNfcStats();
 
   if (!waiting) {
     if (now - startedMs < NFC_POLL_INTERVAL_MS) return;
     startedMs = now;
+    _nfcStats.polls++;
     waiting = nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
-    if (!waiting) onNoTagSeen();
+    if (!waiting) {
+      _nfcStats.startFailed++;
+      onNoTagSeen();
+      // The reader stopped answering: start it again from loop().
+      if (++consecutiveStartFails >= NFC_MAX_START_FAILS) {
+        consecutiveStartFails = 0;
+        NFC_LOG(NFC_LOG_ERRORS, "PN532: %u detections in a row failed (address 0x%02X %s), restarting the reader\n",
+                      (unsigned)NFC_MAX_START_FAILS, kPn532I2cAddress,
+                      i2cDevicePresent(kPn532I2cAddress) ? "acknowledges" : "not found");
+        _nfcOk = false;
+      }
+    } else {
+      consecutiveStartFails = 0;
+    }
     return;
   }
 
-  if (now - startedMs < NFC_RESPONSE_WAIT_MS) return;
+  if (!pn532Ready()) {
+    if (now - startedMs < NFC_RESPONSE_TIMEOUT_MS) return;
+    waiting = false;
+    _nfcStats.timeouts++;
+    onNoTagSeen();
+    return;
+  }
   waiting = false;
 
   // The library copies as many UID bytes as the reader reports, up to 255.
   static uint8_t uid[256];
   uint8_t uidLength = 0;
   if (nfc.readDetectedPassiveTargetID(uid, &uidLength) && uidLength > 0 && uidLength <= kMaxUidLength) {
+    _nfcStats.tags++;
     Tag tag;
     tag.length = uidLength;
     memcpy(tag.uid, uid, uidLength);
     onTagSeen(tag);
   } else {
+    _nfcStats.noTag++;
     onNoTagSeen();
   }
 }
@@ -320,14 +470,14 @@ void onSysEx(uint8_t *data, unsigned int length) {
     case CMD_MAPPING_ON:
       _mappingMode = data[kSysExHeaderSize] == CMD_MAPPING_ON;
       _armedTag = Tag();
-      Serial.printf("mapping mode %s\n", _mappingMode ? "on" : "off");
+      NFC_LOG(NFC_LOG_EVENTS, "mapping mode %s\n", _mappingMode ? "on" : "off");
       reportMappingState();
       break;
     case CMD_CLEAR:
       _mappingCount = 0;
       _armedTag = Tag();
       saveMappings();
-      Serial.println(F("all NFC mappings deleted"));
+      NFC_LOG(NFC_LOG_EVENTS, "all NFC mappings deleted\n");
       reportMappingCount();
       break;
     case CMD_GET_MAPPINGS:
@@ -346,8 +496,13 @@ void setup() {
 #else
   Wire.begin();
 #endif
+  Wire.setClock(NFC_I2C_CLOCK_HZ);
 
   loadMappings();
+
+  // Before _client.begin(): it re-attaches USB, and serial output printed while
+  // the port reconnects is lost.
+  _nfcOk = initNfc(true);
 
   _client.setName("client_nfc"); // optional
   _client.begin();
@@ -356,22 +511,14 @@ void setup() {
   _client.setHandleControlChange(onControlChange);
   _client.setHandleProgramChange(onProgramChange);
   _client.setHandleSysEx(onSysEx);
-
-  _nfcOk = nfc.begin();
-  const uint32_t version = _nfcOk ? nfc.getFirmwareVersion() : 0;
-  if (!version) {
-    _nfcOk = false;
-    Serial.println(F("PN532 does not respond"));
-    return;
-  }
-  Serial.printf("PN532 firmware %lu.%lu\n", (unsigned long)(version >> 16) & 0xFF,
-                (unsigned long)(version >> 8) & 0xFF);
-
-  nfc.SAMConfig();
-  nfc.setPassiveActivationRetries(0x01); // answer quickly when no tag is present
 }
 
 void loop() {
   _client.loop();
-  if (_nfcOk) pollNfc();
+  if (_nfcOk) {
+    pollNfc();
+  } else if (millis() - _nfcRetryMs >= NFC_RETRY_INTERVAL_MS) {
+    _nfcRetryMs = millis();
+    _nfcOk = initNfc(false);
+  }
 }
