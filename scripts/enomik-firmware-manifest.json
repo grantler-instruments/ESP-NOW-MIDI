@@ -41,7 +41,26 @@
     {
       "label": "Print MAC",
       "sketch": "print_mac",
-      "description": "prints the MAC address to serial (use this if you are not using a dongle with display)"
+      "description": "prints the MAC address to serial (use this if you are not using a dongle with display)",
+      "category": "examples"
+    },
+    {
+      "label": "DMX Client",
+      "sketch": "client_dmx",
+      "description": "MIDI to DMX512 via an RS-485 transceiver: DMX out on GPIO 21 (to DI); GPIO 4 drives DE/RE, only needed if the module does not enable itself (Grove DMX512 does)",
+      "category": "examples"
+    },
+    {
+      "label": "Echo Client",
+      "sketch": "client_echo",
+      "description": "sends every received MIDI message straight back (for testing connections)",
+      "category": "examples"
+    },
+    {
+      "label": "NFC Client",
+      "sketch": "client_nfc",
+      "description": "sends a mapped MIDI message per NFC tag (PN532 over I2C)",
+      "category": "examples"
     }
   ]
 }
