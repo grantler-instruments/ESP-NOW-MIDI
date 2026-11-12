@@ -27,12 +27,30 @@ class DMXSender {
     pinMode(_dePin, OUTPUT);
     digitalWrite(_dePin, LOW);
     memset(_channels, 0, sizeof(_channels));
+    memset(_pending, 0, sizeof(_pending));
+    _dirty = false;
   }
 
-  // Set one channel (1-based, 1..512). No transmit until update().
+  // Set one channel (1-based, 1..512) in the pending buffer.
+  // Not visible in frames until commitIfSettled() copies it to the live buffer.
   void writeByte(uint8_t value, uint16_t channel) {
     if (channel >= 1 && channel <= _numChannels) {
-      _channels[channel - 1] = value;
+      _pending[channel - 1] = value;
+      _lastWrite = millis();
+      if (!_dirty) _firstWrite = _lastWrite;
+      _dirty = true;
+    }
+  }
+
+  // Copy pending values to the live buffer once no write happened for quietMs.
+  // Values sent as a burst (e.g. R, G, B of one fixture) then show up together
+  // instead of one by one across several frames.
+  // maxHoldMs caps the wait so a continuous stream (moving fader) still updates.
+  void commitIfSettled(unsigned long quietMs = 5, unsigned long maxHoldMs = 40) {
+    unsigned long now = millis();
+    if (_dirty && (now - _lastWrite >= quietMs || now - _firstWrite >= maxHoldMs)) {
+      memcpy(_channels, _pending, _numChannels);
+      _dirty = false;
     }
   }
 
@@ -61,7 +79,11 @@ class DMXSender {
   HardwareSerial* _serial = nullptr;
   uint8_t _dePin = 0;
   uint16_t _numChannels = 512;
-  uint8_t _channels[512] = {};
+  uint8_t _channels[512] = {};  // live: sent by update()
+  uint8_t _pending[512] = {};   // written by writeByte()
+  unsigned long _lastWrite = 0;
+  unsigned long _firstWrite = 0;
+  bool _dirty = false;
 };
 
 #endif

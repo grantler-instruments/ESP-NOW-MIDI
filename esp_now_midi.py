@@ -17,7 +17,7 @@ def _now_ms():
 # Keep in sync with version.h
 VERSION_MAJOR = 0
 VERSION_MINOR = 19
-VERSION_PATCH = 2
+VERSION_PATCH = 3
 VERSION = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
 
 

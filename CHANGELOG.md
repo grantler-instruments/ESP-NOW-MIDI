@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.19.3
+
+- `client_dmx`: values sent together (e.g. R, G and B of one fixture) now change in the same DMX frame instead of one after another. A frame takes ~23 ms to send, and each was sent with whatever had arrived so far. Received values now collect in a pending buffer that `commitIfSettled()` copies to the output once no value arrived for 5 ms, or 40 ms after the first waiting value at the latest, so a moving fader keeps updating.
+- `client_dmx`: fixed 14-bit CC values getting lost when MSB (CC 0-31) and LSB (CC 32-63) arrived more than 20 ms apart, e.g. on both sides of a DMX frame. An MSB now sets the channel at once (LSB 0) and an LSB refines it, as in the MIDI 14-bit convention, so 7-bit senders that send only CC 0-31 work too (before, nothing was output without an LSB).
+
 ## 0.19.2
 
 - `client_nfc`: fixed tags not being read. The reader's answer was read a fixed 40 ms after starting a detection; when it was not ready yet, the read returned garbage and the late answer collided with the next command. Polling now waits until the PN532 reports ready (`NFC_RESPONSE_TIMEOUT_MS`, 200 ms). A reader that stops answering is restarted after `NFC_MAX_START_FAILS` failed detections in a row.

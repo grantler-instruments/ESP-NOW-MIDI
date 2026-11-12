@@ -38,16 +38,8 @@ const uint8_t dmxTxPin = 21;  // UART TX -> RS-485 DI (any free GPIO on ESP32-S2
 const uint8_t dePin = 4;      // DE/RE for SN75176 (must differ from dmxTxPin)
 const uint16_t numChannels = 512;
 
-struct ChannelState {
-  uint8_t msb = 0;
-  uint8_t lsb = 0;
-  bool msbReceived = false;
-  bool lsbReceived = false;
-  unsigned long lastUpdateTime = 0;
-};
-
-ChannelState channelStates[512];
-const unsigned long PAIR_TIMEOUT = 20;  // ms - if both halves arrive within this window, combine them
+// Last MSB per DMX channel, so an LSB can refine it (14-bit CC: MSB 0-31, LSB 32-63)
+uint8_t ccMsb[512] = {};
 
 // MIDI note-on start channel (1 = use MIDI ch 1–5 for DMX 1–512 via notes)
 const int noteOnStartChannel = 1;
@@ -82,46 +74,27 @@ void onNoteOff(byte channel, byte note, byte velocity) {
   }
 }
 void onControlChange(byte channel, byte control, byte value) {
-  // Determine if MSB (CC 0-31) or LSB (CC 32-63)
+  // CC 0-31 = MSB, CC 32-63 = LSB (MIDI 14-bit convention). 7-bit senders can send MSB only.
+  if (control >= 64) {
+    return;
+  }
   bool isMSB = (control < 32);
   int baseControl = isMSB ? control : (control - 32);
-  int dmxChannel = (channel - 1) * 32 + baseControl;
-
-  if (dmxChannel >= 0 && dmxChannel < numChannels) {
-    unsigned long now = millis();
-
-    // Check if we should reset state due to timeout
-    if (now - channelStates[dmxChannel].lastUpdateTime > PAIR_TIMEOUT) {
-      channelStates[dmxChannel].msbReceived = false;
-      channelStates[dmxChannel].lsbReceived = false;
-    }
-
-    if (isMSB) {
-      channelStates[dmxChannel].msb = value;
-      channelStates[dmxChannel].msbReceived = true;
-      channelStates[dmxChannel].lastUpdateTime = now;
-    } else {
-      channelStates[dmxChannel].lsb = value;
-      channelStates[dmxChannel].lsbReceived = true;
-      channelStates[dmxChannel].lastUpdateTime = now;
-    }
-
-    // If we have both MSB and LSB, update DMX
-    if (channelStates[dmxChannel].msbReceived && channelStates[dmxChannel].lsbReceived) {
-      // Combine into 14-bit value
-      uint16_t fullValue = (channelStates[dmxChannel].msb << 7) | channelStates[dmxChannel].lsb;
-
-      // Scale to 8-bit DMX (0-16383 → 0-255)
-      uint8_t dmxValue = fullValue >> 6;
-
-      // DMX channels 1-indexed
-      dmx.writeByte(dmxValue, dmxChannel + 1);
-
-      // Clear flags for next pair
-      channelStates[dmxChannel].msbReceived = false;
-      channelStates[dmxChannel].lsbReceived = false;
-    }
+  int dmxChannel = (channel - 1) * 32 + baseControl;  // 0-based
+  if (dmxChannel < 0 || dmxChannel >= numChannels) {
+    return;
   }
+
+  uint8_t lsb = 0;
+  if (isMSB) {
+    ccMsb[dmxChannel] = value;  // new MSB resets LSB to 0
+  } else {
+    lsb = value;
+  }
+  uint16_t fullValue = (ccMsb[dmxChannel] << 7) | lsb;  // 14-bit
+  // Scale 0-16383 -> 0-255. Writes go to the pending buffer, so MSB+LSB
+  // (and R+G+B) reach the fixture in the same frame via commitIfSettled().
+  dmx.writeByte(fullValue >> 6, dmxChannel + 1);
 }
 
 void onProgramChange(byte channel, byte program) {
@@ -155,5 +128,6 @@ void setup() {
 
 void loop() {
   _client.loop();
+  dmx.commitIfSettled();  // apply burst (e.g. R+G+B) together, 5 ms after last value
   dmx.update();
 }
