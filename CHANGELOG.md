@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.4
 
 - New `client_bela_trill` example: detects any Bela Trill sensor on the I2C bus (Bar, Flex, Ring, Square, Hex, Craft) and sends touch position and size as CCs plus a note on touch; the Ring's buttons are sent as CCs, and each Craft pad sends its own note.
 - I2C sensor examples moved to `examples/i2c/`: `client_bela_trill`, `client_mpu6500`, `client_nfc`, `client_vl53l0x`.
