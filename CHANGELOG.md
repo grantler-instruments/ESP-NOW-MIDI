@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- New `client_bela_trill` example: detects any Bela Trill sensor on the I2C bus (Bar, Flex, Ring, Square, Hex, Craft) and sends touch position and size as CCs plus a note on touch; the Ring's buttons are sent as CCs, and each Craft pad sends its own note.
+- I2C sensor examples moved to `examples/i2c/`: `client_bela_trill`, `client_mpu6500`, `client_nfc`, `client_vl53l0x`.
+- enomik-app: `client_nfc` moved to the new "I2C sensors" category, together with the new `client_bela_trill`, `client_vl53l0x` and `client_mpu6500` firmware. Needs the enomik-app release that adds the `i2c` category.
+- `scripts/platformio_build_examples.sh` now also builds nested examples (`examples/i2c/*`, `examples/grantler_instruments/dongle`).
+
 ## 0.19.3
 
 - `client_dmx`: values sent together (e.g. R, G and B of one fixture) now change in the same DMX frame instead of one after another. A frame takes ~23 ms to send, and each was sent with whatever had arrived so far. Received values now collect in a pending buffer that `commitIfSettled()` copies to the output once no value arrived for 5 ms, or 40 ms after the first waiting value at the latest, so a moving fader keeps updating.

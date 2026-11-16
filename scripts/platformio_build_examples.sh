@@ -5,15 +5,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 failed_names=()
 
-for example_dir in "$ROOT"/examples/*/; do
-  [[ -d "$example_dir" ]] || continue
-  name="$(basename "$example_dir")"
-  ini="$example_dir/platformio.ini"
-
-  if [[ ! -f "$ini" ]]; then
-    echo "Skipping $name (no platformio.ini)"
-    continue
-  fi
+# Recursive, so nested examples (e.g. examples/i2c/*) are built too. Skip
+# PlatformIO's own .pio folders, which can contain dependency projects.
+while IFS= read -r -d '' ini; do
+  example_dir="$(dirname "$ini")"
+  name="${example_dir#"$ROOT"/examples/}"
 
   echo "========================================"
   echo "Building $name"
@@ -24,7 +20,7 @@ for example_dir in "$ROOT"/examples/*/; do
     echo "FAILED: $name"
     failed_names+=("$name")
   fi
-done
+done < <(find "$ROOT/examples" -name .pio -prune -o -type f -name platformio.ini -print0 | sort -z)
 
 if [[ "${#failed_names[@]}" -ne 0 ]]; then
   echo "One or more PlatformIO example builds failed:"

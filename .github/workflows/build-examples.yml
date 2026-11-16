@@ -160,6 +160,7 @@ jobs:
           arduino-cli lib install "ESP32Servo"
           arduino-cli lib install "MPU9250_WE"
           arduino-cli lib install "Adafruit NeoPixel"
+          arduino-cli lib install "Trill"
           git clone https://github.com/pschatzmann/arduino-audio-tools.git $HOME/Arduino/libraries/AudioTools
           git clone https://github.com/algomusic/M16.git $HOME/Arduino/libraries/M16
           
@@ -276,9 +277,12 @@ jobs:
           for board in manifest["boards"]:
               for role in manifest["roles"]:
                   sketch = role["sketch"]
-                  # Nested Arduino sketches retain their main .ino filename.
-                  main = "dongle" if sketch == "grantler_instruments_dongle" else sketch
-                  source = f"all-binaries/{board['id']}_{sketch}_{main}.ino.bin"
+                  # "path" (relative to examples/) is set for nested sketches. CI names
+                  # binaries <board>_<path with / as _>_<main .ino name>.ino.bin.
+                  path = role.get("path", sketch)
+                  build_id = path.replace("/", "_")
+                  main = path.rsplit("/", 1)[-1]
+                  source = f"all-binaries/{board['id']}_{build_id}_{main}.ino.bin"
                   # The app resolves firmware as <board>_<sketch>_<sketch>.ino.bin.
                   destination = os.path.join(folder, f"{board['id']}_{sketch}_{sketch}.ino.bin")
                   shutil.copyfile(source, destination)

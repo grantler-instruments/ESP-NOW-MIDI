@@ -31,6 +31,7 @@
     {
       "label": "Grantler Dongle",
       "sketch": "grantler_instruments_dongle",
+      "path": "grantler_instruments/dongle",
       "description": "interface to MIDI host with display and menu"
     },
     {
@@ -59,8 +60,30 @@
     {
       "label": "NFC Client",
       "sketch": "client_nfc",
+      "path": "i2c/client_nfc",
       "description": "sends a mapped MIDI message per NFC tag (PN532 over I2C)",
-      "category": "examples"
+      "category": "i2c"
+    },
+    {
+      "label": "Trill Client",
+      "sketch": "client_bela_trill",
+      "path": "i2c/client_bela_trill",
+      "description": "Bela Trill touch sensor (Bar, Flex, Ring, Square, Hex, Craft; detected automatically): position and touch size as CC 70-72, note 60 on touch; Craft: one note per pad from note 36",
+      "category": "i2c"
+    },
+    {
+      "label": "VL53L0X Client",
+      "sketch": "client_vl53l0x",
+      "path": "i2c/client_vl53l0x",
+      "description": "VL53L0X time-of-flight sensor: distance (30-2000 mm) as CC 60",
+      "category": "i2c"
+    },
+    {
+      "label": "MPU6500 Client",
+      "sketch": "client_mpu6500",
+      "path": "i2c/client_mpu6500",
+      "description": "MPU6500 IMU: total acceleration (x + y + z) as CC 67",
+      "category": "i2c"
     }
   ]
 }

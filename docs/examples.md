@@ -26,15 +26,26 @@ Pure ESP-IDF ports of the main Client / Dongle / client_test flows are under
 - **`client_dmx`**: controls DMX fixtures wirelessly.
 - **`client_neopixels`**: drives a WS2812 strip from Note On/Off (pitch → LED
   index, channel → RGB component).
+- **`client_waveshare-esp32-s3-relay-6ch`**: note-driven relay controller for the
+  Waveshare ESP32-S3 6-channel relay board (e.g. solenoids).
+
+## I2C sensor examples
+
+Under
+[`examples/i2c/`](https://github.com/grantler-instruments/ESP-NOW-MIDI/tree/main/examples/i2c)
+(Arduino IDE: **File → Examples → ESP-NOW MIDI → i2c**).
+
 - **`client_mpu6500`**: reads an MPU6500 IMU and sends accelerometer / gyro data
   as MIDI control changes.
 - **`client_vl53l0x`**: reads a VL53L0X time-of-flight sensor and sends distance
   as MIDI control changes.
-- **`client_nfc`**: reads NFC tags with a PN532 (I2C) and sends a MIDI
-  message per tag; tags are mapped in a SysEx-switched mapping mode (place tag,
-  then send it a MIDI message), which also reports tag UIDs via SysEx.
-- **`client_waveshare-esp32-s3-relay-6ch`**: note-driven relay controller for the
-  Waveshare ESP32-S3 6-channel relay board (e.g. solenoids).
+- **`client_bela_trill`**: detects any Bela Trill sensor (Bar, Flex, Ring,
+  Square, Hex, Craft) and sends position / touch size as MIDI control changes
+  plus Note On/Off on touch; Craft sends one note per pad. See the example's
+  `README.md` for setup.
+- **`client_nfc`**: reads NFC tags with a PN532 and sends a MIDI message per
+  tag; tags are mapped in a SysEx-switched mapping mode (place tag, then send it
+  a MIDI message), which also reports tag UIDs via SysEx.
 
 ## Audio examples
 
