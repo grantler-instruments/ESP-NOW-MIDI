@@ -45,6 +45,16 @@ idf.py -p PORT flash monitor
 The first build clones libpd into `../client_pd/components/libpd/libpd/`
 (shared with `client_pd`).
 
+### Pd DSP placement
+
+The default configuration enables `CONFIG_LIBPD_IRAM_DSP`: 55 common libpd DSP
+routine variants run from internal instruction RAM. This adds about 10.1 KiB of
+internal SRAM use in the verified build. For an existing configuration, enable
+**Component config → libpd → Place common Pd DSP routines in IRAM** in
+`idf.py menuconfig`. Disable it to compare with normal flash placement.
+See [the libpd component documentation](../../components/libpd/README.md#optional-iram-placement)
+for the routine selection, memory measurements and placement audit.
+
 ### USB
 
 The board has one USB-C port (GPIO19/20). The enomik client turns it into a

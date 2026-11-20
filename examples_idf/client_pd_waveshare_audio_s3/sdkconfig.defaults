@@ -22,3 +22,6 @@ CONFIG_TINYUSB_MIDI_COUNT=1
 
 # include/esp_now_midi_gpio.h still uses the legacy touch_pad API.
 CONFIG_TOUCH_SUPPRESS_DEPRECATE_WARN=y
+
+# Common libpd DSP routines in internal instruction RAM.
+CONFIG_LIBPD_IRAM_DSP=y

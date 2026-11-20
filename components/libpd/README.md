@@ -43,6 +43,58 @@ oscillator block boundaries, at envelope scheduling boundaries, in compatibility
 routines, and in unrelated objects. This is not a conversion of the entire engine
 to single precision.
 
+## Optional IRAM placement
+
+`CONFIG_LIBPD_IRAM_DSP` places 55 common DSP routine variants into IRAM using
+`libpd_hot.lf`, registered through `LDFRAGMENTS`. It is available on ESP32-S3 and
+is disabled by default for the reusable component. The Waveshare audio example
+enables it in `sdkconfig.defaults`. For existing configurations, enable
+**Component config → libpd → Place common Pd DSP routines in IRAM** using
+`idf.py menuconfig`; defaults do not override a saved configuration.
+
+The selection includes DSP dispatch and scheduling, `libpd_process_float`,
+signal copy/zero/addition, scalar and unrolled addition/subtraction/multiplication,
+`line~`, `vline~`, `lop~`, `hip~`, `biquad~`, current oscillators and `vcf~`,
+`tabread4~`, fixed and interpolated delay reads, delay writes, and the 11 current
+maths objects listed above. Legacy compatibility routines stay in flash. The
+selection changes placement only; it does not duplicate or rewrite DSP routines.
+Associated function literals move with the code. Pooled constants, external maths
+helpers and other callees may remain in flash; signal buffers and tables are not
+moved. This is not a guarantee of operation while flash cache is disabled.
+
+Measured with ESP-IDF 6.0.1 on the complete Waveshare audio firmware, 2026-11-20:
+
+| Linker measurement | Flash placement | IRAM placement | Change |
+| --- | ---: | ---: | ---: |
+| `.iram0.text` | 83,855 bytes | 94,211 bytes | +10,356 bytes |
+| Statically unallocated shared instruction/data SRAM | 209,771 bytes | 199,415 bytes | −10,356 bytes |
+| Static `.data` in shared SRAM | 25,394 bytes | 25,394 bytes | 0 |
+| Static `.bss` in shared SRAM | 38,096 bytes | 38,096 bytes | 0 |
+
+All 55 selected function symbols were verified in IRAM in the linked ELF. Their
+function bodies occupy 9,944 bytes after linker relaxation; the 10,356-byte
+increase includes literals and alignment. The remaining shared SRAM is a linker
+estimate, not the free heap after startup. Boot-time allocation, task stacks,
+Wi-Fi, audio buffers and Pd patch allocations still consume internal memory.
+Placement fits this firmware, but runtime headroom and timing gains need board
+measurements. No IRAM firmware was flashed during this check.
+
+To verify an enabled build (from the repository root):
+
+```sh
+python3 test/libpd/audit_iram.py \
+  examples_idf/client_pd_waveshare_audio_s3/build/esp_now_midi_client_pd_waveshare_audio_s3.elf \
+  --compile-commands examples_idf/client_pd_waveshare_audio_s3/build/compile_commands.json
+```
+
+The audit checks every selected scalar/unrolled/static variant and verifies that
+legacy oscillator/filter routines remain in flash. Use `--expect flash` against
+an otherwise equivalent disabled build. ESP-IDF's `idf.py size` reports overall
+memory allocation; use the map file for literals and alignment. Runtime testing
+should report minimum internal free heap, largest internal free block, Pd task
+stack margin, processing-time percentiles and audio failures under MIDI/radio
+traffic before treating this placement as production-validated.
+
 ## Host verification
 
 Run from the repository root. libpd must already have been fetched. CMake 3.25+,
@@ -93,7 +145,7 @@ idf.py -C test/libpd/idf -B /tmp/enomik-pd-idf-check \
 python3 test/libpd/audit_target.py /tmp/enomik-pd-idf-check/compile_commands.json
 ```
 
-No board was flashed. CPU savings, audio underruns and the `kalimba_groove`
+CPU savings, audio underruns and the `kalimba_groove`
 workload still require measurement on hardware, using identical firmware settings
 with `CONFIG_LIBPD_FLOAT_DSP` enabled and disabled. Measure average and worst-case
 `libpd_process_float()` duration against the audio deadline; include MIDI/radio

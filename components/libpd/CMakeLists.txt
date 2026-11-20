@@ -91,6 +91,7 @@ idf_component_register(
          "compat/libpd_esp_compat.c"
     INCLUDE_DIRS "${LIBPD_DIR}/libpd_wrapper" "${LIBPD_DIR}/libpd_wrapper/util"
                  "${PD_SRC}" "compat"
+    LDFRAGMENTS "libpd_hot.lf"
     REQUIRES lwip esp_timer
 )
 

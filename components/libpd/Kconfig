@@ -8,4 +8,17 @@ config LIBPD_FLOAT_DSP
         routines for processors without hardware double precision. Scheduling
         timestamps remain double precision. Disable for stock Pd routines.
 
+config LIBPD_IRAM_DSP
+    bool "Place common Pd DSP routines in IRAM"
+    depends on IDF_TARGET_ESP32S3
+    default n
+    help
+        Place current arithmetic, buffers, envelopes, filters, oscillators,
+        interpolated table and delay reads, maths and DSP dispatch routines
+        in internal instruction RAM. Includes scalar and unrolled variants.
+        Consumes internal SRAM otherwise available for data and heap.
+        This improves instruction placement, not full cache-disabled safety:
+        called helpers and signal/table data can remain in flash or PSRAM.
+        Disable to restore normal flash placement without changing DSP code.
+
 endmenu
