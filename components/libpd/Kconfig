@@ -1,0 +1,11 @@
+menu "libpd"
+
+config LIBPD_FLOAT_DSP
+    bool "Use single-precision DSP optimisations"
+    default y
+    help
+        Optimise the Pd 0.56-5 maths, oscillator, table lookup and vline DSP
+        routines for processors without hardware double precision. Scheduling
+        timestamps remain double precision. Disable for stock Pd routines.
+
+endmenu

@@ -1,0 +1,558 @@
+diff --git a/src/d_arithmetic.c b/src/d_arithmetic.c
+index 5fc522cf..565d41af 100644
+--- a/src/d_arithmetic.c
++++ b/src/d_arithmetic.c
+@@ -956,6 +956,26 @@ static void *log_tilde_new(t_symbol *s, int argc, t_atom *argv)
+ 
+ t_int *log_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in1 = (t_sample *)(w[1]);
++    t_sample *in2 = (t_sample *)(w[2]);
++    t_sample *out = (t_sample *)(w[3]);
++    int n = (int)(w[4]);
++    while (n--)
++    {
++        t_sample f = *in1++, g = *in2++;
++        if (f <= 0)
++            *out = -1000;   /* rather than blow up, output a number << 0 */
++        else if (g == 1 || g <= 0)
++            *out = logf(f);
++        else *out = logf(f)/logf(g);
++        out++;
++    }
++    return (w+5);
++
++#else
++
+     t_sample *in1 = (t_sample *)(w[1]);
+     t_sample *in2 = (t_sample *)(w[2]);
+     t_sample *out = (t_sample *)(w[3]);
+@@ -971,10 +991,31 @@ t_int *log_tilde_perform(t_int *w)
+         out++;
+     }
+     return (w+5);
++
++#endif
+ }
+ 
+ t_int *log_tilde_perform_scalar(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in1 = (t_sample *)(w[1]);
++    t_sample base = *(t_sample *)(w[2]),
++        multiplier = ((base > 0 && base != 1) ? 1.f/logf(base) : 1);
++    t_sample *out = (t_sample *)(w[3]);
++    int n = (int)(w[4]);
++    while (n--)
++    {
++        t_sample f = *in1++;
++        if (f <= 0)
++            *out = -1000;   /* rather than blow up, output a number << 0 */
++        else *out = logf(f) * multiplier;
++        out++;
++    }
++    return (w+5);
++
++#else
++
+     t_sample *in1 = (t_sample *)(w[1]);
+     t_sample base = *(t_sample *)(w[2]),
+         multiplier = ((base > 0 && base != 1) ? 1./log(base) : 1);
+@@ -989,11 +1030,33 @@ t_int *log_tilde_perform_scalar(t_int *w)
+         out++;
+     }
+     return (w+5);
++
++#endif
+ }
+ 
+     /* nobody sane will ever ask for log(scalar) to a signal base but ok... */
+ t_int *log_tilde_perform_reversescalar(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in1 = (t_sample *)(w[1]);
++    t_sample scalarin = *(t_sample *)(w[2]);
++    t_sample *out = (t_sample *)(w[3]);
++    int n = (int)(w[4]);
++    while (n--)
++    {
++        t_sample base = *in1++;
++        if (base <= 1)
++            *out = -1000;   /* rather than blow up, output a number << 0 */
++        else if (scalarin <- 0)
++            *out = -1000;
++        else *out = logf(scalarin) / logf(base);
++        out++;
++    }
++    return (w+5);
++
++#else
++
+     t_sample *in1 = (t_sample *)(w[1]);
+     t_sample scalarin = *(t_sample *)(w[2]);
+     t_sample *out = (t_sample *)(w[3]);
+@@ -1009,6 +1072,8 @@ t_int *log_tilde_perform_reversescalar(t_int *w)
+         out++;
+     }
+     return (w+5);
++
++#endif
+ }
+ 
+ static void log_tilde_dsp(t_log_tilde *x, t_signal **sp)
+@@ -1082,6 +1147,23 @@ static void *pow_tilde_new(t_symbol *s, int argc, t_atom *argv)
+ 
+ t_int *pow_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in1 = (t_sample *)(w[1]);
++    t_sample *in2 = (t_sample *)(w[2]);
++    t_sample *out = (t_sample *)(w[3]);
++    int n = (int)(w[4]);
++    while (n--)
++    {
++        t_sample f = *in1++, g = *in2++;
++        *out++ = (f == 0 && g < 0) ||
++            (f < 0 && (g - (int)g) != 0) ?
++                0 : powf(f, g);
++    }
++    return (w+5);
++
++#else
++
+     t_sample *in1 = (t_sample *)(w[1]);
+     t_sample *in2 = (t_sample *)(w[2]);
+     t_sample *out = (t_sample *)(w[3]);
+@@ -1094,10 +1176,29 @@ t_int *pow_tilde_perform(t_int *w)
+                 0 : pow(f, g);
+     }
+     return (w+5);
++
++#endif
+ }
+ 
+ t_int *pow_tilde_perform_scalar(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in1 = (t_sample *)(w[1]);
++    t_sample g = *(t_sample *)(w[2]);
++    t_sample *out = (t_sample *)(w[3]);
++    int n = (int)(w[4]);
++    while (n--)
++    {
++        t_sample f = *in1++;
++        *out++ = (f == 0 && g < 0) ||
++            (f < 0 && (g - (int)g) != 0) ?
++                0 : powf(f, g);
++    }
++    return (w+5);
++
++#else
++
+     t_sample *in1 = (t_sample *)(w[1]);
+     t_sample g = *(t_sample *)(w[2]);
+     t_sample *out = (t_sample *)(w[3]);
+@@ -1110,10 +1211,29 @@ t_int *pow_tilde_perform_scalar(t_int *w)
+                 0 : pow(f, g);
+     }
+     return (w+5);
++
++#endif
+ }
+ 
+ t_int *pow_tilde_perform_reversescalar(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in1 = (t_sample *)(w[1]);
++    t_sample f = *(t_sample *)(w[2]);
++    t_sample *out = (t_sample *)(w[3]);
++    int n = (int)(w[4]);
++    while (n--)
++    {
++        t_sample g = *in1++;
++        *out++ = (f == 0 && g < 0) ||
++            (f < 0 && (g - (int)g) != 0) ?
++                0 : powf(f, g);
++    }
++    return (w+5);
++
++#else
++
+     t_sample *in1 = (t_sample *)(w[1]);
+     t_sample f = *(t_sample *)(w[2]);
+     t_sample *out = (t_sample *)(w[3]);
+@@ -1126,6 +1246,8 @@ t_int *pow_tilde_perform_reversescalar(t_int *w)
+                 0 : pow(f, g);
+     }
+     return (w+5);
++
++#endif
+ }
+ 
+ static void pow_tilde_dsp(t_pow_tilde *x, t_signal **sp)
+diff --git a/src/d_math.c b/src/d_math.c
+index 082fb078..52c7258a 100644
+--- a/src/d_math.c
++++ b/src/d_math.c
+@@ -196,6 +196,21 @@ static t_int *sigrsqrt_perform_quick(t_int *w)
+ 
+ static t_int *sigrsqrt_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    while (n--)
++    {
++        t_sample f = *in++;
++        if (f <= 0)
++            *out++ = 0;
++        else *out++ = 1.f/sqrtf(f);
++    }
++    return (w + 4);
++
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     while (n--)
+@@ -206,10 +221,33 @@ static t_int *sigrsqrt_perform(t_int *w)
+         else *out++ = 1./sqrt(f);
+     }
+     return (w + 4);
++
++#endif
+ }
+ 
+ static t_int *sigrsqrt_perform8(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    for (; n; n -= 8, in += 8, out += 8)
++    {
++        t_sample f0 = in[0], f1 = in[1], f2 = in[2], f3 = in[3];
++        t_sample f4 = in[4], f5 = in[5], f6 = in[6], f7 = in[7];
++        out[0] = f0 <= 0 ? 0 : 1.f/sqrtf(f0);
++        out[1] = f1 <= 0 ? 0 : 1.f/sqrtf(f1);
++        out[2] = f2 <= 0 ? 0 : 1.f/sqrtf(f2);
++        out[3] = f3 <= 0 ? 0 : 1.f/sqrtf(f3);
++        out[4] = f4 <= 0 ? 0 : 1.f/sqrtf(f4);
++        out[5] = f5 <= 0 ? 0 : 1.f/sqrtf(f5);
++        out[6] = f6 <= 0 ? 0 : 1.f/sqrtf(f6);
++        out[7] = f7 <= 0 ? 0 : 1.f/sqrtf(f7);
++    }
++    return (w + 4);
++
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     for (; n; n -= 8, in += 8, out += 8)
+@@ -226,6 +264,8 @@ static t_int *sigrsqrt_perform8(t_int *w)
+         out[7] = f7 <= 0 ? 0 : 1./sqrt(f7);
+     }
+     return (w + 4);
++
++#endif
+ }
+ 
+ static void sigrsqrt_dsp(t_sigrsqrt *x, t_signal **sp)
+@@ -294,6 +334,20 @@ t_int *sigsqrt_perform_quick(t_int *w)
+ 
+ t_int *sigsqrt_perform(t_int *w)    /* not static; also used in d_fft.c */
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    while (n--)
++    {
++        t_sample f = *in++;
++        if (f < 0)
++            *out++ = 0;
++        else *out++ = sqrtf(f);
++    }
++    return (w + 4);
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     while (n--)
+@@ -304,10 +358,32 @@ t_int *sigsqrt_perform(t_int *w)    /* not static; also used in d_fft.c */
+         else *out++ = sqrt(f);
+     }
+     return (w + 4);
++#endif
+ }
+ 
+ static t_int *sigsqrt_perform8(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    for (; n; n -= 8, in += 8, out += 8)
++    {
++        t_sample f0 = in[0], f1 = in[1], f2 = in[2], f3 = in[3];
++        t_sample f4 = in[4], f5 = in[5], f6 = in[6], f7 = in[7];
++        out[0] = f0 < 0 ? 0 : sqrtf(f0);
++        out[1] = f1 < 0 ? 0 : sqrtf(f1);
++        out[2] = f2 < 0 ? 0 : sqrtf(f2);
++        out[3] = f3 < 0 ? 0 : sqrtf(f3);
++        out[4] = f4 < 0 ? 0 : sqrtf(f4);
++        out[5] = f5 < 0 ? 0 : sqrtf(f5);
++        out[6] = f6 < 0 ? 0 : sqrtf(f6);
++        out[7] = f7 < 0 ? 0 : sqrtf(f7);
++    }
++    return (w + 4);
++
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     for (; n; n -= 8, in += 8, out += 8)
+@@ -324,6 +400,8 @@ static t_int *sigsqrt_perform8(t_int *w)
+         out[7] = f7 < 0 ? 0 : sqrt(f7);
+     }
+     return (w + 4);
++
++#endif
+ }
+ 
+ static void sigsqrt_dsp(t_sigsqrt *x, t_signal **sp)
+@@ -455,6 +533,24 @@ static void *mtof_tilde_new(void)
+ 
+ static t_int *mtof_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    for (; n--; in++, out++)
++    {
++        t_sample f = *in;
++        if (f <= -1500) *out = 0;
++        else
++        {
++            if (f > 1499) f = 1499;
++            *out = 8.17579891564f * expf(.0577622650f * f);
++        }
++    }
++    return (w + 4);
++
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     for (; n--; in++, out++)
+@@ -468,6 +564,8 @@ static t_int *mtof_tilde_perform(t_int *w)
+         }
+     }
+     return (w + 4);
++
++#endif
+ }
+ 
+ static void mtof_tilde_dsp(t_mtof_tilde *x, t_signal **sp)
+@@ -505,6 +603,19 @@ static void *ftom_tilde_new(void)
+ 
+ static t_int *ftom_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    for (; n--; in++, out++)
++    {
++        t_sample f = *in;
++        *out = (f > 0 ? 17.3123405046f * logf(.12231220585f * f) : -1500);
++    }
++    return (w + 4);
++
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     for (; n--; in++, out++)
+@@ -513,6 +624,8 @@ static t_int *ftom_tilde_perform(t_int *w)
+         *out = (f > 0 ? 17.3123405046 * log(.12231220585 * f) : -1500);
+     }
+     return (w + 4);
++
++#endif
+ }
+ 
+ static void ftom_tilde_dsp(t_ftom_tilde *x, t_signal **sp)
+@@ -550,6 +663,25 @@ static void *dbtorms_tilde_new(void)
+ 
+ static t_int *dbtorms_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    for (; n--; in++, out++)
++    {
++        t_sample f = *in;
++        if (f <= 0) *out = 0;
++        else
++        {
++            if (f > 485)
++                f = 485;
++            *out = expf((2.302585092994046f * 0.05f) * (f-100.f));
++        }
++    }
++    return (w + 4);
++
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     for (; n--; in++, out++)
+@@ -564,6 +696,8 @@ static t_int *dbtorms_tilde_perform(t_int *w)
+         }
+     }
+     return (w + 4);
++
++#endif
+ }
+ 
+ static void dbtorms_tilde_dsp(t_dbtorms_tilde *x, t_signal **sp)
+@@ -603,6 +737,24 @@ static void *rmstodb_tilde_new(void)
+ 
+ static t_int *rmstodb_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    for (; n--; in++, out++)
++    {
++        t_sample f = *in;
++        if (f <= 0) *out = 0;
++        else
++        {
++            t_sample g = 100 + 20.f/2.302585092994046f * logf(f);
++            *out = (g < 0 ? 0 : g);
++        }
++    }
++    return (w + 4);
++
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     for (; n--; in++, out++)
+@@ -616,6 +768,8 @@ static t_int *rmstodb_tilde_perform(t_int *w)
+         }
+     }
+     return (w + 4);
++
++#endif
+ }
+ 
+ static void rmstodb_tilde_dsp(t_rmstodb_tilde *x, t_signal **sp)
+@@ -655,6 +809,25 @@ static void *dbtopow_tilde_new(void)
+ 
+ static t_int *dbtopow_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    for (; n--; in++, out++)
++    {
++        t_sample f = *in;
++        if (f <= 0) *out = 0;
++        else
++        {
++            if (f > 870)
++                f = 870;
++            *out = expf((2.302585092994046f * 0.1f) * (f-100.f));
++        }
++    }
++    return (w + 4);
++
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     for (; n--; in++, out++)
+@@ -669,6 +842,8 @@ static t_int *dbtopow_tilde_perform(t_int *w)
+         }
+     }
+     return (w + 4);
++
++#endif
+ }
+ 
+ static void dbtopow_tilde_dsp(t_dbtopow_tilde *x, t_signal **sp)
+@@ -707,6 +882,24 @@ static void *powtodb_tilde_new(void)
+ 
+ static t_int *powtodb_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    for (; n--; in++, out++)
++    {
++        t_sample f = *in;
++        if (f <= 0) *out = 0;
++        else
++        {
++            t_sample g = 100 + 10.f/2.302585092994046f * logf(f);
++            *out = (g < 0 ? 0 : g);
++        }
++    }
++    return (w + 4);
++
++#else
++
+     t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
+     int n = (int)w[3];
+     for (; n--; in++, out++)
+@@ -720,6 +913,8 @@ static t_int *powtodb_tilde_perform(t_int *w)
+         }
+     }
+     return (w + 4);
++
++#endif
+ }
+ 
+ static void powtodb_tilde_dsp(t_powtodb_tilde *x, t_signal **sp)
+@@ -757,12 +952,25 @@ static void *exp_tilde_new(void)
+ 
+ t_int *exp_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_sample *in1 = (t_sample *)(w[1]);
++    t_sample *out = (t_sample *)(w[2]);
++    int n = (int)(w[3]);
++    while (n--)
++        *out++ = expf(*in1++);
++    return (w+4);
++
++#else
++
+     t_sample *in1 = (t_sample *)(w[1]);
+     t_sample *out = (t_sample *)(w[2]);
+     int n = (int)(w[3]);
+     while (n--)
+         *out++ = exp(*in1++);
+     return (w+4);
++
++#endif
+ }
+ 
+ static void exp_tilde_dsp(t_exp_tilde *x, t_signal **sp)

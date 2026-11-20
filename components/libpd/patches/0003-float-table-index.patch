@@ -1,0 +1,54 @@
+diff --git a/src/d_array.c b/src/d_array.c
+index 53358ef2..c205c77a 100644
+--- a/src/d_array.c
++++ b/src/d_array.c
+@@ -6,6 +6,10 @@
+ /* LATER consider adding methods to set gpointer */
+ 
+ #include "m_pd.h"
++#ifdef PD_FLOAT_DSP
++#include <stdint.h>
++#include <math.h>
++#endif
+ #include "g_canvas.h"
+ 
+ #define MAX_PHASE 0x7fffffff
+@@ -547,6 +551,30 @@ static t_int *tabread4_tilde_perform(t_int *w)
+ 
+     for (i = 0; i < n; i++)
+     {
++#ifdef PD_FLOAT_DSP
++        /* TwoSum retains the low part lost when adding a large onset.
++           This requires normal IEEE arithmetic (no reassociation). */
++        float input = *in++, offset = *onset++;
++        float sum = input + offset;
++        float z = sum - input;
++        float low = (input - (sum-z)) + (offset-z);
++        int index;
++        t_sample frac, a, b, c, d, cminusb;
++        if (!(sum >= 0.0f))
++            index = 1, frac = 0;
++        else if (sum >= 4294967296.0f)
++            index = maxindex, frac = 1;
++        else
++        {
++            float whole = floorf(sum), lowwhole = floorf(low);
++            int64_t wideindex = (int64_t)whole + (int64_t)lowwhole;
++            frac = (sum-whole) + (low-lowwhole);
++            if (frac >= 1.0f) { wideindex++; frac -= 1.0f; }
++            if (wideindex < 1) index = 1, frac = 0;
++            else if (wideindex > maxindex) index = maxindex, frac = 1;
++            else index = (int)wideindex;
++        }
++#else
+         double findex = (double)*in++ + (double)*onset++;
+         int index = findex;
+         t_sample frac,  a,  b,  c,  d, cminusb;
+@@ -555,6 +583,7 @@ static t_int *tabread4_tilde_perform(t_int *w)
+         else if (index > maxindex)
+             index = maxindex, frac = 1;
+         else frac = findex - index;
++#endif
+         wp = buf + index;
+         a = wp[-1].w_float;
+         b = wp[0].w_float;

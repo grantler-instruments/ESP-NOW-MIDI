@@ -36,6 +36,18 @@ if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT EXISTS "${PD_SRC}/m_pd.h")
     endif()
 endif()
 
+# Apply even when the float option is off: each patch retains the stock branch.
+# Fetching and patching must not run during IDF's dependency discovery pass.
+if(NOT CMAKE_BUILD_EARLY_EXPANSION)
+    set(PD_SOURCE_DIR "${LIBPD_DIR}/pure-data")
+    include("${CMAKE_CURRENT_LIST_DIR}/cmake/ApplyPatches.cmake")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0001-float-math.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0002-float-oscillators.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0003-float-table-index.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0004-vline-spans.patch")
+endif()
+
 set(PD_CORE_SOURCES
     d_arithmetic.c d_array.c d_ctl.c d_dac.c d_delay.c d_fft.c d_fft_fftsg.c
     d_filter.c d_global.c d_math.c d_misc.c d_osc.c d_resample.c d_soundfile.c
@@ -92,3 +104,12 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
     -w -O2 -ffast-math -Wno-error
     -include "${CMAKE_CURRENT_LIST_DIR}/compat/libpd_esp_prefix.h"
 )
+
+if(CONFIG_LIBPD_FLOAT_DSP)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE PD_FLOAT_DSP=1)
+    # TwoSum and compensated phase addition require IEEE evaluation order.
+    # Override the component's -ffast-math only for these translation units.
+    set_source_files_properties(
+        "${PD_SRC}/d_array.c" "${PD_SRC}/d_osc.c" "${PD_SRC}/d_ctl.c"
+        PROPERTIES COMPILE_OPTIONS "-fno-fast-math")
+endif()

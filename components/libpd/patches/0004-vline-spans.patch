@@ -1,0 +1,103 @@
+diff --git a/src/d_ctl.c b/src/d_ctl.c
+index 8b1242f3..50e72286 100644
+--- a/src/d_ctl.c
++++ b/src/d_ctl.c
+@@ -245,6 +245,89 @@ typedef struct _vline
+ 
+ static t_int *vline_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++
++    t_vline *x = (t_vline *)(w[1]);
++    t_sample *out = (t_sample *)(w[2]);
++    int n = (int)(w[3]), i;
++    double f = x->x_value;
++    double inc = x->x_inc;
++    double msecpersamp = x->x_msecpersamp;
++    double timenow, logicaltimenow = clock_gettimesince(x->x_referencetime);
++    t_vseg *s = x->x_list;
++    if (logicaltimenow != x->x_lastlogicaltime)
++    {
++        int sampstotime = (n > DEFDACBLKSIZE ? n : DEFDACBLKSIZE);
++        x->x_lastlogicaltime = logicaltimenow;
++        x->x_nextblocktime = logicaltimenow - sampstotime * msecpersamp;
++    }
++    timenow = x->x_nextblocktime;
++    x->x_nextblocktime = timenow + n * msecpersamp;
++    for (i = 0; i < n;)
++    {
++        double timenext = timenow + msecpersamp;
++    checknext:
++        if (s)
++        {
++            /* has starttime elapsed?  If so update value and increment */
++            if (s->s_starttime < timenext)
++            {
++                if (x->x_targettime <= timenext)
++                    f = x->x_target, inc = 0;
++                    /* if zero-length segment bash output value */
++                if (s->s_targettime <= s->s_starttime)
++                {
++                    f = s->s_target;
++                    inc = 0;
++                }
++                else
++                {
++                    double incpermsec = (s->s_target - f)/
++                        (s->s_targettime - s->s_starttime);
++                    f = f + incpermsec * (timenext - s->s_starttime);
++                    inc = incpermsec * msecpersamp;
++                }
++                x->x_inc = inc;
++                x->x_target = s->s_target;
++                x->x_targettime = s->s_targettime;
++                x->x_list = s->s_next;
++                if (!x->x_list)
++                    x->x_list_tail = 0;
++                t_freebytes(s, sizeof(*s));
++                s = x->x_list;
++                goto checknext;
++            }
++        }
++        if (x->x_targettime <= timenext)
++            f = x->x_target, inc = x->x_inc = 0, x->x_targettime = 1e20;
++        /* Render up to the next scheduling boundary. Keep absolute times
++           and endpoint state in double; only the sample loop is float. */
++        {
++            int count = n-i, j;
++            double until;
++            float value = (float)f, step = (float)inc;
++            if (s && s->s_starttime < timenow + count*msecpersamp)
++            {
++                until = floor((s->s_starttime-timenext)/msecpersamp)+1;
++                if (until < count) count = (until > 1 ? (int)until : 1);
++            }
++            if (x->x_targettime <= timenow + count*msecpersamp)
++            {
++                until = ceil((x->x_targettime-timenext)/msecpersamp);
++                if (until < count) count = (until > 1 ? (int)until : 1);
++            }
++            for (j = 0; j < count; j++)
++                *out++ = value + step * j;
++            f += inc * count;
++            i += count;
++            timenow += msecpersamp * count;
++        }
++    }
++    x->x_value = f;
++    return (w+4);
++
++#else
++
+     t_vline *x = (t_vline *)(w[1]);
+     t_sample *out = (t_sample *)(w[2]);
+     int n = (int)(w[3]), i;
+@@ -304,6 +387,8 @@ static t_int *vline_tilde_perform(t_int *w)
+     }
+     x->x_value = f;
+     return (w+4);
++
++#endif
+ }
+ 
+ static void vline_tilde_stop(t_vline *x)

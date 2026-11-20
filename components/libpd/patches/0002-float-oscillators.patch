@@ -1,0 +1,265 @@
+diff --git a/src/d_osc.c b/src/d_osc.c
+index 5034d26d..5fe231ba 100644
+--- a/src/d_osc.c
++++ b/src/d_osc.c
+@@ -60,6 +60,40 @@ static t_int *sigvcf_perform(t_int *w);
+ #define COSTABLENAME cos_newtable   /* keep cos_table back-compatibile */
+ 
+ 
++#ifdef PD_FLOAT_DSP
++#if PD_FLOATSIZE != 32
++#error PD_FLOAT_DSP requires 32-bit Pd samples
++#endif
++/* Bounded phase avoids double bit tricks. Compensation preserves small
++   increments; the residual is carried in the existing double state per block. */
++static inline float pd_float_wrap(float phase, float period)
++{
++    if (!isfinite(phase)) return 0.0f;
++    if (phase >= 0.0f && phase < period) return phase;
++    phase = fmodf(phase, period);
++    if (phase < 0.0f) phase += period;
++    return phase < period ? phase : 0.0f;
++}
++
++static inline void pd_float_advance(float *phase, float *error,
++    float increment, float period)
++{
++    float y = increment - *error;
++    float next = *phase + y;
++    *error = (next - *phase) - y;
++    if (next < 0.0f)
++    {
++        float wrapped;
++        if (next < -period) next = fmodf(next, period);
++        wrapped = next + period;
++        /* Adding the period can round; carry that error as well. */
++        *error += (wrapped-period)-next;
++        *phase = wrapped < period ? wrapped : 0.0f;
++    }
++    else *phase = pd_float_wrap(next, period);
++}
++#endif
++
+ /* -------------------------- phasor~ ------------------------------ */
+ static t_class *phasor_class;
+ 
+@@ -86,6 +120,29 @@ static void *phasor_new(t_floatarg f)
+ 
+ static t_int *phasor_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++    t_phasor *x = (t_phasor *)w[1];
++    t_sample *in = (t_sample *)w[2], *out = (t_sample *)w[3];
++    int n = (int)w[4];
++    double initial = x->x_phase;
++    if (!(initial >= 0.0 && initial < 1.0))
++        initial = isfinite(initial) ? fmod(initial, 1.0) : 0.0;
++    float phase, error;
++    if (initial < 0) initial += 1.0;
++    phase = (float)initial;
++    error = (float)((double)phase-initial);
++    phase = pd_float_wrap(phase, 1.0f);
++    while (n--)
++    {
++        float increment = *in++ * x->x_conv;
++        *out++ = phase;
++        pd_float_advance(&phase, &error, increment, 1.0f);
++    }
++    x->x_phase = (double)phase - (double)error;
++    return w+5;
++
++#else
++
+     t_phasor *x = (t_phasor *)(w[1]);
+     t_sample *in = (t_float *)(w[2]);
+     t_sample *out = (t_float *)(w[3]);
+@@ -109,6 +166,8 @@ static t_int *phasor_perform(t_int *w)
+     tf.tf_i[HIOFFSET] = normhipart;
+     x->x_phase = tf.tf_d - UNITBIT32;
+     return (w+5);
++
++#endif
+ }
+ 
+ static void phasor_dsp(t_phasor *x, t_signal **sp)
+@@ -451,6 +510,43 @@ static void *tabosc4_tilde_new(t_symbol *s)
+ 
+ static t_int *tabosc4_tilde_perform(t_int *w)
+ {
++#ifdef PD_FLOAT_DSP
++    t_tabosc4_tilde *x = (t_tabosc4_tilde *)w[1];
++    t_sample *in = (t_sample *)w[2], *out = (t_sample *)w[3];
++    int n = (int)w[4];
++    float size = x->x_fnpoints;
++    double initial = x->x_phase;
++    if (!(initial >= 0.0 && initial < 1.0))
++        initial = isfinite(initial) ? fmod(initial, 1.0) : 0.0;
++    float phase, error;
++    if (initial < 0) initial += 1.0;
++    phase = (float)initial;
++    error = (float)((double)phase-initial);
++    phase = pd_float_wrap(phase, 1.0f);
++    if (!x->x_vec)
++    {
++        while (n--) *out++ = 0;
++        return w+5;
++    }
++    while (n--)
++    {
++        float increment = *in++ * x->x_conv;
++        float index = phase * size;
++        int i = (int)index;
++        float frac = index - i;
++        t_word *addr = x->x_vec + (i & ((int)size-1));
++        float a = addr[0].w_float, b = addr[1].w_float;
++        float c = addr[2].w_float, d = addr[3].w_float;
++        float cminusb = c-b;
++        *out++ = b + frac * (cminusb - 0.1666667f * (1.0f-frac) *
++            ((d-a-3.0f*cminusb)*frac + (d+2.0f*a-3.0f*b)));
++        pd_float_advance(&phase, &error, increment, 1.0f);
++    }
++    x->x_phase = (double)phase - (double)error;
++    return w+5;
++
++#else
++
+     t_tabosc4_tilde *x = (t_tabosc4_tilde *)(w[1]);
+     t_sample *in = (t_sample *)(w[2]);
+     t_sample *out = (t_sample *)(w[3]);
+@@ -499,6 +595,8 @@ static t_int *tabosc4_tilde_perform(t_int *w)
+     while (n--) *out++ = 0;
+ 
+     return (w+5);
++
++#endif
+ }
+ 
+ static void tabosc4_tilde_set(t_tabosc4_tilde *x, t_symbol *s)
+@@ -565,7 +663,9 @@ static void tabosc4_tilde_setup(void)
+ #define OSCPERF osc_perform
+ #define SIGVCFPERF sigvcf_perform
+ 
++#define PD_FLOAT_CURRENT_TABLE
+ #include "d_osc.h"    /* include normal perf routines */
++#undef PD_FLOAT_CURRENT_TABLE
+ 
+ #ifdef OLDTABSIZE
+ #undef COSTABLESIZE
+diff --git a/src/d_osc.h b/src/d_osc.h
+index 0f364519..64677774 100644
+--- a/src/d_osc.h
++++ b/src/d_osc.h
+@@ -21,6 +21,21 @@ size and to OLDTABSIZE, and corresponding table pointers, as appropriate.
+ 
+ static t_int *COSPERF(t_int *w)
+ {
++#if defined(PD_FLOAT_DSP) && defined(PD_FLOAT_CURRENT_TABLE)
++    t_sample *in = (t_sample *)w[1], *out = (t_sample *)w[2];
++    int n = (int)w[3];
++    while (n--)
++    {
++        float index = pd_float_wrap(*in++, 1.0f) * COSTABLESIZE;
++        int i = (int)index;
++        float frac = index-i;
++        float *addr = COSTABLENAME + (i & (COSTABLESIZE-1));
++        *out++ = addr[0] + frac * (addr[1]-addr[0]);
++    }
++    return w+4;
++
++#else
++
+     t_sample *in = (t_sample *)(w[1]);
+     t_sample *out = (t_sample *)(w[2]);
+     int n = (int)(w[3]);
+@@ -68,10 +83,38 @@ static t_int *COSPERF(t_int *w)
+             *out++ = f1 + frac * (f2 - f1);
+ #endif
+     return (w+4);
++
++#endif
+ }
+ 
+ static t_int *OSCPERF(t_int *w)
+ {
++#if defined(PD_FLOAT_DSP) && defined(PD_FLOAT_CURRENT_TABLE)
++    t_osc *x = (t_osc *)w[1];
++    t_sample *in = (t_sample *)w[2], *out = (t_sample *)w[3];
++    int n = (int)w[4];
++    double initial = x->x_phase;
++    if (!(initial >= 0.0 && initial < COSTABLESIZE))
++        initial = isfinite(initial) ? fmod(initial, COSTABLESIZE) : 0.0;
++    float phase, error;
++    if (initial < 0) initial += COSTABLESIZE;
++    phase = (float)initial;
++    error = (float)((double)phase-initial);
++    phase = pd_float_wrap(phase, COSTABLESIZE);
++    while (n--)
++    {
++        float increment = *in++ * x->x_conv;
++        int i = (int)phase;
++        float frac = phase-i;
++        float *addr = COSTABLENAME + (i & (COSTABLESIZE-1));
++        *out++ = addr[0] + frac*(addr[1]-addr[0]);
++        pd_float_advance(&phase, &error, increment, COSTABLESIZE);
++    }
++    x->x_phase = (double)phase-(double)error;
++    return w+5;
++
++#else
++
+     t_osc *x = (t_osc *)(w[1]);
+     t_sample *in = (t_sample *)(w[2]);
+     t_sample *out = (t_sample *)(w[3]);
+@@ -126,6 +169,8 @@ static t_int *OSCPERF(t_int *w)
+     tf.tf_i[HIOFFSET] = normhipart;
+     x->x_phase = tf.tf_d - UNITBIT32 * COSTABLESIZE;
+     return (w+5);
++
++#endif
+ }
+ 
+ static t_int *SIGVCFPERF(t_int *w)
+@@ -142,15 +187,21 @@ static t_int *SIGVCFPERF(t_int *w)
+     t_float q = c->c_q;
+     t_float isr = c->c_isr;
+     t_float qinv = (q > 0? 1.0f/q : 0);
++#if defined(PD_FLOAT_DSP) && defined(PD_FLOAT_CURRENT_TABLE)
++    t_float ampcorrect = 2.0f - 2.0f / (q + 2.0f);
++#else
+     t_float ampcorrect = 2. - 2. / (q + 2.);
++#endif
+     t_float coefr, coefi;
+     float *tab = COSTABLENAME, *addr, f1, f2, frac;
++    int tabindex;
++#if !defined(PD_FLOAT_DSP) || !defined(PD_FLOAT_CURRENT_TABLE)
+     double dphase;
+-    int normhipart, tabindex;
++    int normhipart;
+     union tabfudge tf;
+-
+     tf.tf_d = UNITBIT32;
+     normhipart = tf.tf_i[HIOFFSET];
++#endif
+ 
+     for (i = 0; i < n; i++)
+     {
+@@ -161,12 +212,19 @@ static t_int *SIGVCFPERF(t_int *w)
+         r = (qinv > 0 ? 1 - cf * qinv : 0);
+         if (r < 0) r = 0;
+         oneminusr = 1.0f - r;
++#if defined(PD_FLOAT_DSP) && defined(PD_FLOAT_CURRENT_TABLE)
++        cfindx = pd_float_wrap(cfindx, COSTABLESIZE);
++        tabindex = (int)cfindx;
++        frac = cfindx-tabindex;
++        addr = tab + tabindex;
++#else
+         dphase = ((double)(cfindx)) + UNITBIT32;
+         tf.tf_d = dphase;
+         tabindex = tf.tf_i[HIOFFSET] & (COSTABLESIZE-1);
+         addr = tab + tabindex;
+         tf.tf_i[HIOFFSET] = normhipart;
+         frac = tf.tf_d - UNITBIT32;
++#endif
+         f1 = addr[0];
+         f2 = addr[1];
+         coefr = r * (f1 + frac * (f2 - f1));

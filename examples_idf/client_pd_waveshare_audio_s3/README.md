@@ -67,9 +67,15 @@ USB MIDI device (TinyUSB) when it starts, so:
 
 ## Patch
 
-`pd/main.pd` (same demo as `client_pd`): incoming notes play a sine on the
-speaker; the microphone level goes out as CC 20 on channel 1. Note that the
-mics hear the speaker.
+`pd/` is flashed with the firmware: `main.pd` + `voice.pd`, an 8-voice
+polyphonic saw synth (CC 1 = filter cutoff); the microphone level goes out as
+CC 20 on channel 1. Note that the mics hear the speaker.
+
+`patches/` holds patches to upload later over SysEx (enomik web app `#/pd`
+or `components/enomik_pd/tools/pd_upload.py`), each in its own folder:
+
+- [`kalimba_groove/`](patches/kalimba_groove): synth + kalimba sampler (CC0
+  sample) + 16-step sequencer + tempo-synced delay.
 
 ## Known issues
 
