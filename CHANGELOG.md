@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- New ESP-IDF example `examples_idf/client_pd`: an enomik client that runs a Pure Data patch through libpd (fetched by CMake on the first build) on ESP32-S3. Pd's MIDI objects (`[notein]`, `[ctlout]`, `[midiout]`, …) send and receive over ESP-NOW (and USB MIDI), `adc~` / `dac~` run over I2S, and the patch folder `pd/` is flashed as a LittleFS partition.
+- New ESP-IDF example `examples_idf/client_pd_waveshare_audio_s3`: `client_pd` on the Waveshare ESP32-S3-AUDIO-Board, with `dac~` on the on-board speaker (ES8311) and `adc~` on the two microphones (ES7210). Uses `espressif/esp_codec_dev` for the codecs, no board support package.
+
 ## 0.19.4
 
 - New `client_bela_trill` example: detects any Bela Trill sensor on the I2C bus (Bar, Flex, Ring, Square, Hex, Craft) and sends touch position and size as CCs plus a note on touch; the Ring's buttons are sent as CCs, and each Craft pad sends its own note.

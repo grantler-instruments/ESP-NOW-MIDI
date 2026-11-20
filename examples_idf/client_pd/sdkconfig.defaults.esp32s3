@@ -1,0 +1,3 @@
+# Most S3 dev boards with PSRAM ship octal PSRAM (N8R8, N16R8). For quad
+# PSRAM modules (N8R2, N4R2) remove this line.
+CONFIG_SPIRAM_MODE_OCT=y

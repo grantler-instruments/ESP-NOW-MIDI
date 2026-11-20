@@ -17,6 +17,9 @@ examples_idf/**/dependencies.lock
 examples_idf/**/sdkconfig
 examples_idf/**/sdkconfig.old
 
+# libpd clone for components/libpd (fetched by CMake on first configure)
+components/libpd/libpd/
+
 # PlatformIO
 .pio/
 

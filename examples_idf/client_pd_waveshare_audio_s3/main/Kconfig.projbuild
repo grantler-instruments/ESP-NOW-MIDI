@@ -1,0 +1,29 @@
+menu "client_pd (Waveshare ESP32-S3-AUDIO)"
+
+    config CLIENT_PD_SAMPLE_RATE
+        int "Sample rate (Hz)"
+        default 48000
+
+    config CLIENT_PD_TICKS
+        int "Pd blocks per audio buffer (64 samples each)"
+        range 1 16
+        default 2
+        help
+            Latency vs. CPU headroom. 2 ticks = 128 frames = 2.7 ms at 48 kHz.
+
+    config CLIENT_PD_CORE
+        int "CPU core for the Pd task"
+        range 0 1
+        default 1
+
+    config CLIENT_PD_SPEAKER_VOLUME
+        int "Speaker volume (ES8311, 0-100)"
+        range 0 100
+        default 70
+
+    config CLIENT_PD_MIC_GAIN_DB
+        int "Microphone gain (ES7210, dB)"
+        range 0 37
+        default 30
+
+endmenu

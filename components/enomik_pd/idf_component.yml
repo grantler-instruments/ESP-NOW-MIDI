@@ -1,0 +1,17 @@
+## enomik_pd dependencies (libpd itself is fetched by ../libpd/CMakeLists.txt)
+description: Run a Pure Data patch (libpd) as an enomik ESP-NOW MIDI client
+dependencies:
+  idf:
+    version: ">=5.5"
+  # Patch storage: mountLittleFs(), littlefs_create_partition_image()
+  joltwallet/littlefs: "^1.14"
+  # USB MIDI in enomik::Client (include/esp_now_midi_usb.h)
+  espressif/esp_tinyusb:
+    version: "*"
+    rules:
+      - if: "target in [esp32s2, esp32s3]"
+  # Codec chip drivers for the Waveshare ESP32-S3-AUDIO backend
+  espressif/esp_codec_dev:
+    version: "~1.5"
+    rules:
+      - if: "target in [esp32s3]"

@@ -37,6 +37,7 @@
   "export": {
     "exclude": [
       "examples_idf",
+      "components",
       ".arduino-build",
       "benchmarks",
       "scripts",

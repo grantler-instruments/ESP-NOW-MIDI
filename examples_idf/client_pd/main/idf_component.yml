@@ -1,0 +1,2 @@
+dependencies:
+  joltwallet/littlefs: "^1.14" # littlefs_create_partition_image()

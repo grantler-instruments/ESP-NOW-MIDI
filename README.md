@@ -75,7 +75,7 @@ Sketches under `examples/` — open in Arduino IDE or `arduino-cli`, or build wi
 
 ### ESP-IDF
 
-Pure IDF ports under `examples_idf/` (`dongle`, `client`, `client_test`). From an example folder:
+Pure IDF ports under `examples_idf/` (`dongle`, `client`, `client_test`), plus `client_pd`: a client running a Pure Data patch (libpd) with I2S audio, and `client_pd_waveshare_audio_s3`, the same for the Waveshare ESP32-S3-AUDIO-Board. From an example folder:
 
 ```bash
 idf.py set-target esp32s2   # or esp32 / esp32s3

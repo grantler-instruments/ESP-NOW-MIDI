@@ -1,0 +1,44 @@
+menu "client_pd (enomik + Pure Data)"
+
+    config CLIENT_PD_SAMPLE_RATE
+        int "Sample rate (Hz)"
+        default 48000
+
+    config CLIENT_PD_TICKS
+        int "Pd blocks per audio buffer (64 samples each)"
+        range 1 16
+        default 2
+        help
+            Latency vs. CPU headroom. 2 ticks = 128 frames = 2.7 ms at 48 kHz.
+
+    config CLIENT_PD_CORE
+        int "CPU core for the Pd task"
+        range 0 1
+        default 1
+
+    config CLIENT_PD_AUDIO
+        bool "I2S audio (adc~ / dac~)"
+        default y
+        help
+            Off: control-only. Pd still runs, ticked by a timer at block rate,
+            so MIDI logic works without any audio hardware.
+
+    if CLIENT_PD_AUDIO
+        config CLIENT_PD_I2S_MCLK
+            int "I2S MCLK GPIO (-1 = unused)"
+            default -1
+        config CLIENT_PD_I2S_BCLK
+            int "I2S BCLK GPIO"
+            default 5
+        config CLIENT_PD_I2S_WS
+            int "I2S WS / LRCK GPIO"
+            default 6
+        config CLIENT_PD_I2S_DOUT
+            int "I2S data out GPIO (to DAC, -1 = no dac~)"
+            default 7
+        config CLIENT_PD_I2S_DIN
+            int "I2S data in GPIO (from ADC/mic, -1 = no adc~)"
+            default 15
+    endif
+
+endmenu
